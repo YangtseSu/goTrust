@@ -6,11 +6,11 @@ A buildable, runnable Go desktop app skeleton in `~/projects/goTrust` that start
 
 ## Next Step
 
-Phase 6 verification: launch the built binary with a live gateway configuration and observe a real login, a real proxy request, and the tray.
+Phase 7 verification: launch the built binary with a live gateway configuration and observe a real login, a real proxy request, and the tray.
 
 ## Current Phase
 
-Phase 6
+Phase 7
 
 ## Phases
 
@@ -51,7 +51,15 @@ Phase 6
 - [x] `--no-ui` mode for headless runs
 - **Status:** complete
 
-### Phase 6: Verification
+### Phase 6: Publication
+
+- [x] Privacy review of the tree, the diff, and the object store
+- [x] Sanitisation of operator-specific addresses and service names
+- [x] Unreachable blobs purged so the history has nothing to reveal later
+- [x] Repository created private, `main` pushed
+- **Status:** complete
+
+### Phase 7: Verification
 
 - [x] `go build ./...` and `go vet ./...` clean
 - [x] Proxy integration test with a fake dialer and a local echo server

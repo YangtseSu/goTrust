@@ -58,7 +58,19 @@
 - Files created/modified:
   - `main.go`, `ui/view.go`, `ui/view_test.go`, `ui_atomic.go`, `icon.go`
 
-### Phase 6: Verification
+### Phase 6: Publication
+
+- **Status:** complete
+- Actions taken:
+  - privacy review of the whole tree and of every added line
+  - replaced an operator-specific intranet address in tests with a documentation address
+  - removed a local service unit name and a sibling checkout path from the planning notes
+  - purged the unreachable blobs that the pre-sanitisation `git add` had left in the object store
+  - created the repository private and pushed `main`
+- Files created/modified:
+  - none beyond the sanitisation edits already listed
+
+### Phase 7: Verification
 
 - **Status:** in_progress
 - Actions taken:
@@ -99,7 +111,7 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 6, verification (live-gateway check outstanding) |
+| Where am I? | Phase 7, verification (live-gateway check outstanding) |
 | Where am I going? | live login, proxied request, keep-alive |
 | What's the goal? | a buildable, runnable goTrust skeleton |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps) |
