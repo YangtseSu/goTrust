@@ -257,10 +257,13 @@
     reveals the window, and a failed phase reveals it too
   - `async` now registers its cancel, so 断开 cancels a login that is waiting
     on the network or a captcha
-  - the settings window is hidden, not destroyed, when 关闭 or the window
-    manager closes it. Destroying a second window from its own button action
-    segfaulted inside GTK through mygo's purego callbacks (reproduced with
-    ydotool Alt+F4); hiding keeps the window alive and reopening reloads the
+  - the settings window is created and hidden outside the frame it was
+    triggered from. Opening it from the 设置 button inside a frame made the
+    second GtkGLArea fail ("OpenGL 0.0 is too old", "native UI shows
+    nothing"), and hiding it from the 关闭 action segfaulted inside GTK
+    through mygo's purego callbacks. `Settings` posts `openSettings` through
+    `RunOnMain`, and `hideSettings` posts the hide after the frame with an
+    epoch so a reopen is not hidden by a stale request. Reopening reloads the
     saved draft
   - README rewritten for TOML, profiles, settings, logs, tray and startup
 - Verification:
@@ -340,7 +343,8 @@
 | Client data directory | nested path on first login | 0700 dir, 0600 file | as expected | pass |
 | Graceful quit after hide-on-close | SIGTERM, hidden window | exit 0, no process | as expected | pass |
 | Settings native close | ydotool Alt+F4 on the settings window | window hides, app alive | alive; before the fix: SIGSEGV | pass |
-| Settings 关闭 button | ydotool click at the button | window hides, app alive | alive | pass |
+| Settings 关闭 button | ydotool keyboard activation | window hides, app alive | alive; before the fix: SIGSEGV | pass |
+| Settings open from 按钮 | RunOnMain-deferred open, real config | no GL errors, window shows | as expected | pass |
 | Quit with settings open | SIGTERM | exit 0, no crash | exit 0 | pass |
 | Keep-alive default | fresh profile | 90 s | 90 s | pass |
 

@@ -132,6 +132,8 @@ type app struct {
 	// quitting lets the main window's close handler destroy it during Quit
 	// instead of hiding it in the tray.
 	quitting bool
+	// settingsEpoch invalidates a hide queued before the window was reopened.
+	settingsEpoch int
 }
 
 // attemptCancel groups the cancel function with an identity, so a stale
@@ -262,6 +264,10 @@ func (a *app) showWindow() {
 // Each opening starts from the saved settings, so closing without 保存 really
 // discards the edits.
 func (a *app) openSettings() {
+	a.mu.Lock()
+	a.settingsEpoch++
+	a.mu.Unlock()
+
 	if window := a.settingsWindow.Load(); window != nil {
 		// The window is hidden, not destroyed, so a close cannot tear down a
 		// GTK window while its own view is still running. Each opening starts
@@ -299,10 +305,7 @@ func (a *app) openSettings() {
 			return
 		}
 		event.PreventDefault()
-		window.Hide()
-		a.mu.Lock()
-		a.settings = nil
-		a.mu.Unlock()
+		a.hideSettings(window)
 	})
 	window.OnClosed(func() {
 		a.settingsWindow.Store(nil)
@@ -345,7 +348,7 @@ func (a *app) actions() gotrustui.Actions {
 	return gotrustui.Actions{
 		Login:         func() { a.async(a.connect) },
 		Logout:        a.disconnect,
-		Settings:      a.openSettings,
+		Settings:      func() { go func() { mygo.RunOnMain(a.openSettings) }() },
 		ShowWindow:    a.showWindow,
 		SelectProfile: a.selectProfile,
 		Quit:          func() { mygo.App.Quit() },
@@ -393,12 +396,38 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 
 func (a *app) closeSettings() {
 	if window := a.settingsWindow.Load(); window != nil {
-		// Hide, do not close: see the OnClose handler in openSettings.
-		window.Hide()
+		a.hideSettings(window)
+		return
 	}
 	a.mu.Lock()
 	a.settings = nil
 	a.mu.Unlock()
+}
+
+// hideSettings hides the settings window after the current frame. Hiding it
+// from the button action itself runs surface callbacks while the frame still
+// builds, which crashed GTK's GL teardown. The epoch stops a hide queued
+// before a reopen from taking the new window away.
+func (a *app) hideSettings(window *mygo.Window) {
+	a.mu.Lock()
+	a.settingsEpoch++
+	epoch := a.settingsEpoch
+	a.mu.Unlock()
+
+	go func() {
+		a.mu.Lock()
+		stale := a.settingsEpoch != epoch
+		a.mu.Unlock()
+		if stale {
+			return
+		}
+		window.Hide()
+		a.mu.Lock()
+		if a.settingsEpoch == epoch {
+			a.settings = nil
+		}
+		a.mu.Unlock()
+	}()
 }
 
 // async runs work off the UI thread and reports the outcome in the status line.
