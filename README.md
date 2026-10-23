@@ -101,7 +101,7 @@ password = "…"
 
 [profiles.keepalive]
 enabled = true
-interval = "60s"
+interval = "90s"
 targets = []
 
 [profiles.debug]
@@ -131,15 +131,16 @@ page. The groups are:
   store it. These take effect on the next login.
 * **代理** — SOCKS5 and HTTP bind addresses. These take effect on the next
   connect.
-* **保活** — enable, interval and manual targets, one per line. Also next
-  connect.
+* **保活** — enable, interval (default 90 s) and manual targets, one per line.
+  Also next connect.
 * **启动** — start at login, auto-connect, start hidden and auto-reconnect
   (stored now; the reconnect ladder arrives in a later phase).
 * **高级** — verbose logging, the log directory with an open button, and the
   per-profile client-data path.
 
 The settings file has no JSON parser and no schema surprises: an omitted field
-takes its default.
+takes its default. 关闭 hides the window and discards the draft; reopening it
+loads the saved settings again.
 
 ## Logging in
 

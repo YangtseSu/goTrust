@@ -30,7 +30,7 @@ func TestDefaultHasOneProfileAndBothListeners(t *testing.T) {
 	if profile.Auth.Domain != "local" {
 		t.Fatalf("default login domain = %q, want local", profile.Auth.Domain)
 	}
-	if !profile.Keep.IsEnabled() || profile.KeepAliveInterval() != 60*time.Second {
+	if !profile.Keep.IsEnabled() || profile.KeepAliveInterval() != 90*time.Second {
 		t.Fatalf("default keep-alive = %v / %v", profile.Keep.IsEnabled(), profile.KeepAliveInterval())
 	}
 }
@@ -157,8 +157,8 @@ username = "alice"
 	if !profile.Keep.IsEnabled() {
 		t.Fatal("an omitted keep-alive setting must default to enabled")
 	}
-	if profile.KeepAliveInterval() != 60*time.Second {
-		t.Fatalf("interval = %v, want 60s", profile.KeepAliveInterval())
+	if profile.KeepAliveInterval() != 90*time.Second {
+		t.Fatalf("interval = %v, want 90s", profile.KeepAliveInterval())
 	}
 	if cfg.ActiveProfile != DefaultProfileName {
 		t.Fatalf("active = %q, want the only profile", cfg.ActiveProfile)
@@ -351,7 +351,7 @@ func TestClientDataPathIsPerProfile(t *testing.T) {
 func TestIntervalFallsBackOnGarbage(t *testing.T) {
 	cfg := Default()
 	cfg.Profiles[0].Keep.Interval = "not-a-duration"
-	if got := cfg.KeepAliveInterval(); got != 60*time.Second {
+	if got := cfg.KeepAliveInterval(); got != 90*time.Second {
 		t.Fatalf("interval = %v, want the default", got)
 	}
 
@@ -361,7 +361,7 @@ func TestIntervalFallsBackOnGarbage(t *testing.T) {
 	}
 
 	cfg.Profiles[0].Keep.Interval = "0s"
-	if got := cfg.KeepAliveInterval(); got != 60*time.Second {
+	if got := cfg.KeepAliveInterval(); got != 90*time.Second {
 		t.Fatalf("zero interval = %v, want the default", got)
 	}
 }

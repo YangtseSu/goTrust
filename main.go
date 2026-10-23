@@ -263,14 +263,16 @@ func (a *app) showWindow() {
 // discards the edits.
 func (a *app) openSettings() {
 	if window := a.settingsWindow.Load(); window != nil {
+		// The window is hidden, not destroyed, so a close cannot tear down a
+		// GTK window while its own view is still running. Each opening starts
+		// from the saved settings again.
+		a.resetSettingsDraft()
 		window.Show()
 		window.Focus()
 		return
 	}
 
-	a.mu.Lock()
-	a.settings = gotrustui.NewSettingsState(a.cfg, a.logDir)
-	a.mu.Unlock()
+	a.resetSettingsDraft()
 
 	window := mygo.NewWindow(mygo.WindowOptions{
 		Title:  "goTrust 设置",
@@ -286,6 +288,22 @@ func (a *app) openSettings() {
 		}),
 	})
 	a.settingsWindow.Store(window)
+	// A close hides the window, as it does for the main window. Destroying a
+	// window from its own button action crashes GTK through mygo's callbacks;
+	// hiding also lets reopening show a fresh draft.
+	window.OnClose(func(event *mygo.CloseEvent) {
+		a.mu.RLock()
+		quitting := a.quitting
+		a.mu.RUnlock()
+		if quitting {
+			return
+		}
+		event.PreventDefault()
+		window.Hide()
+		a.mu.Lock()
+		a.settings = nil
+		a.mu.Unlock()
+	})
 	window.OnClosed(func() {
 		a.settingsWindow.Store(nil)
 		a.mu.Lock()
@@ -293,6 +311,12 @@ func (a *app) openSettings() {
 		a.mu.Unlock()
 	})
 	window.Show()
+}
+
+func (a *app) resetSettingsDraft() {
+	a.mu.Lock()
+	a.settings = gotrustui.NewSettingsState(a.cfg, a.logDir)
+	a.mu.Unlock()
 }
 
 func (a *app) openTray() bool {
@@ -369,8 +393,12 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 
 func (a *app) closeSettings() {
 	if window := a.settingsWindow.Load(); window != nil {
-		window.Close()
+		// Hide, do not close: see the OnClose handler in openSettings.
+		window.Hide()
 	}
+	a.mu.Lock()
+	a.settings = nil
+	a.mu.Unlock()
 }
 
 // async runs work off the UI thread and reports the outcome in the status line.

@@ -194,10 +194,10 @@ func (s *SettingsState) Apply() (config.Config, error) {
 
 	interval := strings.TrimSpace(cfg.Profiles[index].Keep.Interval)
 	if interval == "" {
-		interval = "60s"
+		interval = "90s"
 	}
 	if duration, err := time.ParseDuration(interval); err != nil || duration <= 0 {
-		return cfg, errors.New("保活间隔不是有效时长，例如 60s")
+		return cfg, errors.New("保活间隔不是有效时长，例如 90s")
 	}
 
 	profile := &cfg.Profiles[index]
@@ -352,7 +352,7 @@ func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profi
 			profile.Keep.SetEnabled(*enabled)
 		}
 		ui.Field(c, "间隔", func() {
-			ui.TextInput(c, &profile.Keep.Interval).Placeholder("60s")
+			ui.TextInput(c, &profile.Keep.Interval).Placeholder("90s")
 		})
 		ui.Field(c, "手动目标", func() {
 			ui.TextArea(c, &state.Targets[index]).Placeholder("http://192.0.2.10/，每行一个")

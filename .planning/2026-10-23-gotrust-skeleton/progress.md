@@ -234,6 +234,7 @@
     `client_data.json`), so one ticket cannot restore another account
   - the last keep-alive result arrives by observing the upstream `KeepAlive:`
     log lines on the shared writer; the fork hook is Phase 14's job
+  - keep-alive default is 90 s, not 60 s (operator preference)
 - Actions taken:
   - rewrote `config` for TOML v2, profile CRUD, `Clone`, per-profile client
     data paths, defaults (domain `local`), validation and atomic 0600 writes
@@ -256,6 +257,11 @@
     reveals the window, and a failed phase reveals it too
   - `async` now registers its cancel, so 断开 cancels a login that is waiting
     on the network or a captcha
+  - the settings window is hidden, not destroyed, when 关闭 or the window
+    manager closes it. Destroying a second window from its own button action
+    segfaulted inside GTK through mygo's purego callbacks (reproduced with
+    ydotool Alt+F4); hiding keeps the window alive and reopening reloads the
+    saved draft
   - README rewritten for TOML, profiles, settings, logs, tray and startup
 - Verification:
   - config/logging/session/ui/app tests; `go vet`, `gofmt`, `go test -race`
@@ -307,7 +313,7 @@
 | namcap | `namcap` PKGBUILD/package | only documented warnings | dlopen deps and unused libresolv only | pass |
 | Packaged binary | extracted `usr/bin/goTrust`, 6 s, SIGTERM | ready line, exit 0 | exit 0 | pass |
 | Config TOML round-trip | profiles, secrets, disabled listener, escaping | equal values, 0600 | equal, 0600 | pass |
-| Config defaults | partial TOML, omitted keep-alive | 443, `local`, enabled, 60 s | as expected | pass |
+| Config defaults | partial TOML, omitted keep-alive | 443, `local`, enabled, 90 s | as expected | pass |
 | Keep-alive explicit false | `enabled = false` | stays off | stays off | pass |
 | Config newer version | `version = 99` | refused | refused | pass |
 | v1 JSON ignored | leftover `config.json` | defaults, no `config.toml` | as expected | pass |
@@ -333,6 +339,10 @@
 | Rejected save | port 0 | status set, file and live config untouched | as expected | pass |
 | Client data directory | nested path on first login | 0700 dir, 0600 file | as expected | pass |
 | Graceful quit after hide-on-close | SIGTERM, hidden window | exit 0, no process | as expected | pass |
+| Settings native close | ydotool Alt+F4 on the settings window | window hides, app alive | alive; before the fix: SIGSEGV | pass |
+| Settings 关闭 button | ydotool click at the button | window hides, app alive | alive | pass |
+| Quit with settings open | SIGTERM | exit 0, no crash | exit 0 | pass |
+| Keep-alive default | fresh profile | 90 s | 90 s | pass |
 
 | Live login with captcha | real gateway, operator clicked the image | online with an IP | online, `203.0.113.4` | pass |
 | Live HTTP proxy | `curl -x 127.0.0.1:11081 http://192.0.2.10/` | 200 from the intranet | 200, 507 bytes | pass |

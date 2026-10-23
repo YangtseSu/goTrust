@@ -38,7 +38,7 @@ const (
 	defaultLoginDomain     = "local"
 	defaultSocksBind       = "127.0.0.1:1080"
 	defaultHTTPBind        = "127.0.0.1:1081"
-	defaultKeepAlivePeriod = 60 * time.Second
+	defaultKeepAlivePeriod = 90 * time.Second
 )
 
 // Config is the on-disk settings file.

@@ -135,7 +135,7 @@ does the same. Settings are persisted as versioned TOML.
       redaction of passwords, cookies, tokens and captcha data; bridge the
       upstream global `log` to the same writer; a settings button opens the
       log directory
-- [x] Defaults: login domain `local`, keep-alive 60 s, SOCKS5 `127.0.0.1:1080`,
+- [x] Defaults: login domain `local`, keep-alive 90 s, SOCKS5 `127.0.0.1:1080`,
       HTTP `127.0.0.1:1081`
 - [x] Settings window: connection (gateway, port, username, login domain,
       password/store), proxies (bind addresses and enable toggles), keep-alive
@@ -223,7 +223,7 @@ discipline; not a new user-facing feature list, but the session must not lie.
       wrapping `service.KeepAlive` (a fork result hook) rather than duplicating
       its logic; manual targets first, derived targets next; reject or warn
       about `https://` targets because only a real HTTP request counts; keep
-      the 60 s default
+      the 90 s default
 - [ ] Surface session expiry and reauthentication: ticket restore first,
       automatic login only when credentials are stored, otherwise a clear
       tray/window state
