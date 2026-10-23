@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package session owns one aTrust login and everything that hangs off it: the
 // tunnel client, its netstack, the resolver, the dialer and the keep-alive.
 //

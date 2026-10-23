@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package main
 
 // trayIcon returns the PNG the tray shows, embedded so a packaged binary needs

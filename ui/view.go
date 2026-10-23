@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package ui draws the goTrust window.
 //
 // The view is a plain function of the app state: it reads State and writes only

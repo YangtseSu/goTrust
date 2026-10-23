@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package config
 
 import (

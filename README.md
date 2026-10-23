@@ -45,9 +45,11 @@ offer its source to the users of that service.
 
 ```sh
 go build -o goTrust .
+reuse lint
 ```
 
-Development needs Go 1.27 or later. The resulting binary needs no cgo.
+Development needs Go 1.27 or later. The resulting binary needs no cgo. The tree
+is REUSE-compliant (AGPL-3.0-or-later); `reuse lint` must stay clean.
 
 ## Configuration
 

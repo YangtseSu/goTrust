@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package proxy serves SOCKS5 and HTTP proxies over an injected dial function.
 //
 // It deliberately does not use the dialer's own listener helpers: those take no

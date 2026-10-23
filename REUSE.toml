@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+version = 1
+
+SPDX-PackageName = "goTrust"
+SPDX-PackageSupplier = "Yangtse Su <yangtsesu@gmail.com>"
+SPDX-PackageDownloadLocation = "https://github.com/YangtseSu/goTrust"
+
+[[annotations]]
+path = [
+    ".gitignore",
+    "go.mod",
+    "go.sum",
+    "README.md",
+    "LICENSE",
+]
+SPDX-FileCopyrightText = "2026 Yangtse Su <yangtsesu@gmail.com>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = ".planning/**"
+SPDX-FileCopyrightText = "2026 Yangtse Su <yangtsesu@gmail.com>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"

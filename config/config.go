@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package config holds the settings goTrust persists between launches.
 //
 // The file lives under the user's config directory, never next to the binary:
