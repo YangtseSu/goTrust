@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>goTrust</title>
+  <defs>
+    <clipPath id="frame">
+      <rect x="16" y="12" width="96" height="96" rx="20"/>
+    </clipPath>
+  </defs>
+  <rect x="16" y="12" width="96" height="96" rx="20" fill="#3584e4"/>
+  <rect x="16" y="104" width="96" height="8" fill="#1a5fb4" clip-path="url(#frame)"/>
+  <path d="M64 20 L98 33 V64 C98 86 83 99 64 107 C45 99 30 86 30 64 V33 Z" fill="#ffffff"/>
+  <g fill="#1a5fb4">
+    <rect x="55" y="34" width="18" height="38" rx="9"/>
+    <path d="M42 62 H86 L64 88 Z"/>
+  </g>
+</svg>

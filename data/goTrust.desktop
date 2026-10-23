@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=goTrust
+GenericName=aTrust Client
+Comment=Connect to a Sangfor aTrust gateway and serve local SOCKS5 and HTTP proxies
+Exec=goTrust
+Icon=goTrust
+Terminal=false
+Categories=Network;Security;
+Keywords=atrust;vpn;proxy;socks5;tunnel;sangfor;
+StartupNotify=true
