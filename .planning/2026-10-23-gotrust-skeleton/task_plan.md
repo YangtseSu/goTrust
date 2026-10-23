@@ -1,18 +1,24 @@
-# Task Plan: goTrust skeleton
+# Task Plan: goTrust
 
 ## Goal
 
-A buildable, runnable Go desktop app skeleton in `~/projects/goTrust` that starts a mygo window and tray, manages one aTrust session through the fork of `zju-connect` as a library, and exposes SOCKS5 + HTTP proxy listeners over that session's dialer.
+A cross-platform tray app in `~/projects/goTrust` that embeds the aTrust
+protocol from the fork of `zju-connect`, logs in (password, click captcha,
+one-time codes, external SSO), keeps the session alive, exposes SOCKS5 + HTTP
+proxies, and shows the gateway's granted resources. The live gateway path is
+verified. The remaining work turns the skeleton into a daily-use product:
+settings and startup, auth methods, resource display, reliability, an Arch
+package, and a UI polish pass.
 
 ## Next Step
 
-Phase 9: a real login, proxied request and keep-alive once a disposable
-account is provided. Phase 8 (`--print-dae-config`) remains available if
-verification must wait.
+Phase 11: define the settings model and build the separate settings window
+(connection, proxies, keep-alive, startup, advanced), then wire the tray
+status/connect/settings items, autostart and auto-connect.
 
 ## Current Phase
 
-Phase 9
+Phase 11
 
 ## Phases
 
@@ -69,9 +75,10 @@ Phase 9
 - [x] SOCKS5 resolves hostnames through the tunnel resolver (regression test)
 - **Status:** complete
 
-### Phase 8: Transparent proxy via dae (next)
+### Phase 8: Transparent proxy via dae (deferred, last)
 
-Research is in `findings.md`; dae stays a separate daemon.
+Deferred by the operator: nice-to-have, after the product phases below. Research
+is in `findings.md`; dae stays a separate daemon.
 
 - [ ] `--print-dae-config` emits `node`/`group`/`routing` for the configured listeners
 - [ ] Intranet prefixes derived from the session's IP resources, not hardcoded
@@ -81,12 +88,15 @@ Research is in `findings.md`; dae stays a separate daemon.
 - [ ] README section "Transparent proxy (optional)" with the daemon boundary and the DNS caveat
 - **Status:** pending
 
-### Phase 9: Live gateway verification (blocked)
+### Phase 9: Live gateway verification (complete)
 
-- [ ] Real login, proxied request and keep-alive against a gateway
-- **Status:** pending
-- **Blocked on:** a disposable account. The only account on this host belongs
-  to the operator's production service.
+- [x] Real login through the window, including the gateway's click captcha
+- [x] Proxied request over HTTP and SOCKS5 to the granted application
+- [x] Keep-alive over the derived application target
+- [x] Session restore from the stored ticket without a new captcha
+- **Status:** complete
+- **Note:** the account grants one network application, so the remote-DNS
+  keep-alive fallback does not run on this gateway and stays untested.
 
 ### Phase 10: Click captcha (complete)
 
@@ -101,13 +111,162 @@ protocol writes `{"coordinates":[[x,y],…],"width":W,"height":H}`.
 - [x] `--no-ui` keeps refusing with a message that names the window requirement
 - [x] Tests: pixel mapping, panel clicks, submit payload, window/context cancel, bad image
 - [x] README "Logging in" section
+- [x] 登录域 field, applied by both the settings and the credentials path
+- [x] Session and proxy lifetimes detached from the login-attempt context
 - **Status:** complete
+
+### Phase 11: Settings, startup and tray
+
+Requirements 1, 2, 5, 6, 7, and the foundation for 10. A dedicated settings
+window keeps the main window about status, connection and resources; EZ4Connect
+does the same. Settings are persisted in the existing JSON file.
+
+- [ ] Config model: add an `app` section (`auto_connect`, `start_hidden`,
+      `auto_reconnect`, `reconnect_initial`, `reconnect_max`) and opt-in TOTP
+      secret fields; mirror the OS autostart state so a lost entry is repaired
+- [ ] Defaults: login domain `local`, keep-alive 60 s, SOCKS5 `127.0.0.1:1080`,
+      HTTP `127.0.0.1:1081`; loading an older file fills missing fields from
+      the defaults and keeps the file valid
+- [ ] Settings window: connection (gateway, port, username, login domain,
+      password/store), proxies (bind addresses and enable toggles), keep-alive
+      (enabled, interval, manual targets), startup (autostart, auto-connect,
+      start hidden, auto-reconnect), advanced (verbose, client data path)
+- [ ] Apply rules: proxy binds and keep-alive take effect on the next connect;
+      credentials and domain on the next login; cosmetic settings immediately
+- [ ] Tray: disabled status line (`已连接 203.0.113.4`, `连接中`, `失败: …`),
+      connect/disconnect toggle, show window, settings, quit; tooltip mirrors
+      the phase and the last keep-alive result
+- [ ] Autostart at user login through `mygo.App.SetOpenAtLogin` (XDG autostart
+      on Linux) and `WasOpenedAtLogin` to start hidden; a systemd unit is not
+      the desktop equivalent and is not planned here
+- [ ] Auto-connect on `WhenReady` when enabled and a stored password or client
+      data exists; reveal the window for a captcha/second factor and fail
+      visibly when credentials are missing
+- [ ] Tests: config round-trip/defaults, settings view render and callbacks,
+      tray menu per phase, autostart entry in a temp `XDG_CONFIG_HOME`, and a
+      pure auto-connect decision function
+- **Status:** pending
+
+### Phase 12: Auth methods and second factors
+
+Requirements 3 and 4. The fork exposes `atrust.GetAuthInfoList` as a public
+pre-login call, so method discovery needs no protocol change. aTrust matches
+`authType` and `loginDomain` exactly.
+
+- [ ] `session.DiscoverAuthMethods(ctx, cfg)` wrapping `atrust.GetAuthInfoList`
+      (server, port, underlay settings); return name, type, domain, URL
+- [ ] Settings: "获取认证方式" button and a list/dropdown; store the chosen
+      `auth_type` and `login_domain`; keep `local` as the default domain
+- [ ] Resolution: auto mode uses the only offered method, else the saved one,
+      else asks the user to choose; a stored method the gateway no longer offers
+      fails with the list instead of a silent fallback
+- [ ] Code challenge dialog for SMS/TOTP/RADIUS: message, code input, and
+      "跳过以后的二次认证" when the challenge allows it; optional TOTP secret
+      (store only on opt-in) generates the code upstream
+- [ ] External SSO (CAS/OAuth2): open `LoginURL` in the system browser and take
+      the callback URL, validating path and ticket/code; a built-in webview is a
+      later option, not a dependency
+- [ ] Cancel and login-context timeout release the handler, as the click
+      captcha already does
+- [ ] Tests: auth-info parsing/resolution, prompter dialogs and cancel, SSO
+      callback validation; mark SMS/TOTP/SSO **untested live** (the verified
+      account has no second factor) in the README and progress log
+- **Status:** pending
+
+### Phase 13: Granted resources
+
+Requirement 8, informed by `atrust-quadlet --apps`: the user must see what the
+account may reach and which URL to open in a browser.
+
+- [ ] Retain IP, domain and DNS resources plus app IDs in `session.State`
+      instead of discarding them after setup
+- [ ] Check whether the resource model can carry app names and launch URLs;
+      extend the fork's `resourceApp` if the fields are available, otherwise
+      derive display entries from addresses/ports
+- [ ] Display model: domain `name[:port]`, IP/range with port range and protocol,
+      DNS name→IP; suggest `http://`/`https://` for a single IP with port 80/443
+- [ ] Main window: scrollable resource list with open-in-browser and copy
+      actions, plus gateway, tunnel IP and proxy addresses
+- [ ] Cache the last snapshot in the config directory at 0600 and print it in
+      `--no-ui` runs; add `--print-resources` for headless use (Quadlet's
+      `--apps` equivalent)
+- [ ] Tests: derivation/formatting, URL suggestion, empty session, cache
+      round-trip; no real intranet address in the repository
+- **Status:** pending
+
+### Phase 14: Reliability
+
+Inspired by EZ4Connect's reconnect ladder and the keepalive family's probe
+discipline; not a new user-facing feature list, but the session must not lie.
+
+- [ ] Auto-reconnect option (default off): attempts after session loss with
+      1/2/4/8/16 s backoff, at most 5; state and tray show
+      `重连中 (n/5, next in Xs)`
+- [ ] Stop the ladder when a captcha, one-time code or SSO callback is needed,
+      and bring the window forward instead of retrying blindly
+- [ ] Expose `last target`, `last result`, `last at` in `session.State` by
+      wrapping `service.KeepAlive` (a fork result hook) rather than duplicating
+      its logic; manual targets first, derived targets next; reject or warn
+      about `https://` targets because only a real HTTP request counts; keep
+      the 60 s default
+- [ ] Surface session expiry and reauthentication: ticket restore first,
+      automatic login only when credentials are stored, otherwise a clear
+      tray/window state
+- [ ] Tests: backoff schedule and cap, target ordering, keep-alive result
+      transitions, reconnect stops on a challenge
+- **Status:** pending
+
+### Phase 15: UI polish
+
+Requirement 10, after the functional windows exist.
+
+- [ ] Layout and typography pass over main, settings, captcha, code and SSO
+      views; consistent spacing, section headings and button hierarchy
+- [ ] Status colours and detail lines for idle/connecting/online/failed/
+      reconnecting; a visible busy state and disabled controls while work runs
+- [ ] Window sizing and scrolling: main window with the resource list; a
+      settings window sized for its groups, scrollable when the screen is
+      short
+- [ ] Render every state with `ui.NewTester` and inspect the images; launch the
+      real window on Wayland for a final smoke, including CJK and the tray menu
+- [ ] Accessibility labels and a sane tab order for every input and button
+- **Status:** pending
+
+### Phase 16: Arch package `gotrust-git`
+
+Requirement 9. Self-use first; publication comes after the public repository
+exists. Follow the existing `~/projects/arch-pkgs` conventions: comment header,
+SPDX, `_branch`, `prepare`/`pkgver`/`build`/`check`/`package`.
+
+- [ ] Create `~/projects/arch-pkgs/gotrust-git/` with `PKGBUILD`, `REUSE.toml`,
+      `goTrust.desktop` and an icon
+- [ ] Source: `git+https://github.com/YangtseSu/goTrust.git#branch=main`;
+      the package is self-use and does not go to the AUR
+- [ ] Install `/usr/bin/goTrust`, the desktop entry, the icon and the AGPL
+      license; determine runtime deps with `ldd` and `namcap` (GTK, WebKit,
+      appindicator/hicolor as applicable)
+- [ ] `check()` runs `go test ./...`; `pkgver()` uses `git describe`; build with
+      `-trimpath` and the same hardening as the sibling packages
+- [ ] Verify `makepkg -f`, `namcap PKGBUILD` and the package file, install with
+      `pacman -U` and launch from the desktop entry; leave it installed for
+      daily use
+- [ ] Do not push or publish; this is the operator's local package first
+- **Status:** pending
 
 ## Key Questions
 
-1. Does mygo's `ui` package expose a text input suitable for username/password? (answer: `ui.Field` wraps a child view; check for a bound-input constructor before writing the form)
-2. Does the fork's `dev` branch carry the session-recovery fixes needed for a usable state machine? (answer: yes, 72 commits ahead, CI green)
-3. Can `service.ServeSocks5` be used? (answer: no — it has no context and registers cleanup through `internal/hook_func`; own listeners instead)
+1. Can the resource model carry app names and launch URLs, or only the
+   address/port rules the fork parses? (Phase 13: extend the parser if the
+   fields exist, otherwise derive display URLs)
+2. What signal does the embedded client give when the session needs a relogin?
+   The upstream logs `aTrust session requires reauthentication`; if no callback
+   exists, Phase 14 needs a small fork hook or dial-failure detection.
+3. For external SSO, is a system browser plus a pasted callback URL enough, or
+   does a gateway hand back a cookie that only a webview can complete? Start
+   with the browser/paste path and add a webview only on evidence.
+4. Which runtime libraries does the packaged binary actually load (GTK,
+   WebKitGTK, libayatana-appindicator)? Resolve with `ldd` and `namcap` in
+   Phase 16, not by guessing.
 
 ## Decisions Made
 
@@ -118,6 +277,15 @@ protocol writes `{"coordinates":[[x,y],…],"width":W,"height":H}`.
 | AGPL-3.0-or-later for goTrust | Static linking with AGPL code makes the combination AGPL; GPLv3 §13 only permits the combination in the AGPL direction |
 | Own SOCKS5/HTTP listeners instead of `service.Serve*` | Those take no `context.Context` and shut down through `internal/hook_func`, which an external module cannot import |
 | No TUN, no system proxy | Removes root elevation, wintun, and three platform backends; keeps the app a plain user process |
+| Settings in a dedicated window | The main window stays a status/connection page, as EZ4Connect does; the settings surface is large (connection, proxies, keep-alive, startup, advanced) |
+| Auth method: auto by default, manual override | `atrust.GetAuthInfoList` is public and works pre-login; one offered method is unambiguous, several need the saved pair or a chooser, and the protocol requires an exact `authType`+`loginDomain` match |
+| Login domain defaults to `local` | The verified gateway offers `local`; the field stays editable because other gateways use `Radius` or a tenant name |
+| Autostart means XDG login autostart | `mygo.App.SetOpenAtLogin` is the platform path for a tray app; a systemd unit is not the desktop equivalent and is not planned here |
+| Auto-connect on startup, auto-reconnect separate and off by default | "自动连接" is a startup behavior; reconnecting after expiry is a different risk and gets its own setting (EZ4Connect defaults it off too) |
+| Keep-alive is a real HTTP request | CONNECT-only and HTTPS targets do not renew the session (tested in atrust-keepalive and atrust-quadlet); manual targets come first, derived targets next |
+| Resource list derives URLs when names are absent | The fork keeps address/port rules and app IDs, not necessarily names; showing `http://IP[:port]` is useful even without a portal label |
+| Arch package builds from the local checkout first | The repository is private until publication; `gotrust-git` stays self-use and switches its source URL at release |
+| dae remains last | The operator deferred transparent-proxy export; it is nice-to-have after the product phases |
 
 ## Errors Encountered
 
@@ -134,5 +302,14 @@ protocol writes `{"coordinates":[[x,y],…],"width":W,"height":H}`.
 
 ## Notes
 
-- The production aTrust account is owned by the operator's production service; this skeleton must never attempt a real login during development.
-- `internal/` packages of `zju-connect` are unreachable from here by design. Only use `client`, `client/atrust`, `client/authchallenge`, `dial`, `resolve`, `service`, `stack/gvisor`, `underlay`.
+- The verified gateway account is disposable and has no second factor beyond the
+  click captcha; SMS/TOTP/SSO can be implemented but not live-tested. Never put
+  the account, password, gateway address, intranet addresses or client data in
+  the repository or a package.
+- `internal/` packages of `zju-connect` are unreachable from here by design.
+  Only use `client`, `client/atrust`, `client/authchallenge`, `dial`, `resolve`,
+  `service`, `stack/gvisor`, `underlay`.
+- Reference projects: `EZ4Connect` (Qt UI around the core), `zju-connect`
+  (protocol), `atrust-quadlet` (supervised deployment, `--apps`,
+  `--status`), `atrust-keepalive` (90 s real-HTTP probe, target discovery,
+  failure surfacing). Their reusable lessons are recorded in `findings.md`.

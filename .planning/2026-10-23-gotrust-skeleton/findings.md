@@ -170,3 +170,117 @@ Machine readiness on this host: `dae` installed, kernel 7.3 (well above the 5.17
 
 - Headless render of a CJK view (`ui.NewTester`) produced correct glyphs at 22px and body size; no tofu, no baseline drift.
 - The goTrust window renders correctly at 520x560 with four `TextInput` fields, a masked password, four buttons, a divider and the listener list. `ui.NewTester` needs one extra `Frame()` before `Image()` for values typed into inputs to appear.
+
+### Product-phase research (2026-10-24)
+
+The operator's next scope: autostart, auto-connect, SMS/TOTP/SSO, auth-method
+choice, defaults, settings, tray, resource display, Arch package, UI polish.
+dae is deferred last.
+
+#### EZ4Connect (Qt UI around the core)
+
+- Auth-method discovery: a settings/guide button runs the core as
+  `-protocol atrust -server … -port … -auth-info` and parses the JSON list into
+  a picker; the chosen `authType`/`loginDomain` are stored
+  (`presentation/dialogs/authinfowindow/authinfowindow.cpp:105-113`,
+  `configurationguidedialog.cpp:608-621`). Exact-match failure is surfaced as
+  "认证方式/登录域不可用" (`connectionuicontroller.cpp:499`).
+- Settings keys: `ZJUConnect/AuthType` (default `psw`),
+  `ZJUConnect/LoginDomain`, SMS phone/URL, TOTP secret, HTTP port, keep-alive
+  URL/mode, auto start/silent start/connect after start, auto reconnect and its
+  initial delay (`presentation/dialogs/settingwindow/settingwindow.ui`).
+- Settings live in a separate window; a configuration guide covers first run.
+- Reconnect: `Common/AutoReconnect` (default false) and
+  `Common/ReconnectTime` (default 1 s); a 1/2/4/8/16 s ladder, max 5, and a
+  `Reconnecting` state with attempt/delay text (`connectionsession.cpp:8-53`,
+  `connectionsessionstate.*`, `mainwindow.cpp:651-670`).
+- Tray: connect, profile submenu, show, quit; tooltip carries the session and
+  last keep-alive state (`mainwindow.cpp:697-739`, `622-648`).
+- One-time codes: SMS dialog with "跳过以后的二次认证" (prefix `$` to the
+  core), RADIUS dialog with the same checkbox, TOTP input
+  (`authdialogcoordinator.cpp:230-285`). SSO uses a Qt WebEngine window that
+  intercepts the redirect to the gateway callback and rejects it
+  (`ssologinwebview.cpp:50-80`).
+- Resources: no per-app list; the main window only says "连接后即可访问网络
+  资源". Quadlet's `--apps` is the better model.
+
+#### zju-connect (protocol)
+
+- `atrust.GetAuthInfoList(server, port, bindInterface, autoDetect, localDNS,
+  tlsKeyLog)` is a public pre-login call; it builds its own underlay/session
+  (`client/atrust/client.go:263-288`). goTrust can use it without a fork patch.
+- Auth matching is exact on `AuthType` + `LoginDomain`
+  (`client/atrust/auth/auth.go:438-448`); `NewLoginMethod` supports
+  `auth/psw`, `auth/cas`, `auth/httpsOauth2`, `auth/smsCheckCode`
+  (`login_method.go:16-56`).
+- Code challenges: `CodeSMS`, `CodeTOTP`, `CodeRadius`; TOTP can be generated
+  from `LoginOptions.TOTPSecret` instead of prompting
+  (`client/atrust/auth/token.go:22-33`); SMS/RADIUS prompt with
+  `CanSkipSecondaryAuth` (`request.go:553-566`, `custom_sms.go:15-29`).
+- External login: CAS and OAuth2 call `HandleExternalLogin` with the login URL
+  and validate the pasted callback path and ticket/code
+  (`client/atrust/auth/cas.go:55-90`, `https_oauth2.go:60-90`).
+- Resources: `IPResource{IPMin,IPMax,PortMin,PortMax,Protocol,AppID,NodeGroupID,
+  EnableTCPPrefL3}`, `DomainResources` by name, `DNSResource` name→IP
+  (`client/client.go:24-45`). The parser keeps no app name or launch URL
+  (`client/atrust/parse.go:26-100`); raw JSON may have more, to be verified.
+- Keep-alive: `DeriveKeepAliveTargets(ipResources)` produces an HTTP URL from a
+  granted app; named targets are merged first (`service/keep_alive.go`), and
+  the remote-DNS fallback explicitly does not count as application traffic.
+- Session data persists cookies/sign key/SID ticket; a restart can restore
+  without a login (`client/atrust/auth/auth.go:58-72`). The client logs
+  `aTrust session requires reauthentication` and refreshes the SID itself.
+
+#### atrust-quadlet (supervised deployment)
+
+- Headless supervisor with podman/Quadlet; state machine logs in, probes the
+  data plane and recovers the tunnel without a human when it can
+  (`README.md`, `atrustd/__main__.py`).
+- Publishes the account's applications after login: name, launch URL, launch
+  method and server address, as `apps.json` and `atrustd --apps`
+  (`atrustd/__main__.py:234-249`, `atrustd/apps.py`); this is exactly the
+  "what can I open" surface goTrust needs.
+- Probe discipline: a real HTTP request through the tunnel, a named target or
+  route discovery, and a 90 s watch interval; `CONNECT`-only and HTTPS do not
+  renew the session (README "What you get", `probe.py`).
+- TOTP secret is supported for printing a code (`atrustd --totp`) but is never
+  submitted automatically; a human completes VNC.
+- Diagnostics: `--status`, `--once`, `--login-probe`, `--apps`, `--bundle`;
+  state/evidence files are 0600 and contain no credentials by construction.
+
+#### atrust-keepalive (host deployment)
+
+- One real HTTP request per 90 s through the tunnel interface, bound with
+  `SO_BINDTODEVICE` so a withdrawn route cannot leak the probe
+  (`atrust-keepalive-linux/atrust-keepalive.sh:6-30`).
+- Status comes from the client's loopback API, cross-checked by the probe;
+  session/tunnel events wake the next cycle early; target is discovered from
+  the tunnel's host routes or configured explicitly (`README.md`).
+- Failure is a first-class state: OFFLINE/ONLINE transitions, consecutive
+  failures, a warning when no real traffic is sent, and a ticket-based tunnel
+  rebuild before asking a human.
+- systemd `--user` for the session bus and notifications; journal logging.
+
+#### mygo (v0.6.3)
+
+- `App.SetOpenAtLogin` / `OpenAtLogin` / `WasOpenedAtLogin` are the platform
+  autostart path; on Linux it writes
+  `$XDG_CONFIG_HOME/autostart/<id>.desktop` with `--mygo-opened-at-login`
+  (`login.go:36-78`, `internal/linux/login.go:20-50`).
+- Tray `MenuItem` supports `Disabled`, `Checked`, `Submenu`, `ToolTip`; enough
+  for a status line, a connect/disconnect toggle, settings and quit
+  (`menu.go:89-110`).
+- Multiple windows are ordinary (`NewWindow`); the settings window can reuse
+  the same view helpers and `Invalidate` model.
+
+#### Arch packaging (`~/projects/arch-pkgs`)
+
+- Sibling packages are VCS packages with a comment header, SPDX, `_branch`,
+  `source=(git+…)`, `prepare()` running `go mod download`, `pkgver()` from
+  `git describe`, `build()` with `-trimpath`, `check()` running the suite, and
+  `package()` installing binary, desktop entry, icon and license
+  (`zju-connect-git/PKGBUILD`, `ez4connect-git/PKGBUILD`).
+- A GUI package installs a `.desktop` and an icon; runtime deps are resolved by
+  `ldd`/`namcap`, not guessed (`ez4connect-git/PKGBUILD`).
+- `gotrust-git` can build from a local `git+file://` source until the repository
+  is public; the source URL is the only release-time change.
