@@ -12,12 +12,13 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 14: reliability. Auto-reconnect with the 1/2/4/8/16 s ladder, keep-alive
-result fields in `session.State`, and session-expiry/reauthentication states.
+Phase 15: UI polish. Layout and typography over every window, state colours and
+busy states, scrolling and sizing, a render pass over every state, then the
+real Wayland smoke including CJK and the tray menu.
 
 ## Current Phase
 
-Phase 14
+Phase 15
 
 ## Phases
 
@@ -223,27 +224,50 @@ account may reach and which URL to open in a browser.
       round-trip, app metadata; no real intranet address in the repository
 - **Status:** complete
 
-### Phase 14: Reliability
+### Phase 14: Reliability (complete)
 
 Inspired by EZ4Connect's reconnect ladder and the keepalive family's probe
 discipline; not a new user-facing feature list, but the session must not lie.
 
-- [ ] Auto-reconnect option (default off): attempts after session loss with
+- [x] Auto-reconnect option (default off): attempts after session loss with
       1/2/4/8/16 s backoff, at most 5; state and tray show
-      `重连中 (n/5, next in Xs)`
-- [ ] Stop the ladder when a captcha, one-time code or SSO callback is needed,
-      and bring the window forward instead of retrying blindly
-- [ ] Expose `last target`, `last result`, `last at` in `session.State` by
+      `重连中 (n/5, next in Xs)`; `PhaseReconnecting` and `State.Reconnect`;
+      the ladder runs only when the client's own renewal has failed, and every
+      attempt is a full login
+- [x] Stop the ladder when a captcha, one-time code or SSO callback is needed,
+      and bring the window forward instead of retrying blindly: an observing
+      prompter marks the attempt, and every prompt panel already reveals the
+      window; the ladder never starts without a saved password, because a
+      fresh login is the only way to a session
+- [x] Expose `last target`, `last result`, `last at` in `session.State` by
       wrapping `service.KeepAlive` (a fork result hook) rather than duplicating
-      its logic; manual targets first, derived targets next; reject or warn
-      about `https://` targets because only a real HTTP request counts; keep
-      the 90 s default
-- [ ] Surface session expiry and reauthentication: ticket restore first,
-      automatic login only when credentials are stored, otherwise a clear
-      tray/window state
-- [ ] Tests: backoff schedule and cap, target ordering, keep-alive result
-      transitions, reconnect stops on a challenge
-- **Status:** pending
+      its logic; manual targets first, derived targets next; `https://` targets
+      are warned about (upstream validation) and the settings window says why;
+      the 90 s default is unchanged. The fork's `KeepAliveOptions.OnResult`
+      reports every attempt and the DNS fallback; the old log-line parser is
+      gone
+- [x] Surface session expiry and reauthentication: the fork reports
+      `online`/`restoring`/`relogin-required` through
+      `SetupOptions.OnSessionState`, goTrust mirrors it, and a lost session
+      with auto-reconnect off becomes a visible `PhaseFailed` with attention
+      instead of an online-looking dead tunnel
+- [x] No session reuse across connections. A session ends with its connection:
+      a stored sid ticket is not a login and cannot be exchanged after the
+      portal ended the session. Auto-connect on startup and the reconnect
+      ladder therefore require a **saved password**; client data alone is not
+      enough. The operator confirmed that both `atrust-quadlet` and
+      `atrust-dev` tried the restore path and the portal rejected it
+      (`75500307` while logged out; `ticketExchange` needs a live session), so
+      the fork commit that enabled it from stored client data was removed
+      from `dev` (history rewritten; `1d0673b` is the only new commit)
+- [x] Tests: backoff schedule and cap, target ordering, keep-alive result
+      transitions, reconnect stops on a challenge / cancellation,
+      session-loss state, no ladder without a password, foreign-client
+      callbacks ignored
+- **Status:** complete
+- **Note:** the live gateway was not re-run; the ladder and the expiry path are
+  covered by unit tests and the fork's own suite. The verify smoke launched the
+  real binary with temporary config/state directories.
 
 ### Phase 15: UI polish
 
@@ -294,9 +318,12 @@ the repository is public. Then a self-use VCS package; it does not go to AUR.
    app list carries `name`, group `name`, `accessAddress`, `openModel.model` and
    `webRelativeDomainList`; the fork parses them into `client.App` and exposes
    `Apps()`. Address rules remain the routing model.
-2. What signal does the embedded client give when the session needs a relogin?
-   The upstream logs `aTrust session requires reauthentication`; if no callback
-   exists, Phase 14 needs a small fork hook or dial-failure detection.
+2. What signal does the embedded client give when the session needs a
+   relogin? **Answered in Phase 14:** the fork now publishes
+   `online`/`restoring`/`relogin-required` through
+   `SetupOptions.OnSessionState`, so goTrust mirrors the client's own renewal,
+   ticket-restore and cooldown ladder instead of parsing log lines. The fork's
+   `KeepAliveOptions.OnResult` does the same for probes.
 3. For external SSO, is a system browser plus a pasted callback URL enough, or
    does a gateway hand back a cookie that only a webview can complete? Start
    with the browser/paste path and add a webview only on evidence.
@@ -324,6 +351,7 @@ the repository is public. Then a self-use VCS package; it does not go to AUR.
 | Login domain defaults to `local` | The verified gateway offers `local`; the field stays editable because other gateways use `Radius` or a tenant name |
 | Autostart means XDG login autostart | `mygo.App.SetOpenAtLogin` is the platform path for a tray app; a systemd unit is not the desktop equivalent and is not planned here |
 | Auto-connect on startup, auto-reconnect separate and off by default | "自动连接" is a startup behavior; reconnecting after expiry is a different risk and gets its own setting (EZ4Connect defaults it off too) |
+| A session cannot outlive its connection; no ticket restore | Tested in `atrust-quadlet` and `atrust-dev`: the stored sid ticket only exchanges while the portal still has a live session (`75500307` while logged out), so a reconnect must log in again. Stored client data is device material, not a credential |
 | Keep-alive is a real HTTP request | CONNECT-only and HTTPS targets do not renew the session (tested in atrust-keepalive and atrust-quadlet); manual targets come first, derived targets next |
 | Resource list derives URLs when names are absent | The fork keeps address/port rules and app IDs, not necessarily names; showing `http://IP[:port]` is useful even without a portal label |
 | Arch package builds from the local checkout first | The repository is private until publication; `gotrust-git` stays self-use and switches its source URL at release |

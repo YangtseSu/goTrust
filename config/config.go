@@ -59,11 +59,13 @@ type AppConfig struct {
 	Autostart bool `toml:"autostart"`
 	// StartHidden opens only the tray icon.
 	StartHidden bool `toml:"start_hidden"`
-	// AutoConnect logs in when the app becomes ready, if a saved password or a
-	// stored session makes that possible without asking first.
+	// AutoConnect logs in when the app becomes ready, if a saved password
+	// makes that possible without asking first. A stored session is not a
+	// credential: it ends with its connection.
 	AutoConnect bool `toml:"auto_connect"`
-	// AutoReconnect is reserved for the reconnect ladder; the settings window
-	// stores it now.
+	// AutoReconnect retries a lost session on the 1/2/4/8/16 s ladder, five
+	// attempts at most. Off by default: a full login rotates the device token
+	// and drops other clients of the same account.
 	AutoReconnect bool `toml:"auto_reconnect"`
 }
 

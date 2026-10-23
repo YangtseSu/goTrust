@@ -465,6 +465,7 @@ func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profi
 		})
 		ui.Field(c, "手动目标", func() {
 			ui.TextArea(c, &state.Targets[index]).Placeholder("http://192.0.2.10/，每行一个")
+			ui.Text(c, "只探测 http:// 目标：https 经 CONNECT 隧道，不算应用流量，不续期会话。").FontSize(11)
 		})
 	})
 }
@@ -476,7 +477,7 @@ func startupSection(c *ui.Context, state *SettingsState, actions SettingsActions
 		}
 		ui.Checkbox(c, &state.Draft.App.AutoConnect, "启动后自动连接")
 		ui.Checkbox(c, &state.Draft.App.StartHidden, "启动时隐藏窗口")
-		ui.Checkbox(c, &state.Draft.App.AutoReconnect, "断线后自动重连（后续版本生效）")
+		ui.Checkbox(c, &state.Draft.App.AutoReconnect, "断线后自动重连（最多 5 次）")
 	})
 }
 

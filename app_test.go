@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/YangtseSu/goTrust/config"
 	"github.com/YangtseSu/goTrust/session"
@@ -21,11 +22,10 @@ func TestDecideAutoConnect(t *testing.T) {
 	ready.Profiles[0].Auth.Username = "alice"
 
 	cases := []struct {
-		name       string
-		mutate     func(*config.Config)
-		clientData bool
-		want       bool
-		reason     string
+		name   string
+		mutate func(*config.Config)
+		want   bool
+		reason string
 	}{
 		{
 			name:   "option off",
@@ -63,10 +63,11 @@ func TestDecideAutoConnect(t *testing.T) {
 			reason: "密码",
 		},
 		{
-			name:       "stored session",
-			mutate:     func(cfg *config.Config) {},
-			clientData: true,
-			want:       true,
+			// A session belongs to its connection; stored client data alone
+			// is not a reason to connect without a password.
+			name:   "stored session is not a credential",
+			mutate: func(cfg *config.Config) {},
+			reason: "密码",
 		},
 	}
 
@@ -74,7 +75,7 @@ func TestDecideAutoConnect(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			cfg := ready.Clone()
 			testCase.mutate(&cfg)
-			decision := decideAutoConnect(cfg, testCase.clientData)
+			decision := decideAutoConnect(cfg)
 			if decision.Connect != testCase.want {
 				t.Fatalf("connect = %v, want %v (reason %q)", decision.Connect, testCase.want, decision.Reason)
 			}
@@ -82,67 +83,6 @@ func TestDecideAutoConnect(t *testing.T) {
 				t.Fatalf("reason = %q, want it to mention %q", decision.Reason, testCase.reason)
 			}
 		})
-	}
-}
-
-func TestHasClientDataIsPerProfile(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
-	cfg := config.Default()
-	application := &app{cfg: cfg}
-	if application.hasClientData() {
-		t.Fatal("reported a stored session before one exists")
-	}
-
-	path, err := cfg.ClientDataPath()
-	if err != nil {
-		t.Fatalf("path: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(path, []byte("{}"), 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	if !application.hasClientData() {
-		t.Fatal("a stored session was not seen")
-	}
-}
-
-func TestParseKeepAlive(t *testing.T) {
-	cases := []struct {
-		line   string
-		want   string
-		wantOK bool
-	}{
-		{
-			line:   "2026/10/24 01:00:00 KeepAlive: OK status=200 target=http://192.0.2.10/",
-			want:   "OK 200 · http://192.0.2.10/",
-			wantOK: true,
-		},
-		{
-			line:   "2026/10/24 01:00:00 KeepAlive: target=http://192.0.2.10/ err=dial timeout",
-			want:   "失败 · http://192.0.2.10/",
-			wantOK: true,
-		},
-		{
-			line:   "2026/10/24 01:00:00 KeepAlive using UDP: OK",
-			want:   "DNS OK",
-			wantOK: true,
-		},
-		{
-			line:   "2026/10/24 01:00:00 goTrust ready",
-			wantOK: false,
-		},
-	}
-	for _, testCase := range cases {
-		got, ok := parseKeepAlive(testCase.line)
-		if ok != testCase.wantOK {
-			t.Fatalf("%q: ok = %v, want %v", testCase.line, ok, testCase.wantOK)
-		}
-		if ok && got != testCase.want {
-			t.Fatalf("%q: result = %q, want %q", testCase.line, got, testCase.want)
-		}
 	}
 }
 
@@ -192,8 +132,16 @@ func TestActiveProfileFeedsTheSession(t *testing.T) {
 
 func TestTooltipMirrorsPhaseAndKeepAlive(t *testing.T) {
 	application := &app{}
-	application.view.Session = session.State{Phase: session.PhaseOnline, ClientIP: "203.0.113.4"}
-	application.view.KeepAlive = "OK 200 · http://192.0.2.10/"
+	application.view.Session = session.State{
+		Phase:    session.PhaseOnline,
+		ClientIP: "203.0.113.4",
+		KeepAlive: session.KeepAliveState{
+			Target: "http://192.0.2.10/",
+			Status: 200,
+			OK:     true,
+			At:     time.Now(),
+		},
+	}
 
 	tooltip := application.tooltip(application.view)
 	if !strings.Contains(tooltip, "已连接 203.0.113.4") {
@@ -204,22 +152,35 @@ func TestTooltipMirrorsPhaseAndKeepAlive(t *testing.T) {
 	}
 
 	application.view.Session = session.State{Phase: session.PhaseFailed, Detail: "bad password"}
-	application.view.KeepAlive = ""
 	if got := application.tooltip(application.view); !strings.Contains(got, "失败: bad password") {
 		t.Fatalf("tooltip = %q", got)
 	}
 }
 
-func TestObserveLogLineUpdatesTheView(t *testing.T) {
-	application := &app{}
-	application.observeLogLine("2026/10/24 01:00:00 KeepAlive: OK status=200 target=http://192.0.2.10/")
-	if !strings.HasPrefix(application.view.KeepAlive, "OK 200") {
-		t.Fatalf("keep-alive = %q", application.view.KeepAlive)
+// The reconnect phase is an active session: 断开 must stop it, and the tray
+// must count down rather than claim the user is disconnected.
+func TestReconnectIsAnActiveSession(t *testing.T) {
+	for _, phase := range []session.Phase{session.PhaseOnline, session.PhaseConnecting, session.PhaseReconnecting} {
+		if !sessionActive(phase) {
+			t.Fatalf("phase %q is not treated as active", phase)
+		}
+	}
+	for _, phase := range []session.Phase{session.PhaseIdle, session.PhaseFailed} {
+		if sessionActive(phase) {
+			t.Fatalf("phase %q is treated as active", phase)
+		}
 	}
 
-	application.observeLogLine("2026/10/24 01:00:30 goTrust ready")
-	if gotrustui.TrayStatus(application.view.Session) != "未连接" {
-		t.Fatalf("an ordinary line changed the state")
+	state := session.State{
+		Phase: session.PhaseReconnecting,
+		Reconnect: session.ReconnectState{
+			Attempt: 2,
+			Max:     5,
+			NextAt:  time.Now().Add(4 * time.Second),
+		},
+	}
+	if got := gotrustui.TrayStatus(state); !strings.Contains(got, "重连中 (2/5") {
+		t.Fatalf("tray status = %q, want the ladder position", got)
 	}
 }
 

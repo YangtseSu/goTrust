@@ -10,6 +10,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -40,9 +41,6 @@ type State struct {
 	Code     *CodePrompt
 	External *ExternalLogin
 	Choice   *AuthChoice
-	// KeepAlive is the last keep-alive result, parsed from the log line the
-	// upstream loop writes.
-	KeepAlive string
 }
 
 // Actions are what the window and the tray can ask the application to do.
@@ -131,6 +129,8 @@ func phaseLabel(s session.State) string {
 		return "已连接"
 	case session.PhaseConnecting:
 		return "连接中"
+	case session.PhaseReconnecting:
+		return "重连中"
 	case session.PhaseFailed:
 		return "失败"
 	default:
@@ -140,6 +140,12 @@ func phaseLabel(s session.State) string {
 
 // phaseDetail explains the phase in one line, including how long it has held.
 func phaseDetail(s session.State) string {
+	if s.Phase == session.PhaseReconnecting {
+		if s.Reconnect.Attempt == 0 {
+			return s.Detail + "…"
+		}
+		return reconnectLabel(s.Reconnect)
+	}
 	if s.Since.IsZero() {
 		return s.Detail
 	}
@@ -155,6 +161,50 @@ func phaseDetail(s session.State) string {
 	default:
 		return s.Detail
 	}
+}
+
+// reconnectLabel is the ladder position the state and the tray both show:
+// "重连中 (2/5，4 秒后)" while it waits, "重连中 (2/5)" while an attempt runs.
+func reconnectLabel(reconnect session.ReconnectState) string {
+	label := fmt.Sprintf("重连中 (%d/%d", reconnect.Attempt, reconnect.Max)
+	if wait := reconnectWait(reconnect.NextAt); wait != "" {
+		label += "，" + wait
+	}
+	return label + ")"
+}
+
+// reconnectWait renders the time left before the next attempt, rounded up so a
+// countdown never shows "0 秒后" while the attempt has not started.
+func reconnectWait(next time.Time) string {
+	if next.IsZero() {
+		return ""
+	}
+	seconds := int(math.Ceil(time.Until(next).Seconds()))
+	if seconds < 1 {
+		seconds = 1
+	}
+	return fmt.Sprintf("%d 秒后", seconds)
+}
+
+// KeepAliveSummary renders the last probe for the window and the tray tooltip.
+// An empty string means no probe has run yet.
+func KeepAliveSummary(keepAlive session.KeepAliveState) string {
+	if keepAlive.At.IsZero() {
+		return ""
+	}
+	if keepAlive.Fallback {
+		if keepAlive.OK {
+			return "DNS OK · " + keepAlive.Target
+		}
+		return "DNS 失败 · " + keepAlive.Target
+	}
+	if keepAlive.OK {
+		return fmt.Sprintf("OK %d · %s", keepAlive.Status, keepAlive.Target)
+	}
+	if keepAlive.Err != "" {
+		return "失败 · " + keepAlive.Target
+	}
+	return fmt.Sprintf("失败 %d · %s", keepAlive.Status, keepAlive.Target)
 }
 
 // captchaPanel replaces the connection controls while the gateway waits for a
@@ -216,7 +266,7 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 func controls(c *ui.Context, state *State, actions Actions) {
 	ui.Row(c).Gap(10).Children(func() {
 		switch state.Session.Phase {
-		case session.PhaseOnline, session.PhaseConnecting:
+		case session.PhaseOnline, session.PhaseConnecting, session.PhaseReconnecting:
 			if ui.Button(c, "断开").Clicked() && actions.Logout != nil {
 				actions.Logout()
 			}
@@ -293,8 +343,8 @@ func footer(c *ui.Context, state *State) {
 			ui.Text(c, "代理监听 "+address).FontSize(12)
 		}
 	}
-	if state.KeepAlive != "" {
-		ui.Text(c, "保活 "+state.KeepAlive).FontSize(12)
+	if summary := KeepAliveSummary(state.Session.KeepAlive); summary != "" {
+		ui.Text(c, "保活 "+summary).FontSize(12)
 	}
 	if state.Status != "" {
 		ui.Text(c, state.Status).FontSize(12)
@@ -316,6 +366,11 @@ func TrayStatus(s session.State) string {
 		return "已连接 " + target
 	case session.PhaseConnecting:
 		return "连接中"
+	case session.PhaseReconnecting:
+		if s.Reconnect.Attempt > 0 {
+			return reconnectLabel(s.Reconnect)
+		}
+		return "重连中"
 	case session.PhaseFailed:
 		return "失败: " + truncate(s.Detail, 48)
 	default:
@@ -341,7 +396,9 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 	}
 
 	toggle := &mygo.MenuItem{ID: "toggle", Label: "连接"}
-	if state.Session.Phase == session.PhaseOnline || state.Session.Phase == session.PhaseConnecting {
+	if state.Session.Phase == session.PhaseOnline ||
+		state.Session.Phase == session.PhaseConnecting ||
+		state.Session.Phase == session.PhaseReconnecting {
 		toggle.Label = "断开"
 		toggle.Click = func(*mygo.MenuItem, *mygo.Window) {
 			if actions.Logout != nil {

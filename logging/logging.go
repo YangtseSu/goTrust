@@ -19,7 +19,6 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -44,9 +43,6 @@ type Options struct {
 	Mirror io.Writer
 	// Verbose starts with debug logging enabled.
 	Verbose bool
-	// OnLine sees every redacted line. It must not log: it runs while the
-	// writer's lock is held.
-	OnLine func(line string)
 }
 
 // Logger is an io.Writer that splits its input into lines, redacts them,
@@ -59,7 +55,6 @@ type Logger struct {
 	backups int
 	size    int64
 	mirror  io.Writer
-	onLine  func(string)
 	pending []byte
 	closed  bool
 
@@ -131,7 +126,6 @@ func New(options Options) (*Logger, error) {
 		max:     maxBytes,
 		backups: backups,
 		mirror:  options.Mirror,
-		onLine:  options.OnLine,
 	}
 	writer.verbose.Store(options.Verbose)
 	if err := writer.openLocked(); err != nil {
@@ -229,9 +223,6 @@ func (l *Logger) emitLocked(line []byte) {
 	}
 	if l.mirror != nil {
 		_, _ = l.mirror.Write(raw)
-	}
-	if l.onLine != nil {
-		l.onLine(strings.TrimRight(redacted, "\n"))
 	}
 }
 

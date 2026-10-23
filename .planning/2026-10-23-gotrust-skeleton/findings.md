@@ -156,6 +156,9 @@ Machine readiness on this host: `dae` installed, kernel 7.3 (well above the 5.17
 | `go get …@dev` fails: the default branch is `main` | Pin a pseudo-version through `replace` |
 | Pseudo-version timestamp malformed (`20261020T02`) | Use the full 14 digits from the commit date |
 | `service.Serve*` not shutdown-controllable | Write the listeners in `proxy` |
+| A session-expiry callback was only a log line | Fork `1d0673b`: `SetupOptions.OnSessionState` publishes every real state change |
+| Keep-alive results were parsed out of log text | Fork `1d0673b`: `KeepAliveOptions.OnResult` reports each probe and the DNS fallback |
+| A stored sid ticket cannot revive a session after its connection ended | Tested in `atrust-quadlet` and `atrust-dev`: the exchange needs a live session (`75500307` while logged out). Do not treat client data as a login; a reconnect is a fresh login. The attempt to enable it from stored client data was removed from the fork history (force-pushed rewrite, `1d0673b`) |
 
 ## Resources
 

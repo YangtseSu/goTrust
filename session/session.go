@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	clientpkg "github.com/mythologyli/zju-connect/client"
@@ -45,6 +46,10 @@ const (
 	PhaseConnecting Phase = "connecting"
 	// PhaseOnline means the tunnel is usable and the proxies may serve.
 	PhaseOnline Phase = "online"
+	// PhaseReconnecting means a lost session is being retried with a fresh
+	// login, or the client is renewing its own live session. Dial refuses
+	// until it is online.
+	PhaseReconnecting Phase = "reconnecting"
 	// PhaseFailed means the last attempt stopped with Detail as the reason.
 	PhaseFailed Phase = "failed"
 )
@@ -61,6 +66,13 @@ type State struct {
 	// Resources is what the gateway granted this account. It is retained from
 	// the login that established the tunnel and cleared by Logout.
 	Resources Resources
+	// KeepAlive is the last application-traffic probe.
+	KeepAlive KeepAliveState
+	// Reconnect is the ladder position while a lost session is retried.
+	Reconnect ReconnectState
+	// Attention asks the UI to bring itself forward: the login needs a person,
+	// or the session expired and cannot recover on its own.
+	Attention string
 	// Since is when the phase was entered.
 	Since time.Time
 }
@@ -114,6 +126,14 @@ type Manager struct {
 	underlay *underlay.Dialer
 	cancel   context.CancelFunc
 	login    sync.Mutex
+
+	// challenge records that the login asked the user something during the
+	// current attempt, so the ladder stops instead of retrying blindly.
+	challenge atomic.Bool
+	// reconnectMu guards the ladder's cancel function, which is nil when no
+	// ladder runs.
+	reconnectMu     sync.Mutex
+	reconnectCancel context.CancelFunc
 }
 
 // New creates a manager in the idle phase.
@@ -139,8 +159,18 @@ func (m *Manager) State() State {
 // Login establishes a session. It returns once the tunnel is usable, or with
 // the reason it is not. Calling it while online is an error rather than a
 // silent reconnect: a second full login rotates the device token and drops
-// other clients of the same account.
+// other clients of the same account. While the auto-reconnect ladder runs it is
+// refused too, because the ladder owns the next attempt.
 func (m *Manager) Login(ctx context.Context) error {
+	if m.reconnectRunning() {
+		return errors.New("auto-reconnect is already retrying the session")
+	}
+	return m.loginSession(ctx)
+}
+
+// loginSession is the login itself. The ladder calls it directly: it is the
+// owner of the attempts, so the reconnect guard in Login does not apply.
+func (m *Manager) loginSession(ctx context.Context) error {
 	m.login.Lock()
 	defer m.login.Unlock()
 
@@ -191,8 +221,10 @@ func (m *Manager) Login(ctx context.Context) error {
 
 	// The gateway decides which pair is valid; a saved pair that it no longer
 	// offers has to be a visible error, not a silent fallback. An empty list
-	// means the gateway has nothing to ask (already logged in), so the client
-	// may restore the stored session instead of logging in.
+	// means the gateway has nothing to ask (it already sees this client as
+	// logged in), so the client continues with the stored cookies and lets the
+	// portal answer. A session never outlives its connection: after a
+	// disconnect the gateway offers the methods again and a login is made.
 	m.set(State{Phase: PhaseConnecting, Detail: "discovering the authentication methods", Since: time.Now()})
 	methods, err := DiscoverAuthMethods(ctx, profile)
 	if err != nil {
@@ -221,10 +253,14 @@ func (m *Manager) Login(ctx context.Context) error {
 
 	// A nil handler panics the upstream client when a gateway asks for a
 	// challenge, so a configuration without one still gets a handler that
-	// refuses with a reason.
+	// refuses with a reason. The wrapper marks the attempt as needing a person,
+	// which is what stops a reconnect ladder at the prompt.
 	var prompt Prompter = authchallenge.UnsupportedHandler{}
 	if m.options.Prompt != nil {
-		prompt = m.options.Prompt(ctx)
+		prompt = observingPrompter{
+			inner:  m.options.Prompt(ctx),
+			notify: func() { m.challenge.Store(true) },
+		}
 	}
 
 	if _, err := client.SetupContext(ctx, atrust.SetupOptions{
@@ -236,6 +272,9 @@ func (m *Manager) Login(ctx context.Context) error {
 		ChallengeHandler:         prompt,
 		BestNodesRefreshInterval: 5 * time.Minute,
 		SessionRefreshInterval:   60 * time.Second,
+		OnSessionState: func(state atrust.SessionState, reason string) {
+			m.observeSessionState(client, state, reason)
+		},
 		SaveClientData: func(data []byte) error {
 			return writeClientData(clientDataPath, data)
 		},
@@ -323,9 +362,17 @@ func (m *Manager) cacheResources(profile config.Profile, gateway, tunnelIP strin
 
 // Logout tears the session down. It is safe to call when idle.
 func (m *Manager) Logout() {
+	m.stopReconnect()
 	m.login.Lock()
 	defer m.login.Unlock()
 
+	m.teardown()
+	m.set(State{Phase: PhaseIdle, Detail: "not connected", Since: time.Now()})
+}
+
+// teardown releases the live client and its data path. It does not publish a
+// phase: the caller decides whether the result is idle, failed or a retry.
+func (m *Manager) teardown() {
 	m.mu.Lock()
 	cancel := m.cancel
 	client := m.client
@@ -347,7 +394,6 @@ func (m *Manager) Logout() {
 	if underlayDialer != nil {
 		_ = underlayDialer.Close()
 	}
-	m.set(State{Phase: PhaseIdle, Detail: "not connected", Since: time.Now()})
 }
 
 // Dial opens a connection through the tunnel. It is the proxy layer's only
@@ -418,6 +464,7 @@ func (m *Manager) runKeepAlive(ctx context.Context, profile config.Profile, ipRe
 	service.KeepAlive(ctx, resolver, dialer, service.KeepAliveOptions{
 		Targets:  targets,
 		Interval: profile.KeepAliveInterval(),
+		OnResult: m.recordKeepAlive,
 	})
 }
 
@@ -460,9 +507,8 @@ func (m *Manager) settings() config.Config {
 }
 
 // resolveAuthMethod turns the offered list into the pair to log in with. An
-// empty list means the gateway has nothing to ask, so no login method is built
-// and the client's own restore path decides whether the stored session is
-// enough.
+// empty list means the gateway has nothing to ask, so no login method is built;
+// the client continues with the stored cookies and the portal answers.
 func (m *Manager) resolveAuthMethod(ctx context.Context, methods []AuthMethod, profile config.Profile) (*AuthMethod, error) {
 	if len(methods) == 0 {
 		m.logf("the gateway offered no authentication method; expecting a stored session")
@@ -526,9 +572,74 @@ func (m *Manager) set(state State) {
 	m.state = state
 	m.mu.Unlock()
 
+	m.emit(state)
+}
+
+// setTransition replaces the state and stamps Since only when the phase changes:
+// the reconnect countdown republishes the same phase every second, and a
+// timestamp that moves with it would claim the phase restarted.
+func (m *Manager) setTransition(state State) {
+	m.mu.Lock()
+	if m.state.Phase == state.Phase {
+		state.Since = m.state.Since
+	} else {
+		state.Since = time.Now()
+	}
+	m.state = state
+	m.mu.Unlock()
+
+	m.emit(state)
+}
+
+func (m *Manager) emit(state State) {
 	if m.options.OnState != nil {
 		m.options.OnState(state)
 	}
+}
+
+// recordKeepAlive publishes the last probe without disturbing the phase the
+// session is in: a failed probe is evidence, not a state transition.
+func (m *Manager) recordKeepAlive(result service.KeepAliveResult) {
+	keepAlive := KeepAliveState{
+		Target:   result.Target,
+		Named:    result.Named,
+		Status:   result.StatusCode,
+		OK:       result.OK,
+		Fallback: result.Fallback,
+		At:       result.At,
+	}
+	if result.Err != nil {
+		keepAlive.Err = result.Err.Error()
+	}
+
+	m.mu.Lock()
+	state := m.state
+	state.KeepAlive = keepAlive
+	m.state = state
+	m.mu.Unlock()
+
+	m.emit(state)
+}
+
+// tunnelIP reports the address the live client holds, empty when there is none.
+func (m *Manager) tunnelIP() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.state.ClientIP
+}
+
+// resources reports the last grant, so a reconnecting state does not flash an
+// empty list.
+func (m *Manager) resources() Resources {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.state.Resources
+}
+
+// gatewayAddress is host:port in the form the window shows when online.
+func (m *Manager) gatewayAddress() string {
+	profile := m.settings().Active()
+	return net.JoinHostPort(profile.ServerAddress(), strconv.Itoa(profile.Server.Port))
 }
 
 func (m *Manager) fail(err error) {

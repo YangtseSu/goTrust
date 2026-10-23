@@ -385,6 +385,88 @@
   - `--no-ui` needs a gateway that does not ask for a second factor; the print
     path after a successful login was therefore not exercised live
 
+### Phase 14: Reliability
+
+- **Status:** complete (unit-tested ladder and expiry path; the live gateway
+  was not re-run)
+- Decisions:
+  - the fork's own recovery ladder (renew → upstream ticket restore →
+    cooldown) runs first; goTrust's 1/2/4/8/16 s ladder starts only at
+    `relogin-required`, so the two never race. The upstream restore attempt
+    remains library behaviour, but it cannot cross a connection (the portal
+    answers `75500307` once logged out); every goTrust attempt is a fresh
+    login. The fork still keeps `AutoRelogin` off: a full login
+    rotates the device token and drops other clients of the account
+  - **a session ends with its connection.** The operator confirmed that both
+    `atrust-quadlet` and `atrust-dev` tried the stored-sid-ticket restore and
+    the portal rejected it once the session was gone. The recorded evidence:
+    `ticketExchange` needs a live session, the
+    ticket half answers `75500307 非法的随机校验码` while logged out (`:322`),
+    and quadlet's restart "cannot restore a session the portal has
+    already ended" (`plans/12-client-api-state-read.md:84`). Therefore no
+    reconnect reuses a session: the ladder is a full login, auto-connect
+    requires a saved password, and client data counts as device material only
+  - the ladder is not a health probe. A single failed keep-alive is evidence,
+    not a session loss; only the client's session state starts a reconnect
+  - the state machine gained `PhaseReconnecting`; `State.Reconnect` carries the
+    attempt, the cap and an absolute `NextAt`, and the countdown is rendered,
+    never stored as a frozen number
+- Actions taken:
+  - fork `YangtseSu/zju-connect` dev:
+    - the first attempt also adopted `DeviceID` from stored client data so
+      `canRestoreByTicket` fired. That was wrong: it made a reconnect reuse the
+      old session, which the portal refuses. The operator asked for the
+      erroneous commit to disappear from history, so `dev` was rewritten (one
+      commit replayed onto `7958d6a`, then a force push): the branch now holds
+      only `1d0673b`, the feature commit, and no adoption code
+    - `feat` `1d0673b`: `service.KeepAliveOptions.OnResult` reports every probe
+      (HTTP target, status/error, timestamp) and the remote-DNS fallback;
+      `SetupOptions.OnSessionState` reports each real
+      `online`/`restoring`/`relogin-required` change; tests for both
+  - go.mod re-pinned to `v1.3.2-0.20261023225112-1d0673b1c79b`; the fork tests
+    (including the race-free suite) are green on the rewritten branch
+  - `session/reconnect.go`: the schedule (`reconnectDelays`), `reconnectLadder`
+    with injected wait/attempt/challenge hooks, `waitForReconnect` (one state
+    per second so the countdown moves), `onSessionLost`, `hasStoredPassword`,
+    `startReconnect`/`stopReconnect`, `expire`, `observingPrompter`
+  - `session/session.go`: `PhaseReconnecting`, `State.Reconnect`,
+    `State.KeepAlive`, `State.Attention`, `setTransition` (keeps `Since` across
+    countdown ticks), `recordKeepAlive`, `teardown`, and a `Login`/
+    `loginSession` split so the ladder owns its attempts
+  - `ObserveSessionState` mirrors restoring/online/relogin-required and ignores
+    a closed client's callbacks; keep-alive results are published without
+    faking a phase change
+  - `--no-ui` and the proxy are untouched: a dead session makes `Dial` return
+    `ErrNotOnline` instead of serving through a tunnel that rejects everything
+  - main: dropped the log-line keep-alive parser and the logging `OnLine` hook;
+    the tray tooltip and the window read `state.Session.KeepAlive`; a failure or
+    an attention state reveals the window; 断开 stops the ladder
+  - UI: `重连中 (n/5，x 秒后)` in the phase line and the tray, `KeepAliveSummary`
+    (HTTP answer, transport error, DNS fallback), the 保活 hint about
+    `https://`, and 断开 available while reconnecting
+  - settings label "断线后自动重连（最多 5 次）"
+  - README "Reliability" section
+- Verification:
+  - `go build ./...`, `go vet ./...`, `gofmt -l .`, `go test ./...`,
+    `go test -race . ./session ./ui`, `reuse lint` (40/40) clean
+  - the fork's `go test ./...` clean before the push
+  - schedule, cap, challenge stop and cancellation are asserted on
+    `reconnectLadder` with no clock; session-loss states (including "no ladder
+    without a saved password"), foreign callbacks, keep-alive transitions and
+    target ordering on the manager; auto-connect now needs a saved password
+  - the reconnect state and the keep-alive summaries rendered through
+    `ui.NewTester`; the tray status asserted
+  - a headless binary smoke (`--no-ui`, temp XDG, gateway `127.0.0.1:1`)
+    exited 1 with the discovery error and wrote the 0600 log
+- Notes:
+  - the live gateway was not re-run: the verified account is in use by the
+    operator's running instance, and mygo's single-instance lock refuses a
+    second window. The window states are covered by the headless renderer
+  - a transient network drop that never produces an aTrust "session invalid"
+    answer only shows up as failed keep-alive probes; it does not start the
+    ladder. That is deliberate (a retry is a full login), but a future phase
+    could offer probe-based recovery
+
 ## Test Results
 
 | Test | Input | Expected | Actual | Status |
@@ -470,6 +552,28 @@
 | Settings auth view | two methods | picker, button, hint, callback | rendered | pass |
 | New panels render | code, TOTP, SSO, chooser 520×560 | all texts and buttons | rendered | pass |
 | Discovery failure smoke | `--no-ui`, gateway `127.0.0.1:1` | exit 1 with the reason | as expected | pass |
+| Reconnect schedule | `reconnectDelay` 1…5 and out-of-range | 1/2/4/8/16 s, clamped | as expected | pass |
+| Reconnect ladder cap | always-failing attempt, password stored | 5 attempts, exhausted | 5 | pass |
+| Reconnect ladder challenge | challenge after attempt 2 | stops at 2 | 2 | pass |
+| No ladder without a password | auto-reconnect on, no saved password | failed + attention, no ladder | as expected | pass |
+| Auto-connect needs a password | stored client data, no password | not connected, reason names the password | as expected | pass |
+| Reconnect ladder cancelled | cancelled context | no attempt runs | 0 | pass |
+| Session loss, no auto-reconnect | `relogin-required` | failed + attention, `Dial` → `ErrNotOnline` | as expected | pass |
+| Session loss, no material | auto-reconnect on, empty profile | failed, no ladder | as expected | pass |
+| Restore transitions | `restoring` then `online` | reconnecting → online, IP kept | as expected | pass |
+| Foreign client callback | stale client reports loss | live state untouched | ignored | pass |
+| Keep-alive transitions | OK then transport error | fields replaced, phase kept | as expected | pass |
+| Target ordering | named + derived port-80 grant | named first, derived second | as expected | pass |
+| Tray reconnect status | attempt 2/5, 4 s left | `重连中 (2/5，4 秒后)` | as expected | pass |
+| Keep-alive summary | OK / error / 503 / DNS / none | formatted per case | as expected | pass |
+| Reconnect render | 520×560, ladder 2/5 | label and countdown present | rendered | pass |
+| Headless reliability smoke | `--no-ui`, temp XDG, gateway `127.0.0.1:1` | exit 1 with the reason, 0600 log | as expected | pass |
+| Fork session observer | online repeated, then relogin-required | one callback per change | as expected | pass |
+| Fork keep-alive results | 500 then 200 | two results, timestamps increasing | as expected | pass |
+| Fork fallback result | zero resolver | one labelled failure | as expected | pass |
+| Fork after the rewrite | module cache at `1d0673b` | hooks present, no adoption symbol | as expected | pass |
+| Race detector (reliability) | `go test -race . ./session ./ui` | clean | clean | pass |
+| REUSE after the new files | `reuse lint` | 40/40 | 40/40 | pass |
 
 | Live login with captcha | real gateway, operator clicked the image | online with an IP | online, `203.0.113.4` | pass |
 | Live HTTP proxy | `curl -x 127.0.0.1:11081 http://192.0.2.10/` | 200 from the intranet | 200, 507 bytes | pass |
@@ -491,8 +595,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 13 complete: resources retained, displayed and cached |
-| Where am I going? | Phase 14, reliability |
+| Where am I? | Phase 14 complete: reconnect ladder, keep-alive results and expiry states |
+| Where am I going? | Phase 15, UI polish |
 | What's the goal? | a daily-use aTrust tray client |
-| What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors) |
-| What have I done? | four packages, the settings/auth/resource windows, the fork extension and the package; the binary builds, runs and exits cleanly |
+| What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal |
+| What have I done? | four packages, the settings/auth/resource windows, the reliability state machine, the fork hooks and the package; the binary builds, runs and exits cleanly |

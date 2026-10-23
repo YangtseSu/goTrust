@@ -63,7 +63,6 @@ func main() {
 	fileLog, logErr := logging.New(logging.Options{
 		Verbose: cfg.Logging.Verbose,
 		Mirror:  mirror,
-		OnLine:  application.observeLogLine,
 	})
 	if logErr != nil {
 		// A tray app with no log file is still better than no app.
@@ -217,7 +216,7 @@ func (a *app) runUI(ctx context.Context) {
 		}
 		a.logf("goTrust ready; profile %s", a.cfg.ActiveProfile)
 
-		decision := decideAutoConnect(a.cfg, a.hasClientData())
+		decision := decideAutoConnect(a.cfg)
 		switch {
 		case decision.Connect:
 			a.logf("auto-connect: on")
@@ -567,8 +566,9 @@ func (a *app) onSessionState(state session.State) {
 	}
 	a.refreshTray()
 
-	// A login that fails while the window is hidden must not fail silently.
-	if state.Phase == session.PhaseFailed && !stopping {
+	// A login that fails while the window is hidden must not fail silently, and
+	// neither may a session that expired or a ladder that stopped at a prompt.
+	if (state.Phase == session.PhaseFailed || state.Attention != "") && !stopping {
 		a.showWindow()
 	}
 }
@@ -698,7 +698,7 @@ func (a *app) selectProfile(name string) {
 	}
 
 	a.mu.RLock()
-	online := a.view.Session.Phase == session.PhaseOnline || a.view.Session.Phase == session.PhaseConnecting
+	online := sessionActive(a.view.Session.Phase)
 	a.mu.RUnlock()
 
 	cfg.ActiveProfile = name
@@ -734,7 +734,7 @@ func (a *app) reconcileProfileSwitch(previous, next config.Config) {
 		return
 	}
 	a.mu.RLock()
-	online := a.view.Session.Phase == session.PhaseOnline || a.view.Session.Phase == session.PhaseConnecting
+	online := sessionActive(a.view.Session.Phase)
 	a.mu.RUnlock()
 	if online {
 		a.disconnect()
@@ -900,13 +900,15 @@ func cfgForDisk(cfg config.Config) config.Config {
 	return disk
 }
 
-func (a *app) hasClientData() bool {
-	path, err := a.cfg.ClientDataPath()
-	if err != nil {
+// sessionActive reports whether the phase has a session that 断开 must end:
+// connected, logging in, or waiting out an auto-reconnect.
+func sessionActive(phase session.Phase) bool {
+	switch phase {
+	case session.PhaseOnline, session.PhaseConnecting, session.PhaseReconnecting:
+		return true
+	default:
 		return false
 	}
-	info, err := os.Stat(path)
-	return err == nil && info.Size() > 0
 }
 
 // autoConnectDecision says whether startup may log in without asking.
@@ -915,7 +917,7 @@ type autoConnectDecision struct {
 	Reason  string
 }
 
-func decideAutoConnect(cfg config.Config, clientData bool) autoConnectDecision {
+func decideAutoConnect(cfg config.Config) autoConnectDecision {
 	if !cfg.App.AutoConnect {
 		return autoConnectDecision{}
 	}
@@ -926,69 +928,12 @@ func decideAutoConnect(cfg config.Config, clientData bool) autoConnectDecision {
 	if strings.TrimSpace(profile.Auth.Username) == "" {
 		return autoConnectDecision{Reason: "自动连接未执行：请先在设置中填写用户名"}
 	}
-	if (profile.Auth.StorePass && profile.Auth.Password != "") || clientData {
+	// A stored session is not a login credential: the portal ends a session
+	// with its connection, so startup needs a saved password to reconnect.
+	if profile.Auth.StorePass && profile.Auth.Password != "" {
 		return autoConnectDecision{Connect: true}
 	}
-	return autoConnectDecision{Reason: "自动连接未执行：没有保存的密码或会话，请先在设置中保存密码"}
-}
-
-// observeLogLine turns the upstream keep-alive lines into the tray's last
-// result. The loop itself lives in the aTrust client and has no callback yet,
-// so its logs are the observable result.
-func (a *app) observeLogLine(line string) {
-	result, ok := parseKeepAlive(line)
-	if !ok {
-		return
-	}
-	a.mu.Lock()
-	a.view.KeepAlive = result
-	state := a.view
-	a.mu.Unlock()
-
-	if tray := a.tray.Load(); tray != nil {
-		tray.SetToolTip(a.tooltip(state))
-	}
-	a.invalidate()
-}
-
-// parseKeepAlive reads one of the lines service.KeepAlive writes.
-func parseKeepAlive(line string) (string, bool) {
-	if index := strings.Index(line, "KeepAlive: OK "); index >= 0 {
-		fields := strings.Fields(line[index+len("KeepAlive: OK "):])
-		result := "OK"
-		for _, field := range fields {
-			switch {
-			case strings.HasPrefix(field, "status="):
-				result += " " + strings.TrimPrefix(field, "status=")
-			case strings.HasPrefix(field, "target="):
-				result += " · " + strings.TrimPrefix(field, "target=")
-			}
-		}
-		return result, true
-	}
-	if index := strings.Index(line, "KeepAlive: target="); index >= 0 {
-		fields := strings.Fields(line[index:])
-		target := ""
-		for _, field := range fields {
-			if strings.HasPrefix(field, "target=") {
-				target = strings.TrimPrefix(field, "target=")
-				break
-			}
-		}
-		if target == "" {
-			return "失败", true
-		}
-		return "失败 · " + target, true
-	}
-	switch {
-	case strings.Contains(line, "KeepAlive using UDP: OK"):
-		return "DNS OK", true
-	case strings.Contains(line, "KeepAlive using TCP: OK"):
-		return "DNS OK", true
-	case strings.Contains(line, "KeepAlive: no application target"):
-		return "无应用目标", true
-	}
-	return "", false
+	return autoConnectDecision{Reason: "自动连接未执行：没有保存的密码，请先在设置中保存密码"}
 }
 
 func (a *app) setStatus(message string, busy bool) {
@@ -1026,8 +971,8 @@ func (a *app) refreshTray() {
 
 func (a *app) tooltip(state gotrustui.State) string {
 	tooltip := "goTrust: " + gotrustui.TrayStatus(state.Session)
-	if state.KeepAlive != "" {
-		tooltip += "\n保活: " + state.KeepAlive
+	if summary := gotrustui.KeepAliveSummary(state.Session.KeepAlive); summary != "" {
+		tooltip += "\n保活: " + summary
 	}
 	return tooltip
 }

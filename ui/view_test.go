@@ -6,6 +6,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -22,6 +23,7 @@ func TestViewRendersEveryPhase(t *testing.T) {
 		session.PhaseIdle,
 		session.PhaseConnecting,
 		session.PhaseOnline,
+		session.PhaseReconnecting,
 		session.PhaseFailed,
 	}
 
@@ -91,6 +93,8 @@ func TestButtonsCallTheRightAction(t *testing.T) {
 		{phase: session.PhaseFailed, button: "连接", wantLogin: true},
 		{phase: session.PhaseOnline, button: "断开", wantLogout: true},
 		{phase: session.PhaseConnecting, button: "断开", wantLogout: true},
+		// 断开 during the ladder is how the user stops it.
+		{phase: session.PhaseReconnecting, button: "断开", wantLogout: true},
 	}
 
 	for _, testCase := range cases {
@@ -139,10 +143,18 @@ func TestSettingsButtonOpensTheWindow(t *testing.T) {
 // the view has to show every one of them.
 func TestAddressesAndKeepAliveAreListed(t *testing.T) {
 	state := State{
-		Session:   session.State{Phase: session.PhaseOnline, Detail: "vpn.example.com:443"},
+		Session: session.State{
+			Phase:  session.PhaseOnline,
+			Detail: "vpn.example.com:443",
+			KeepAlive: session.KeepAliveState{
+				Target: "http://192.0.2.10/",
+				Status: 200,
+				OK:     true,
+				At:     time.Now(),
+			},
+		},
 		Config:    config.Default(),
 		Addresses: []string{"127.0.0.1:1080", "127.0.0.1:1081"},
-		KeepAlive: "OK 200 · http://192.0.2.10/",
 	}
 
 	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
@@ -337,4 +349,88 @@ func labels(items []*mygo.MenuItem) []string {
 		out = append(out, item.Label)
 	}
 	return out
+}
+
+// The ladder says which attempt is next and how long the wait is; that is the
+// only place a user learns the app is retrying instead of hanging.
+func TestReconnectCountdownIsRendered(t *testing.T) {
+	state := State{
+		Session: session.State{
+			Phase:  session.PhaseReconnecting,
+			Detail: "会话已过期",
+			Reconnect: session.ReconnectState{
+				Attempt: 2,
+				Max:     5,
+				NextAt:  time.Now().Add(4 * time.Second),
+			},
+			Since: time.Now(),
+		},
+		Config: config.Default(),
+	}
+
+	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
+	tester.Frame()
+
+	if !tester.HasText("重连中") {
+		t.Fatalf("the reconnect label is missing; texts: %v", tester.Texts())
+	}
+	if !tester.HasText("重连中 (2/5，4 秒后)") {
+		t.Fatalf("the countdown is missing; texts: %v", tester.Texts())
+	}
+	if got := TrayStatus(state.Session); got != "重连中 (2/5，4 秒后)" {
+		t.Fatalf("tray status = %q, want the attempt and the wait", got)
+	}
+}
+
+// A keep-alive line has to distinguish a real HTTP answer, a transport failure
+// and the DNS fallback, because the fallback does not hold the session open.
+func TestKeepAliveSummary(t *testing.T) {
+	at := time.Now()
+	cases := []struct {
+		name      string
+		keepAlive session.KeepAliveState
+		want      string
+	}{
+		{
+			name:      "no probe yet",
+			keepAlive: session.KeepAliveState{},
+			want:      "",
+		},
+		{
+			name: "a real HTTP answer",
+			keepAlive: session.KeepAliveState{
+				Target: "http://192.0.2.10/", Status: 200, OK: true, At: at,
+			},
+			want: "OK 200 · http://192.0.2.10/",
+		},
+		{
+			name: "a transport failure",
+			keepAlive: session.KeepAliveState{
+				Target: "http://192.0.2.10/", Err: "dial timeout", At: at,
+			},
+			want: "失败 · http://192.0.2.10/",
+		},
+		{
+			name: "an HTTP error",
+			keepAlive: session.KeepAliveState{
+				Target: "http://192.0.2.10/", Status: 503, At: at,
+			},
+			want: "失败 503 · http://192.0.2.10/",
+		},
+		{
+			name: "the DNS fallback",
+			keepAlive: session.KeepAliveState{
+				Target: "www.baidu.com (UDP)", OK: true, Fallback: true, At: at,
+			},
+			want: "DNS OK · www.baidu.com (UDP)",
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := KeepAliveSummary(testCase.keepAlive); got != testCase.want {
+				t.Fatalf("summary = %q, want %q", got, testCase.want)
+			}
+		})
+	}
 }

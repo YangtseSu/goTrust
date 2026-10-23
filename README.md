@@ -143,7 +143,7 @@ page. The groups are:
 * **保活** — enable, interval (default 90 s) and manual targets, one per line.
   Also next connect.
 * **启动** — start at login, auto-connect, start hidden and auto-reconnect
-  (stored now; the reconnect ladder arrives in a later phase).
+  (1/2/4/8/16 s, five attempts at most).
 * **高级** — verbose logging, the log directory with an open button, and the
   per-profile client-data path.
 
@@ -196,9 +196,33 @@ and 退出. Its tooltip repeats the status and the last keep-alive result.
 (`App.SetOpenAtLogin`, an XDG autostart file on Linux) and the app reconciles it
 at every launch. `start_hidden` opens only the tray; a launch caused by the
 autostart entry is hidden as well. With 启动后自动连接, the app logs in when a
-stored password or a stored session exists; otherwise it shows the window with
-the reason instead of failing silently. A captcha or a missing credential
-always reveals the window.
+saved password exists; otherwise it shows the window with the reason instead of
+failing silently. A captcha or a missing credential always reveals the window.
+
+## Reliability
+
+With 断线后自动重连 enabled (off by default), goTrust retries a lost session with
+a fresh login on the 1/2/4/8/16 s ladder, five attempts at most. The window and
+the tray show `重连中 (2/5，4 秒后)` while it waits; 断开 stops the ladder. It
+runs only when the gateway says the session is gone — the client has already
+tried a renewal — and it stops at a captcha, one-time code or SSO callback: the
+prompt appears in the window instead of being retried blindly. Without a saved
+password the ladder never starts, and an expired session becomes a visible
+failure (`会话已过期，需要重新登录`) that brings the window forward.
+
+A session belongs to its connection and cannot be reused. A stored sid ticket
+is device material, not a login: after 断开, or after the portal ends the
+session, the next connection logs in again. Both atrust-quadlet and
+zju-connect tried to revive a session from the stored ticket, and the portal
+ended it anyway; the attempt only delayed the login. For the same reason
+启动后自动连接 requires a saved password — stored client data alone is not
+enough.
+
+The main window and the tray tooltip show the last keep-alive probe: target,
+HTTP status, transport error, or the DNS fallback. A `https://` target is
+tunnelled with CONNECT and does not count as application traffic, so it does
+not renew the session; use a plain `http://` address inside the VPN. Manual
+targets are probed first, derived candidates after them.
 
 ## Logs
 

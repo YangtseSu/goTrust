@@ -79,13 +79,7 @@ func TestRedactLeavesOrdinaryLines(t *testing.T) {
 
 func TestLoggerRedactsBeforeWriting(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "goTrust.log")
-	var lines []string
-	logger, err := New(Options{
-		Path: path,
-		OnLine: func(line string) {
-			lines = append(lines, line)
-		},
-	})
+	logger, err := New(Options{Path: path})
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -105,9 +99,6 @@ func TestLoggerRedactsBeforeWriting(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), "keep-alive ok") {
 		t.Fatalf("ordinary line missing:\n%s", raw)
-	}
-	if len(lines) != 2 || strings.Contains(lines[0], "hunter2") {
-		t.Fatalf("OnLine saw %q", lines)
 	}
 }
 
