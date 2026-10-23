@@ -115,36 +115,47 @@ protocol writes `{"coordinates":[[x,y],…],"width":W,"height":H}`.
 - [x] Session and proxy lifetimes detached from the login-attempt context
 - **Status:** complete
 
-### Phase 11: Settings, startup and tray
+### Phase 11: Config v2, profiles, settings, startup and tray
 
-Requirements 1, 2, 5, 6, 7, and the foundation for 10. A dedicated settings
+Requirements 1, 2, 3, 5, 6, 7, and the foundation for 10. A dedicated settings
 window keeps the main window about status, connection and resources; EZ4Connect
-does the same. Settings are persisted in the existing JSON file.
+does the same. Settings are persisted as versioned JSON.
 
-- [ ] Config model: add an `app` section (`auto_connect`, `start_hidden`,
-      `auto_reconnect`, `reconnect_initial`, `reconnect_max`) and opt-in TOTP
-      secret fields; mirror the OS autostart state so a lost entry is repaired
+- [ ] Config v2: `version`, `active_profile`, global `app`/`proxy`/`logging`
+      sections and a `profiles[]` array; each profile owns server, auth, TOTP,
+      keep-alive and debug settings. Proxy ports stay global so a switch does
+      not move the listeners
+- [ ] Migration: a v1 file becomes one profile (`默认`), preserving every value;
+      missing fields take defaults and the file stays valid
+- [ ] Profiles: create, rename, duplicate and delete; one active session at a
+      time; switching disconnects first, then optionally auto-connects; the
+      active profile is visible in the window and the tray submenu
+- [ ] Logging: line log to `$XDG_STATE_HOME/goTrust/goTrust.log` (0600, 5 MiB
+      × 3 rotation), stderr in `--no-ui`, `verbose` level from settings, and
+      redaction of passwords, cookies, tokens and captcha data; bridge the
+      upstream global `log` to the same writer; a settings button opens the
+      log directory
 - [ ] Defaults: login domain `local`, keep-alive 60 s, SOCKS5 `127.0.0.1:1080`,
-      HTTP `127.0.0.1:1081`; loading an older file fills missing fields from
-      the defaults and keeps the file valid
+      HTTP `127.0.0.1:1081`
 - [ ] Settings window: connection (gateway, port, username, login domain,
       password/store), proxies (bind addresses and enable toggles), keep-alive
       (enabled, interval, manual targets), startup (autostart, auto-connect,
-      start hidden, auto-reconnect), advanced (verbose, client data path)
+      start hidden, auto-reconnect), advanced (verbose, log directory, client
+      data path)
 - [ ] Apply rules: proxy binds and keep-alive take effect on the next connect;
       credentials and domain on the next login; cosmetic settings immediately
 - [ ] Tray: disabled status line (`已连接 203.0.113.4`, `连接中`, `失败: …`),
-      connect/disconnect toggle, show window, settings, quit; tooltip mirrors
-      the phase and the last keep-alive result
+      connect/disconnect toggle, profile submenu, show window, settings, quit;
+      tooltip mirrors the phase and the last keep-alive result
 - [ ] Autostart at user login through `mygo.App.SetOpenAtLogin` (XDG autostart
       on Linux) and `WasOpenedAtLogin` to start hidden; a systemd unit is not
       the desktop equivalent and is not planned here
 - [ ] Auto-connect on `WhenReady` when enabled and a stored password or client
       data exists; reveal the window for a captcha/second factor and fail
       visibly when credentials are missing
-- [ ] Tests: config round-trip/defaults, settings view render and callbacks,
-      tray menu per phase, autostart entry in a temp `XDG_CONFIG_HOME`, and a
-      pure auto-connect decision function
+- [ ] Tests: config v1→v2 migration and round-trip, profile switch/delete,
+      log rotation/redaction, settings view and callbacks, tray menu per phase,
+      autostart entry in a temp `XDG_CONFIG_HOME`, auto-connect decision
 - **Status:** pending
 
 ### Phase 12: Auth methods and second factors
@@ -232,26 +243,31 @@ Requirement 10, after the functional windows exist.
 - [ ] Accessibility labels and a sane tab order for every input and button
 - **Status:** pending
 
-### Phase 16: Arch package `gotrust-git`
+### Phase 16: REUSE compliance and Arch package `gotrust-git`
 
-Requirement 9. Self-use first; publication comes after the public repository
-exists. Follow the existing `~/projects/arch-pkgs` conventions: comment header,
-SPDX, `_branch`, `prepare`/`pkgver`/`build`/`check`/`package`.
+Requirements 4 and 9. REUSE first, because the package ships the license and
+the repository is public. Then a self-use VCS package; it does not go to AUR.
 
-- [ ] Create `~/projects/arch-pkgs/gotrust-git/` with `PKGBUILD`, `REUSE.toml`,
+- [x] `LICENSES/AGPL-3.0-or-later.txt`, `REUSE.toml`, and SPDX headers in every
+      Go file; annotate docs, `go.mod`, `go.sum`, `.gitignore` and `.planning/`
+- [x] `reuse lint` clean (24/24 files); documented in README
+- [x] Create `~/projects/arch-pkgs/gotrust-git/` with `PKGBUILD`, `REUSE.toml`,
       `goTrust.desktop` and an icon
-- [ ] Source: `git+https://github.com/YangtseSu/goTrust.git#branch=main`;
-      the package is self-use and does not go to the AUR
-- [ ] Install `/usr/bin/goTrust`, the desktop entry, the icon and the AGPL
-      license; determine runtime deps with `ldd` and `namcap` (GTK, WebKit,
-      appindicator/hicolor as applicable)
-- [ ] `check()` runs `go test ./...`; `pkgver()` uses `git describe`; build with
-      `-trimpath` and the same hardening as the sibling packages
-- [ ] Verify `makepkg -f`, `namcap PKGBUILD` and the package file, install with
-      `pacman -U` and launch from the desktop entry; leave it installed for
-      daily use
-- [ ] Do not push or publish; this is the operator's local package first
-- **Status:** pending
+- [x] Source: local `git+file://$HOME/projects/goTrust#branch=main`, because
+      makepkg runs git with `GIT_CONFIG_GLOBAL=/dev/null` and cannot use the
+      private GitHub credential helper; the GitHub URL is a one-line switch
+      once the repository is public or the helper is made makepkg-safe
+- [x] Install layout: `/usr/bin/goTrust`, the desktop entry, the two icons and
+      the AGPL license; runtime deps `gtk3`, `libayatana-appindicator`,
+      `hicolor-icon-theme` (WebKitGTK is lazy and stays out)
+- [x] `check()` runs `go test ./...`; `pkgver()` uses a rev-count/hash fallback;
+      build is `-trimpath`, PIE, FULL RELRO/BIND_NOW via the external linker
+- [x] `makepkg -f` built `gotrust-git r7`; `namcap` only reports the
+      intentional dlopen/external-linker warnings; the extracted binary starts
+      and exits 0 on SIGTERM
+- [ ] Install with `pacman -U` after the operator supplies the sudo password;
+      the package is built and tested from its extracted tree
+- **Status:** in_progress
 
 ## Key Questions
 
@@ -278,6 +294,11 @@ SPDX, `_branch`, `prepare`/`pkgver`/`build`/`check`/`package`.
 | Own SOCKS5/HTTP listeners instead of `service.Serve*` | Those take no `context.Context` and shut down through `internal/hook_func`, which an external module cannot import |
 | No TUN, no system proxy | Removes root elevation, wintun, and three platform backends; keeps the app a plain user process |
 | Settings in a dedicated window | The main window stays a status/connection page, as EZ4Connect does; the settings surface is large (connection, proxies, keep-alive, startup, advanced) |
+| Config is versioned JSON with profiles | The existing file is JSON and atomic/0600; adding `version` and `profiles[]` avoids a second format while allowing multiple accounts. Proxy ports stay global so listeners do not move on a switch |
+| Multiple profiles, one live session | The operator asked for account switching; one session at a time keeps the device token and proxy listeners unambiguous. A switch disconnects first |
+| Logging is a rotating local file | A tray app has no terminal; a 0600 file under the state directory plus a settings shortcut makes failures diagnosable, while stderr/journal stays for `--no-ui`. Secrets are redacted |
+| REUSE is a gate | The repository is public and AGPL; SPDX headers, `LICENSES/` and `reuse lint` make the licence machine-checkable and are required by the package |
+| Arch package builds from GitHub now | The operator approved the push and wants the package now; it is self-use, not AUR, so private-repo credentials during `makepkg` are acceptable |
 | Auth method: auto by default, manual override | `atrust.GetAuthInfoList` is public and works pre-login; one offered method is unambiguous, several need the saved pair or a chooser, and the protocol requires an exact `authType`+`loginDomain` match |
 | Login domain defaults to `local` | The verified gateway offers `local`; the field stays editable because other gateways use `Radius` or a tenant name |
 | Autostart means XDG login autostart | `mygo.App.SetOpenAtLogin` is the platform path for a tray app; a systemd unit is not the desktop equivalent and is not planned here |

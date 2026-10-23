@@ -180,6 +180,46 @@
   - `.planning/2026-10-23-gotrust-skeleton/progress.md`
 - No application code changed in this session.
 
+### Logging, config shape, profiles, REUSE and the package
+
+- **Status:** complete for the package and REUSE; Phase 11 implementation pending
+- Decisions:
+  - logging: yes. Line log under `$XDG_STATE_HOME/goTrust/goTrust.log`
+    (0600, 5 MiB × 3 rotation), stderr for `--no-ui`, a verbose level, secret
+    redaction, and a settings shortcut to the directory
+  - config: JSON stays, versioned as v2. `active_profile`, global
+    `app`/`proxy`/`logging`, and `profiles[]`; a profile owns server, auth,
+    TOTP and keep-alive. Proxy ports stay global so a switch does not move the
+    listeners. v1 migrates to one `默认` profile
+  - profiles: yes, one active session. Create/rename/duplicate/delete, a tray
+    submenu, and a switch disconnects first and optionally reconnects
+  - REUSE: AGPL-3.0-or-later, SPDX headers, `LICENSES/`, `REUSE.toml`;
+    `reuse lint` is the gate
+  - package: self-use `gotrust-git`, not AUR. makepkg runs git with
+    `GIT_CONFIG_GLOBAL=/dev/null`, so the private GitHub HTTPS clone cannot use
+    the credential helper; the package builds from the local checkout and the
+    GitHub URL is the one-line switch later
+- Actions taken:
+  - answered the five design questions and folded the decisions into
+    `task_plan.md` phases 11 and 16
+  - added `LICENSES/AGPL-3.0-or-later.txt`, `REUSE.toml` and SPDX headers to
+    every Go file; `reuse lint` reports 24/24 files
+  - created `~/projects/arch-pkgs/gotrust-git/` with `PKGBUILD`, `REUSE.toml`,
+    `goTrust.desktop`, 256×256 and 32×32 icons
+  - built `gotrust-git r7` from the local `main`; `namcap` only
+    reports the intentional dlopen/external-linker warnings; extracted the
+    package and launched the binary (ready line, SIGTERM exit 0)
+  - installed nothing: the host has no passwordless sudo; `pacman -U` is left
+    for the operator
+- Privacy review before the push:
+  - rewrote the three local commits so the intermediate history no longer
+    contains the live tunnel/intranet addresses; the outgoing diff, tree and
+    full history have no credentials, gateway address, account, absolute home
+    path or analysis-process wording
+  - pushed `main` to `https://github.com/YangtseSu/goTrust.git`
+  - the REUSE/package commits follow in a second push after the operator's
+    explicit approval
+
 ## Test Results
 
 | Test | Input | Expected | Actual | Status |
@@ -208,6 +248,12 @@
 | Captcha panel render | mygo test renderer, 520×560 | numbered markers and buttons visible | rendered | pass |
 | Race detector | `go test -race . ./ui ./session` | no data race | clean | pass |
 | Binary after the change | launch, 6 s, SIGTERM | ready line, exit 0 | exit 0 | pass |
+| REUSE compliance | `reuse lint` | 24/24 files | clean | pass |
+| Package build | `makepkg -f` from the local checkout | package with binary, desktop, icons, license | `gotrust-git r7` | pass |
+| Package hardening | `readelf` on the extracted binary | PIE, FULL RELRO, BIND_NOW | all present | pass |
+| namcap | `namcap` PKGBUILD/package | only documented warnings | dlopen deps and unused libresolv only | pass |
+| Packaged binary | extracted `usr/bin/goTrust`, 6 s, SIGTERM | ready line, exit 0 | exit 0 | pass |
+
 | Live login with captcha | real gateway, operator clicked the image | online with an IP | online, `203.0.113.4` | pass |
 | Live HTTP proxy | `curl -x 127.0.0.1:11081 http://192.0.2.10/` | 200 from the intranet | 200, 507 bytes | pass |
 | Live SOCKS5 proxy | `curl --socks5-hostname 127.0.0.1:11080 …` | 200 from the intranet | 200, 507 bytes | pass |
