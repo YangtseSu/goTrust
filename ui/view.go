@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package ui draws the goTrust window.
+// Package ui draws the goTrust windows.
 //
-// The view is a plain function of the app state: it reads State and writes only
-// through the callbacks the App provides. Nothing here touches the network, so
-// the whole interface can be rendered headlessly in a test.
+// The views are plain functions of the app state: they read State and write
+// only through the callbacks the app provides. Nothing here touches the
+// network, so the whole interface can be rendered headlessly in a test.
 package ui
 
 import (
@@ -20,10 +20,11 @@ import (
 	"github.com/YangtseSu/goTrust/session"
 )
 
-// State is what the window shows.
+// State is what the main window and the tray show.
 type State struct {
 	Session session.State
-	// Config is the settings currently in effect.
+	// Config is the settings in effect. The main window shows the active
+	// profile; editing happens in the settings window.
 	Config config.Config
 	// Addresses are the bound proxy listeners.
 	Addresses []string
@@ -31,27 +32,24 @@ type State struct {
 	Status string
 	// Busy disables the controls that would race a login or a logout.
 	Busy bool
-	// Username and Password are the fields being edited. They live here so the
-	// login view can be redrawn without losing what was typed.
-	Username string
-	Password string
-	Server   string
-	Port     string
-	// Domain is the gateway's login domain, as its authConfig names it.
-	Domain string
 	// Captcha is set while the gateway waits for a click captcha. It replaces
-	// the login fields until the user submits or cancels it.
+	// the connection controls until the user submits or cancels it.
 	Captcha *Captcha
+	// KeepAlive is the last keep-alive result, parsed from the log line the
+	// upstream loop writes.
+	KeepAlive string
 }
 
-// Actions are what the window can ask the application to do.
+// Actions are what the window and the tray can ask the application to do.
 type Actions struct {
-	Login  func()
-	Logout func()
-	Reload func()
-	Quit   func()
-	// Save remembers the edited settings without connecting.
-	Save func()
+	Login      func()
+	Logout     func()
+	Settings   func()
+	ShowWindow func()
+	Quit       func()
+	// SelectProfile switches the active account. The application disconnects
+	// first and reconnects when auto-connect is on.
+	SelectProfile func(string)
 	// The captcha callbacks drive the pending click captcha: one point in
 	// image pixels at a time, an undo, a clear, the submit, and a cancel that
 	// abandons the login.
@@ -62,7 +60,7 @@ type Actions struct {
 	CancelCaptcha   func()
 }
 
-// View renders one frame.
+// View renders one frame of the main window.
 func View(state *State, actions Actions) func(c *ui.Context) {
 	return func(c *ui.Context) {
 		ui.Column(c).Fill().Padding(20).Gap(14).Children(func() {
@@ -70,7 +68,6 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 			if state.Captcha != nil {
 				captchaPanel(c, state, actions)
 			} else {
-				fields(c, state, actions)
 				controls(c, state, actions)
 			}
 			footer(c, state)
@@ -83,7 +80,21 @@ func header(c *ui.Context, state *State) {
 		ui.Text(c, "goTrust").FontSize(20).Bold()
 		ui.Text(c, phaseLabel(state.Session)).FontSize(13)
 	})
+	ui.Text(c, profileSummary(state.Config)).FontSize(12)
 	ui.Text(c, phaseDetail(state.Session)).FontSize(12)
+}
+
+// profileSummary names the active account and where it connects.
+func profileSummary(cfg config.Config) string {
+	name := cfg.ActiveProfile
+	if name == "" {
+		name = config.DefaultProfileName
+	}
+	profile := cfg.Active()
+	if profile.ServerAddress() == "" {
+		return fmt.Sprintf("配置 %s ｜ 尚未填写网关", name)
+	}
+	return fmt.Sprintf("配置 %s ｜ %s:%d", name, profile.ServerAddress(), profile.Server.Port)
 }
 
 // phaseLabel is the short word next to the title.
@@ -114,37 +125,13 @@ func phaseDetail(s session.State) string {
 		return fmt.Sprintf("%s ｜ 已保持 %s", s.Detail, held)
 	case session.PhaseConnecting:
 		return fmt.Sprintf("%s…", s.Detail)
-	case session.PhaseFailed:
-		return s.Detail
 	default:
 		return s.Detail
 	}
 }
 
-func fields(c *ui.Context, state *State, actions Actions) {
-	ui.Form(c, func() {
-		ui.Column(c).Gap(10).Children(func() {
-			ui.Field(c, "网关地址", func() {
-				ui.TextInput(c, &state.Server).Placeholder("vpn.example.com")
-			})
-			ui.Field(c, "端口", func() {
-				ui.TextInput(c, &state.Port).Placeholder("443")
-			})
-			ui.Field(c, "用户名", func() {
-				ui.TextInput(c, &state.Username)
-			})
-			ui.Field(c, "登录域", func() {
-				ui.TextInput(c, &state.Domain).Placeholder("local")
-			})
-			ui.Field(c, "密码", func() {
-				ui.TextInput(c, &state.Password).Password()
-			})
-		})
-	})
-}
-
-// captchaPanel replaces the login fields while the gateway waits for a click
-// captcha. The image is drawn at a known size so a click maps back to the
+// captchaPanel replaces the connection controls while the gateway waits for a
+// click captcha. The image is drawn at a known size so a click maps back to the
 // pixels the gateway expects, and the picked points are numbered in order.
 func captchaPanel(c *ui.Context, state *State, actions Actions) {
 	captcha := state.Captcha
@@ -211,11 +198,8 @@ func controls(c *ui.Context, state *State, actions Actions) {
 				actions.Login()
 			}
 		}
-		if ui.Button(c, "保存设置").Clicked() && actions.Save != nil {
-			actions.Save()
-		}
-		if ui.Button(c, "重新读取").Clicked() && actions.Reload != nil {
-			actions.Reload()
+		if ui.Button(c, "设置").Clicked() && actions.Settings != nil {
+			actions.Settings()
 		}
 		if ui.Button(c, "退出").Clicked() && actions.Quit != nil {
 			actions.Quit()
@@ -232,14 +216,53 @@ func footer(c *ui.Context, state *State) {
 			ui.Text(c, "代理监听 "+address).FontSize(12)
 		}
 	}
+	if state.KeepAlive != "" {
+		ui.Text(c, "保活 "+state.KeepAlive).FontSize(12)
+	}
 	if state.Status != "" {
 		ui.Text(c, state.Status).FontSize(12)
 	}
 }
 
-// TrayMenu builds the tray menu for the current state.
+// TrayStatus is the disabled first line of the tray menu: the phase and, when
+// connected, the address the gateway assigned.
+func TrayStatus(s session.State) string {
+	switch s.Phase {
+	case session.PhaseOnline:
+		target := s.ClientIP
+		if target == "" {
+			target = s.Detail
+		}
+		if target == "" {
+			return "已连接"
+		}
+		return "已连接 " + target
+	case session.PhaseConnecting:
+		return "连接中"
+	case session.PhaseFailed:
+		return "失败: " + truncate(s.Detail, 48)
+	default:
+		return "未连接"
+	}
+}
+
+func truncate(text string, limit int) string {
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return string(runes[:limit]) + "…"
+}
+
+// TrayMenu builds the tray menu for the current state: a status line, the
+// connect toggle, the profile submenu, and the window commands.
 func TrayMenu(state *State, actions Actions) *mygo.Menu {
-	show := &mygo.MenuItem{ID: "show", Label: "显示窗口"}
+	status := &mygo.MenuItem{
+		ID:       "status",
+		Label:    TrayStatus(state.Session),
+		Disabled: true,
+	}
+
 	toggle := &mygo.MenuItem{ID: "toggle", Label: "连接"}
 	if state.Session.Phase == session.PhaseOnline || state.Session.Phase == session.PhaseConnecting {
 		toggle.Label = "断开"
@@ -255,11 +278,53 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 			}
 		}
 	}
+
+	profileItems := make([]*mygo.MenuItem, 0, len(state.Config.Profiles))
+	for _, profile := range state.Config.Profiles {
+		name := profile.Name
+		profileItems = append(profileItems, &mygo.MenuItem{
+			ID:      "profile:" + name,
+			Label:   name,
+			Type:    mygo.MenuItemRadio,
+			Checked: name == state.Config.ActiveProfile,
+			Click: func(*mygo.MenuItem, *mygo.Window) {
+				if actions.SelectProfile != nil {
+					actions.SelectProfile(name)
+				}
+			},
+		})
+	}
+	profiles := &mygo.MenuItem{ID: "profiles", Label: "配置", Submenu: profileItems}
+	if len(profileItems) == 0 {
+		profiles.Disabled = true
+	}
+
+	show := &mygo.MenuItem{ID: "show", Label: "显示窗口", Click: func(*mygo.MenuItem, *mygo.Window) {
+		if actions.ShowWindow != nil {
+			actions.ShowWindow()
+		}
+	}}
+
+	settingsItem := &mygo.MenuItem{ID: "settings", Label: "设置…", Click: func(*mygo.MenuItem, *mygo.Window) {
+		if actions.Settings != nil {
+			actions.Settings()
+		}
+	}}
 	quit := &mygo.MenuItem{ID: "quit", Label: "退出", Click: func(*mygo.MenuItem, *mygo.Window) {
 		if actions.Quit != nil {
 			actions.Quit()
 		}
 	}}
-	separator := &mygo.MenuItem{Type: mygo.MenuItemSeparator}
-	return mygo.NewMenu([]*mygo.MenuItem{show, separator, toggle, quit})
+
+	return mygo.NewMenu([]*mygo.MenuItem{
+		status,
+		mygo.Separator(),
+		toggle,
+		profiles,
+		mygo.Separator(),
+		show,
+		settingsItem,
+		mygo.Separator(),
+		quit,
+	})
 }

@@ -12,13 +12,12 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 11: define the settings model and build the separate settings window
-(connection, proxies, keep-alive, startup, advanced), then wire the tray
-status/connect/settings items, autostart and auto-connect.
+Phase 12: discover the gateway's auth methods, store the chosen pair, and add
+the code and external-SSO prompts.
 
 ## Current Phase
 
-Phase 11
+Phase 12
 
 ## Phases
 
@@ -115,48 +114,53 @@ protocol writes `{"coordinates":[[x,y],…],"width":W,"height":H}`.
 - [x] Session and proxy lifetimes detached from the login-attempt context
 - **Status:** complete
 
-### Phase 11: Config v2, profiles, settings, startup and tray
+### Phase 11: Config v2, profiles, settings, startup and tray (complete)
 
 Requirements 1, 2, 3, 5, 6, 7, and the foundation for 10. A dedicated settings
 window keeps the main window about status, connection and resources; EZ4Connect
-does the same. Settings are persisted as versioned JSON.
+does the same. Settings are persisted as versioned TOML.
 
-- [ ] Config v2: `version`, `active_profile`, global `app`/`proxy`/`logging`
+- [x] Config v2: `version`, `active_profile`, global `app`/`proxy`/`logging`
       sections and a `profiles[]` array; each profile owns server, auth, TOTP,
       keep-alive and debug settings. Proxy ports stay global so a switch does
       not move the listeners
-- [ ] Migration: a v1 file becomes one profile (`默认`), preserving every value;
-      missing fields take defaults and the file stays valid
-- [ ] Profiles: create, rename, duplicate and delete; one active session at a
-      time; switching disconnects first, then optionally auto-connects; the
-      active profile is visible in the window and the tray submenu
-- [ ] Logging: line log to `$XDG_STATE_HOME/goTrust/goTrust.log` (0600, 5 MiB
+- [x] No migration: v1 was a JSON file from an unreleased build, so a leftover
+      `config.json` is ignored. Missing fields take defaults and the TOML file
+      stays valid; a newer `version` is refused
+- [x] Profiles: create, rename, duplicate and delete; one active session at a
+      time; switching disconnects first, then reconnects when auto-connect is
+      on; the active profile is visible in the window and the tray submenu
+- [x] Logging: line log to `$XDG_STATE_HOME/goTrust/goTrust.log` (0600, 5 MiB
       × 3 rotation), stderr in `--no-ui`, `verbose` level from settings, and
       redaction of passwords, cookies, tokens and captcha data; bridge the
       upstream global `log` to the same writer; a settings button opens the
       log directory
-- [ ] Defaults: login domain `local`, keep-alive 60 s, SOCKS5 `127.0.0.1:1080`,
+- [x] Defaults: login domain `local`, keep-alive 60 s, SOCKS5 `127.0.0.1:1080`,
       HTTP `127.0.0.1:1081`
-- [ ] Settings window: connection (gateway, port, username, login domain,
+- [x] Settings window: connection (gateway, port, username, login domain,
       password/store), proxies (bind addresses and enable toggles), keep-alive
       (enabled, interval, manual targets), startup (autostart, auto-connect,
       start hidden, auto-reconnect), advanced (verbose, log directory, client
       data path)
-- [ ] Apply rules: proxy binds and keep-alive take effect on the next connect;
-      credentials and domain on the next login; cosmetic settings immediately
-- [ ] Tray: disabled status line (`已连接 203.0.113.4`, `连接中`, `失败: …`),
+- [x] Apply rules: proxy binds and keep-alive take effect on the next connect;
+      credentials and domain on the next login; autostart and verbose apply
+      immediately
+- [x] Tray: disabled status line (`已连接 203.0.113.4`, `连接中`, `失败: …`),
       connect/disconnect toggle, profile submenu, show window, settings, quit;
       tooltip mirrors the phase and the last keep-alive result
-- [ ] Autostart at user login through `mygo.App.SetOpenAtLogin` (XDG autostart
+- [x] Autostart at user login through `mygo.App.SetOpenAtLogin` (XDG autostart
       on Linux) and `WasOpenedAtLogin` to start hidden; a systemd unit is not
       the desktop equivalent and is not planned here
-- [ ] Auto-connect on `WhenReady` when enabled and a stored password or client
+- [x] Auto-connect on `WhenReady` when enabled and a stored password or client
       data exists; reveal the window for a captcha/second factor and fail
       visibly when credentials are missing
-- [ ] Tests: config v1→v2 migration and round-trip, profile switch/delete,
-      log rotation/redaction, settings view and callbacks, tray menu per phase,
+- [x] Tests: TOML round-trip, profile switch/delete, log
+      rotation/redaction, settings view and callbacks, tray menu per phase,
       autostart entry in a temp `XDG_CONFIG_HOME`, auto-connect decision
-- **Status:** pending
+- **Status:** complete
+- **Note:** the settings window was rendered and its callbacks tested; clicking
+  it in the real window on Wayland belongs to the Phase 15 smoke. The real
+  binary was launched with a temporary config and autostart entry.
 
 ### Phase 12: Auth methods and second factors
 
@@ -250,7 +254,7 @@ the repository is public. Then a self-use VCS package; it does not go to AUR.
 
 - [x] `LICENSES/AGPL-3.0-or-later.txt`, `REUSE.toml`, and SPDX headers in every
       Go file; annotate docs, `go.mod`, `go.sum`, `.gitignore` and `.planning/`
-- [x] `reuse lint` clean (24/24 files); documented in README
+- [x] `reuse lint` clean (28/28 files); documented in README
 - [x] Create `~/projects/arch-pkgs/gotrust-git/` with `PKGBUILD`, `REUSE.toml`,
       `goTrust.desktop` and an icon
 - [x] Source: local `git+file://$HOME/projects/goTrust#branch=main`, because
@@ -294,7 +298,8 @@ the repository is public. Then a self-use VCS package; it does not go to AUR.
 | Own SOCKS5/HTTP listeners instead of `service.Serve*` | Those take no `context.Context` and shut down through `internal/hook_func`, which an external module cannot import |
 | No TUN, no system proxy | Removes root elevation, wintun, and three platform backends; keeps the app a plain user process |
 | Settings in a dedicated window | The main window stays a status/connection page, as EZ4Connect does; the settings surface is large (connection, proxies, keep-alive, startup, advanced) |
-| Config is versioned JSON with profiles | The existing file is JSON and atomic/0600; adding `version` and `profiles[]` avoids a second format while allowing multiple accounts. Proxy ports stay global so listeners do not move on a switch |
+| Config is versioned TOML with profiles | The operator prefers TOML, and `BurntSushi/toml` writes a readable, hand-editable file with `[[profiles]]`. Atomic save and 0600 stay. Proxy ports stay global so listeners do not move on a switch |
+| No v1→v2 migration | v1 was never released and the only existing `config.json` on the operator's machine holds defaults; a migration path would preserve nothing. The old file is ignored, and a newer `version` is refused so a future build cannot silently drop fields |
 | Multiple profiles, one live session | The operator asked for account switching; one session at a time keeps the device token and proxy listeners unambiguous. A switch disconnects first |
 | Logging is a rotating local file | A tray app has no terminal; a 0600 file under the state directory plus a settings shortcut makes failures diagnosable, while stderr/journal stays for `--no-ui`. Secrets are redacted |
 | REUSE is a gate | The repository is public and AGPL; SPDX headers, `LICENSES/` and `reuse lint` make the licence machine-checkable and are required by the package |

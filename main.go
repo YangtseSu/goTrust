@@ -7,10 +7,11 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -18,8 +19,10 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	zjuconnectlog "github.com/mythologyli/zju-connect/log"
 
 	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/logging"
 	gotrustproxy "github.com/YangtseSu/goTrust/proxy"
 	"github.com/YangtseSu/goTrust/session"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
@@ -27,76 +30,127 @@ import (
 
 func main() {
 	headless := flag.Bool("no-ui", false, "run without a window; connect, serve the proxies, and exit on SIGINT or SIGTERM")
-	configPath := flag.String("config", "", "settings file (default: the user config directory)")
+	configPath := flag.String("config", "", "TOML settings file (default: the user config directory)")
 	flag.Parse()
 
-	logger := log.New(os.Stderr, "", log.LstdFlags)
-
-	cfg, err := loadConfig(*configPath)
+	cfg, path, err := loadConfig(*configPath)
 	if err != nil {
-		logger.Fatalf("settings: %v", err)
+		log.Fatalf("settings: %v", err)
 	}
 
-	app := &app{
-		cfg:    cfg,
-		logf:   logger.Printf,
-		view:   gotrustui.State{Config: cfg},
-		logger: logger,
+	application := &app{
+		cfg:        cfg,
+		configPath: path,
+		view:       gotrustui.State{Config: cfg},
 	}
-	app.view.Server, app.view.Port = cfg.ServerAddress(), strconv.Itoa(cfg.Server.Port)
-	app.view.Username = cfg.Auth.Username
-	app.view.Password = cfg.Auth.Password
-	app.view.Domain = cfg.Auth.Domain
 
-	app.manager = session.New(session.Options{
-		Config: app.currentConfig,
-		Auth:   app.currentAuth,
+	var mirror io.Writer
+	if *headless {
+		mirror = os.Stderr
+	}
+	fileLog, logErr := logging.New(logging.Options{
+		Verbose: cfg.Logging.Verbose,
+		Mirror:  mirror,
+		OnLine:  application.observeLogLine,
+	})
+	if logErr != nil {
+		// A tray app with no log file is still better than no app.
+		application.logger = log.New(os.Stderr, "", log.LstdFlags)
+		application.logf = application.logger.Printf
+		log.SetOutput(os.Stderr)
+		application.logger.Printf("logging: %v; continuing on stderr", logErr)
+	} else {
+		defer func() { _ = fileLog.Close() }()
+		application.log = fileLog
+		application.logDir = fileLog.Dir()
+		application.logger = log.New(fileLog, "", log.LstdFlags)
+		application.logf = application.logger.Printf
+		// The aTrust client logs through the standard library's global logger,
+		// so pointing that at the same writer is the whole bridge.
+		log.SetOutput(fileLog)
+		if cfg.Logging.Verbose {
+			zjuconnectlog.EnableDebug()
+		}
+	}
+
+	application.manager = session.New(session.Options{
+		Config: application.currentConfig,
 		Prompt: func(ctx context.Context) session.Prompter {
 			if *headless {
-				return cliPrompter{logger: logger}
+				return cliPrompter{logger: application.logger}
 			}
-			return &uiPrompter{app: app, ctx: ctx}
+			return &uiPrompter{app: application, ctx: ctx}
 		},
-		Logf:    logger.Printf,
-		OnState: app.onSessionState,
+		Logf:    application.logf,
+		OnState: application.onSessionState,
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	if *headless {
-		app.runHeadless(ctx)
+		application.runHeadless(ctx)
 		return
 	}
-
-	app.runUI(ctx)
+	application.runUI(ctx)
 }
 
-// app ties the session, the proxies and the window together.
+// app ties the session, the proxies and the windows together.
 type app struct {
-	cfg     config.Config
-	manager *session.Manager
-	logger  *log.Logger
-	logf    func(string, ...any)
+	cfg        config.Config
+	configPath string
+	manager    *session.Manager
+	logger     *log.Logger
+	logf       func(string, ...any)
+	log        *logging.Logger
+	logDir     string
 
-	mu     sync.RWMutex
-	view   gotrustui.State
+	mu sync.RWMutex
+	// view is the main window and tray snapshot.
+	view gotrustui.State
+	// settings is the settings window's draft, nil while the window is closed.
+	settings *gotrustui.SettingsState
+
 	proxy  *gotrustproxy.Server
 	window atomicWindow
-	tray   atomicTray
+	// settingsWindow is the separate settings window; the main window stays a
+	// status and connection page.
+	settingsWindow atomicWindow
+	tray           atomicTray
 	// proxyCancel ends the listeners of the live session. It is separate from
 	// the login attempt's context, which the async helper cancels on return.
 	proxyCancel context.CancelFunc
+	// attempt is the login or action in flight, so 断开 can cancel a login
+	// that is waiting on the network or on the user.
+	attempt *attemptCancel
 	// captcha is the reply channel of the challenge the window is showing,
 	// nil when no login waits on the user.
 	captcha chan captchaResult
+	// stopping suppresses the failure reveal while 断开 cancels a login: the
+	// user asked for it, so the window must not pop up with "cancelled".
+	stopping bool
+	// quitting lets the main window's close handler destroy it during Quit
+	// instead of hiding it in the tray.
+	quitting bool
 }
 
-func loadConfig(path string) (config.Config, error) {
-	if path == "" {
-		return config.Load()
+// attemptCancel groups the cancel function with an identity, so a stale
+// goroutine cannot clear a newer attempt's cancel.
+type attemptCancel struct {
+	cancel context.CancelFunc
+}
+
+func loadConfig(path string) (config.Config, string, error) {
+	if path != "" {
+		cfg, err := config.LoadFile(path)
+		return cfg, path, err
 	}
-	return config.LoadFile(path)
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Config{}, "", err
+	}
+	defaultPath, err := config.Path()
+	return cfg, defaultPath, err
 }
 
 func (a *app) runHeadless(ctx context.Context) {
@@ -111,17 +165,38 @@ func (a *app) runUI(ctx context.Context) {
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}
-	a.logger.SetOutput(os.Stderr)
 
 	// Quit runs the quit sequence, so the tray disappears, the proxies close
 	// and the single-instance lock is released. Exit would skip all three and
 	// leave a stale socket behind.
 	mygo.App.OnQuit(a.disconnect)
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+		a.mu.Lock()
+		a.quitting = true
+		a.mu.Unlock()
+	})
 
 	mygo.App.WhenReady(func() {
-		a.openWindow()
-		a.openTray()
-		a.logger.Printf("goTrust ready; fill in the gateway and press 连接")
+		a.reconcileAutostart()
+
+		hidden := a.cfg.App.StartHidden || mygo.App.WasOpenedAtLogin()
+		a.openWindow(hidden)
+		if !a.openTray() {
+			// Without a tray icon a hidden window would leave no way back in.
+			a.showWindow()
+		}
+		a.logf("goTrust ready; profile %s", a.cfg.ActiveProfile)
+
+		decision := decideAutoConnect(a.cfg, a.hasClientData())
+		switch {
+		case decision.Connect:
+			a.logf("auto-connect: on")
+			a.async(a.connect)
+		case decision.Reason != "":
+			a.logf("auto-connect: %s", decision.Reason)
+			a.setStatus(decision.Reason, false)
+			a.showWindow()
+		}
 	})
 
 	go func() {
@@ -135,11 +210,24 @@ func (a *app) runUI(ctx context.Context) {
 	a.disconnect()
 }
 
-func (a *app) openWindow() {
+// reconcileAutostart makes the desktop's entry match the settings file. The
+// settings window applies a toggle immediately; this repairs a divergence
+// after a crash or a manual edit.
+func (a *app) reconcileAutostart() {
+	if err := mygo.App.SetOpenAtLogin(a.cfg.App.Autostart); err != nil {
+		a.logf("autostart: %v", err)
+	}
+}
+
+func (a *app) openWindow(hidden bool) {
+	if a.window.Load() != nil {
+		return
+	}
 	window := mygo.NewWindow(mygo.WindowOptions{
 		Title:  "goTrust",
 		Width:  520,
 		Height: 560,
+		Hidden: hidden,
 		Content: ui.View(func(c *ui.Context) {
 			a.mu.RLock()
 			state := a.view
@@ -147,17 +235,75 @@ func (a *app) openWindow() {
 			gotrustui.View(&state, a.actions())(c)
 		}),
 	})
+	// Closing the window hides it in the tray instead of destroying it; the
+	// tray needs to be able to bring it back. Quit sets quitting first, so the
+	// real quit still closes the window.
+	window.OnClose(func(event *mygo.CloseEvent) {
+		a.mu.RLock()
+		quitting := a.quitting
+		a.mu.RUnlock()
+		if quitting {
+			return
+		}
+		event.PreventDefault()
+		window.Hide()
+	})
 	a.window.Store(window)
 }
 
-func (a *app) openTray() {
+func (a *app) showWindow() {
+	if window := a.window.Load(); window != nil {
+		window.Show()
+		window.Focus()
+	}
+}
+
+// openSettings creates the settings window, or reveals the one already open.
+// Each opening starts from the saved settings, so closing without 保存 really
+// discards the edits.
+func (a *app) openSettings() {
+	if window := a.settingsWindow.Load(); window != nil {
+		window.Show()
+		window.Focus()
+		return
+	}
+
+	a.mu.Lock()
+	a.settings = gotrustui.NewSettingsState(a.cfg, a.logDir)
+	a.mu.Unlock()
+
+	window := mygo.NewWindow(mygo.WindowOptions{
+		Title:  "goTrust 设置",
+		Width:  560,
+		Height: 720,
+		Content: ui.View(func(c *ui.Context) {
+			a.mu.RLock()
+			state := a.settings
+			a.mu.RUnlock()
+			if state != nil {
+				gotrustui.SettingsView(state, a.settingsActions())(c)
+			}
+		}),
+	})
+	a.settingsWindow.Store(window)
+	window.OnClosed(func() {
+		a.settingsWindow.Store(nil)
+		a.mu.Lock()
+		a.settings = nil
+		a.mu.Unlock()
+	})
+	window.Show()
+}
+
+func (a *app) openTray() bool {
 	tray, err := mygo.NewTray(mygo.TrayOptions{
+		ID:      "goTrust",
 		Icon:    trayIcon(),
 		ToolTip: "goTrust",
 	})
 	if err != nil {
-		a.logger.Printf("tray unavailable: %v", err)
-		return
+		a.logf("tray unavailable: %v", err)
+		return false
 	}
 	a.tray.Store(tray)
 
@@ -165,31 +311,20 @@ func (a *app) openTray() {
 	state := a.view
 	a.mu.RUnlock()
 	tray.SetMenu(gotrustui.TrayMenu(&state, a.actions()))
-	tray.OnClick(func() {
-		if window := a.window.Load(); window != nil {
-			window.Show()
-			window.Focus()
-		}
-	})
+	tray.SetToolTip(a.tooltip(state))
+	tray.OnClick(a.showWindow)
+	return true
 }
 
-// actions are the callbacks the window and the tray share.
+// actions are the callbacks the main window and the tray share.
 func (a *app) actions() gotrustui.Actions {
 	return gotrustui.Actions{
-		Login:  func() { a.async(a.connect) },
-		Logout: a.disconnect,
-		Save:   func() { a.async(func(context.Context) error { return a.save() }) },
-		Reload: func() {
-			a.async(func(context.Context) error {
-				cfg, err := loadConfig("")
-				if err != nil {
-					return err
-				}
-				a.applyConfig(cfg)
-				return nil
-			})
-		},
-		Quit: func() { mygo.App.Quit() },
+		Login:         func() { a.async(a.connect) },
+		Logout:        a.disconnect,
+		Settings:      a.openSettings,
+		ShowWindow:    a.showWindow,
+		SelectProfile: a.selectProfile,
+		Quit:          func() { mygo.App.Quit() },
 
 		AddCaptchaPoint: a.addCaptchaPoint,
 		UndoCaptcha:     a.undoCaptchaPoint,
@@ -199,17 +334,71 @@ func (a *app) actions() gotrustui.Actions {
 	}
 }
 
+// settingsActions are the settings window's callbacks.
+func (a *app) settingsActions() gotrustui.SettingsActions {
+	mutate := func(fn func(*gotrustui.SettingsState)) {
+		a.mu.RLock()
+		state := a.settings
+		a.mu.RUnlock()
+		if state == nil {
+			return
+		}
+		fn(state)
+		a.invalidateSettings()
+	}
+	return gotrustui.SettingsActions{
+		Save:  a.saveSettings,
+		Close: a.closeSettings,
+		NewProfile: func() {
+			mutate(func(state *gotrustui.SettingsState) { state.AddProfile() })
+		},
+		DuplicateProfile: func() {
+			mutate(func(state *gotrustui.SettingsState) { state.DuplicateProfile() })
+		},
+		DeleteProfile: func() {
+			mutate(func(state *gotrustui.SettingsState) { state.DeleteProfile() })
+		},
+		SelectProfile: func(index int) {
+			mutate(func(state *gotrustui.SettingsState) { state.Select(index) })
+		},
+		SetAutostart: a.setAutostart,
+		SetVerbose:   a.setVerbose,
+		OpenLogs:     a.openLogs,
+	}
+}
+
+func (a *app) closeSettings() {
+	if window := a.settingsWindow.Load(); window != nil {
+		window.Close()
+	}
+}
+
 // async runs work off the UI thread and reports the outcome in the status line.
 func (a *app) async(fn func(context.Context) error) {
 	go func() {
 		// The login may wait on a person reading a captcha, so the deadline
 		// covers more than the network work.
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
+		token := &attemptCancel{cancel: cancel}
+		a.mu.Lock()
+		a.attempt = token
+		a.mu.Unlock()
+		defer func() {
+			cancel()
+			a.mu.Lock()
+			if a.attempt == token {
+				a.attempt = nil
+			}
+			a.mu.Unlock()
+		}()
 
 		a.setStatus("…", true)
 		err := fn(ctx)
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				a.setStatus("已取消", false)
+				return
+			}
 			a.setStatus(err.Error(), false)
 			return
 		}
@@ -221,12 +410,17 @@ func (a *app) connect(ctx context.Context) error {
 	if err := a.manager.Login(ctx); err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		a.manager.Logout()
+		return err
+	}
 
 	// ctx is the attempt's deadline, which async cancels as soon as this
 	// returns. The listeners must live until the session ends.
 	proxyCtx, cancel := context.WithCancel(context.Background())
 	if err := a.startProxy(proxyCtx); err != nil {
 		cancel()
+		a.manager.Logout()
 		return err
 	}
 
@@ -245,13 +439,17 @@ func (a *app) connect(ctx context.Context) error {
 func (a *app) onSessionState(state session.State) {
 	a.mu.Lock()
 	a.view.Session = state
+	stopping := a.stopping
 	a.mu.Unlock()
 
 	if window := a.window.Load(); window != nil {
 		window.Invalidate()
 	}
-	if tray := a.tray.Load(); tray != nil {
-		tray.SetToolTip("goTrust: " + string(state.Phase))
+	a.refreshTray()
+
+	// A login that fails while the window is hidden must not fail silently.
+	if state.Phase == session.PhaseFailed && !stopping {
+		a.showWindow()
 	}
 }
 
@@ -284,9 +482,8 @@ func (a *app) startProxy(ctx context.Context) error {
 	a.view.Addresses = server.Addresses()
 	a.mu.Unlock()
 
-	if window := a.window.Load(); window != nil {
-		window.Invalidate()
-	}
+	a.invalidate()
+	a.refreshTray()
 	return nil
 }
 
@@ -294,6 +491,9 @@ func (a *app) disconnect() {
 	a.cancelCaptcha(errors.New("login cancelled"))
 
 	a.mu.Lock()
+	attempt := a.attempt
+	a.attempt = nil
+	a.stopping = true
 	server := a.proxy
 	a.proxy = nil
 	cancel := a.proxyCancel
@@ -301,6 +501,9 @@ func (a *app) disconnect() {
 	a.view.Addresses = nil
 	a.mu.Unlock()
 
+	if attempt != nil {
+		attempt.cancel()
+	}
 	if cancel != nil {
 		cancel()
 	}
@@ -309,58 +512,298 @@ func (a *app) disconnect() {
 	}
 	a.manager.Logout()
 
-	if window := a.window.Load(); window != nil {
-		window.Invalidate()
+	a.mu.Lock()
+	a.stopping = false
+	a.mu.Unlock()
+
+	a.invalidate()
+	a.refreshTray()
+}
+
+// saveSettings persists the settings draft. Proxy binds and keep-alive take
+// effect on the next connect; credentials on the next login; a profile switch
+// disconnects first.
+func (a *app) saveSettings() {
+	a.mu.RLock()
+	state := a.settings
+	a.mu.RUnlock()
+	if state == nil {
+		return
+	}
+
+	cfg, err := state.Apply()
+	if err != nil {
+		state.Status = err.Error()
+		a.invalidateSettings()
+		return
+	}
+	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+		state.Status = "保存失败: " + err.Error()
+		a.invalidateSettings()
+		a.logf("save settings: %v", err)
+		return
+	}
+
+	previous := a.currentConfig()
+	a.applyConfig(cfg)
+
+	// Reflect the normalised values back into the form.
+	a.mu.RLock()
+	settings := a.settings
+	a.mu.RUnlock()
+	if settings != nil {
+		settings.Reload(cfg)
+		settings.Status = "设置已保存"
+	}
+
+	a.reconcileProfileSwitch(previous, cfg)
+	a.invalidateSettings()
+}
+
+// selectProfile switches accounts from the tray or the settings window. One
+// live session at a time: the old one disconnects first.
+func (a *app) selectProfile(name string) {
+	cfg := a.currentConfig()
+	if cfg.ActiveProfile == name {
+		return
+	}
+	if cfg.ProfileIndex(name) < 0 {
+		a.setStatus(fmt.Sprintf("配置 %q 不存在", name), false)
+		return
+	}
+
+	a.mu.RLock()
+	online := a.view.Session.Phase == session.PhaseOnline || a.view.Session.Phase == session.PhaseConnecting
+	a.mu.RUnlock()
+
+	cfg.ActiveProfile = name
+	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+		a.setStatus("切换配置失败: "+err.Error(), false)
+		a.logf("switch profile: %v", err)
+		return
+	}
+
+	a.applyConfig(cfg)
+	if online {
+		a.disconnect()
+		if cfg.App.AutoConnect {
+			a.async(a.connect)
+		}
+	}
+
+	// Keep an open settings window in step with the switch.
+	a.mu.RLock()
+	settings := a.settings
+	a.mu.RUnlock()
+	if settings != nil {
+		settings.Reload(cfg)
+		settings.Status = "配置已切换，未保存的修改已丢弃"
+		a.invalidateSettings()
 	}
 }
 
-func (a *app) save() error {
-	cfg := a.currentConfig()
-	if cfg.Auth.StorePass {
-		cfg.Auth.Password = a.currentAuth().Password
-	} else {
-		cfg.Auth.Password = ""
+// reconcileProfileSwitch handles a save that changed active_profile: a live
+// session belongs to the old account and must go first.
+func (a *app) reconcileProfileSwitch(previous, next config.Config) {
+	if previous.ActiveProfile == next.ActiveProfile {
+		return
 	}
-	if err := config.Save(cfg); err != nil {
-		return err
+	a.mu.RLock()
+	online := a.view.Session.Phase == session.PhaseOnline || a.view.Session.Phase == session.PhaseConnecting
+	a.mu.RUnlock()
+	if online {
+		a.disconnect()
+		if next.App.AutoConnect {
+			a.async(a.connect)
+		}
+	}
+}
+
+// setAutostart changes the desktop entry immediately and persists the flag.
+func (a *app) setAutostart(on bool) {
+	a.mu.RLock()
+	state := a.settings
+	a.mu.RUnlock()
+
+	if err := mygo.App.SetOpenAtLogin(on); err != nil {
+		if state != nil {
+			state.Status = "开机自启设置失败: " + err.Error()
+			a.invalidateSettings()
+		}
+		a.logf("autostart: %v", err)
+		return
+	}
+	a.persistFlag(func(cfg *config.Config) { cfg.App.Autostart = on })
+	if state != nil {
+		state.Status = "开机自启已" + map[bool]string{true: "开启", false: "关闭"}[on]
+		a.invalidateSettings()
+	}
+}
+
+// setVerbose changes the running log level immediately and persists it.
+func (a *app) setVerbose(on bool) {
+	if a.log != nil {
+		a.log.SetVerbose(on)
+	}
+	if on {
+		zjuconnectlog.EnableDebug()
+	} else {
+		zjuconnectlog.DisableDebug()
+	}
+	a.persistFlag(func(cfg *config.Config) { cfg.Logging.Verbose = on })
+}
+
+func (a *app) persistFlag(mutate func(*config.Config)) {
+	cfg := a.currentConfig()
+	mutate(&cfg)
+	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+		a.setStatus("保存设置失败: "+err.Error(), false)
+		a.logf("save settings: %v", err)
+		return
 	}
 	a.applyConfig(cfg)
-	a.setStatus("设置已保存", false)
-	return nil
 }
 
+func (a *app) openLogs() {
+	a.mu.RLock()
+	state := a.settings
+	a.mu.RUnlock()
+	if a.logDir == "" {
+		if state != nil {
+			state.Status = "日志目录不可用"
+			a.invalidateSettings()
+		}
+		return
+	}
+	if err := mygo.Shell.OpenPath(a.logDir); err != nil {
+		if state != nil {
+			state.Status = "打开日志目录失败: " + err.Error()
+			a.invalidateSettings()
+		}
+		a.logf("open logs: %v", err)
+	}
+}
+
+// applyConfig makes cfg the settings in effect. It does not touch a live
+// session: the apply rules are explicit at the call sites.
 func (a *app) applyConfig(cfg config.Config) {
 	a.mu.Lock()
 	a.cfg = cfg
 	a.view.Config = cfg
 	a.mu.Unlock()
+
+	a.refreshTray()
+	a.invalidate()
 }
 
-// currentConfig merges the edited fields into the settings in effect.
+// currentConfig returns the settings a login or a listener should use.
 func (a *app) currentConfig() config.Config {
 	a.mu.RLock()
-	cfg := a.cfg
-	view := a.view
-	a.mu.RUnlock()
-
-	cfg.Server.Address = strings.TrimSpace(view.Server)
-	if port, err := strconv.Atoi(strings.TrimSpace(view.Port)); err == nil {
-		cfg.Server.Port = port
-	}
-	cfg.Auth.Username = view.Username
-	cfg.Auth.Domain = strings.TrimSpace(view.Domain)
-	return cfg
+	defer a.mu.RUnlock()
+	return a.cfg
 }
 
-func (a *app) currentAuth() config.AuthConfig {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
+// cfgForDisk clears a password the user chose not to store. The in-memory
+// configuration keeps it for this run.
+func cfgForDisk(cfg config.Config) config.Config {
+	disk := cfg.Clone()
+	for index := range disk.Profiles {
+		if !disk.Profiles[index].Auth.StorePass {
+			disk.Profiles[index].Auth.Password = ""
+		}
+	}
+	return disk
+}
 
-	auth := a.cfg.Auth
-	auth.Username = a.view.Username
-	auth.Domain = strings.TrimSpace(a.view.Domain)
-	auth.Password = a.view.Password
-	return auth
+func (a *app) hasClientData() bool {
+	path, err := a.cfg.ClientDataPath()
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.Size() > 0
+}
+
+// autoConnectDecision says whether startup may log in without asking.
+type autoConnectDecision struct {
+	Connect bool
+	Reason  string
+}
+
+func decideAutoConnect(cfg config.Config, clientData bool) autoConnectDecision {
+	if !cfg.App.AutoConnect {
+		return autoConnectDecision{}
+	}
+	profile := cfg.Active()
+	if profile.ServerAddress() == "" {
+		return autoConnectDecision{Reason: "自动连接未执行：请先在设置中填写网关地址"}
+	}
+	if strings.TrimSpace(profile.Auth.Username) == "" {
+		return autoConnectDecision{Reason: "自动连接未执行：请先在设置中填写用户名"}
+	}
+	if (profile.Auth.StorePass && profile.Auth.Password != "") || clientData {
+		return autoConnectDecision{Connect: true}
+	}
+	return autoConnectDecision{Reason: "自动连接未执行：没有保存的密码或会话，请先在设置中保存密码"}
+}
+
+// observeLogLine turns the upstream keep-alive lines into the tray's last
+// result. The loop itself lives in the aTrust client and has no callback yet,
+// so its logs are the observable result.
+func (a *app) observeLogLine(line string) {
+	result, ok := parseKeepAlive(line)
+	if !ok {
+		return
+	}
+	a.mu.Lock()
+	a.view.KeepAlive = result
+	state := a.view
+	a.mu.Unlock()
+
+	if tray := a.tray.Load(); tray != nil {
+		tray.SetToolTip(a.tooltip(state))
+	}
+	a.invalidate()
+}
+
+// parseKeepAlive reads one of the lines service.KeepAlive writes.
+func parseKeepAlive(line string) (string, bool) {
+	if index := strings.Index(line, "KeepAlive: OK "); index >= 0 {
+		fields := strings.Fields(line[index+len("KeepAlive: OK "):])
+		result := "OK"
+		for _, field := range fields {
+			switch {
+			case strings.HasPrefix(field, "status="):
+				result += " " + strings.TrimPrefix(field, "status=")
+			case strings.HasPrefix(field, "target="):
+				result += " · " + strings.TrimPrefix(field, "target=")
+			}
+		}
+		return result, true
+	}
+	if index := strings.Index(line, "KeepAlive: target="); index >= 0 {
+		fields := strings.Fields(line[index:])
+		target := ""
+		for _, field := range fields {
+			if strings.HasPrefix(field, "target=") {
+				target = strings.TrimPrefix(field, "target=")
+				break
+			}
+		}
+		if target == "" {
+			return "失败", true
+		}
+		return "失败 · " + target, true
+	}
+	switch {
+	case strings.Contains(line, "KeepAlive using UDP: OK"):
+		return "DNS OK", true
+	case strings.Contains(line, "KeepAlive using TCP: OK"):
+		return "DNS OK", true
+	case strings.Contains(line, "KeepAlive: no application target"):
+		return "无应用目标", true
+	}
+	return "", false
 }
 
 func (a *app) setStatus(message string, busy bool) {
@@ -376,4 +819,30 @@ func (a *app) invalidate() {
 	if window := a.window.Load(); window != nil {
 		window.Invalidate()
 	}
+}
+
+func (a *app) invalidateSettings() {
+	if window := a.settingsWindow.Load(); window != nil {
+		window.Invalidate()
+	}
+}
+
+func (a *app) refreshTray() {
+	tray := a.tray.Load()
+	if tray == nil {
+		return
+	}
+	a.mu.RLock()
+	state := a.view
+	a.mu.RUnlock()
+	tray.SetMenu(gotrustui.TrayMenu(&state, a.actions()))
+	tray.SetToolTip(a.tooltip(state))
+}
+
+func (a *app) tooltip(state gotrustui.State) string {
+	tooltip := "goTrust: " + gotrustui.TrayStatus(state.Session)
+	if state.KeepAlive != "" {
+		tooltip += "\n保活: " + state.KeepAlive
+	}
+	return tooltip
 }

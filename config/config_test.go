@@ -6,59 +6,95 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestDefaultHasBothListeners(t *testing.T) {
+func TestDefaultHasOneProfileAndBothListeners(t *testing.T) {
 	cfg := Default()
+	if cfg.Version != CurrentVersion {
+		t.Fatalf("version = %d, want %d", cfg.Version, CurrentVersion)
+	}
+	if len(cfg.Profiles) != 1 || cfg.ActiveProfile != DefaultProfileName {
+		t.Fatalf("profiles = %v, active = %q", cfg.ProfileNames(), cfg.ActiveProfile)
+	}
 	socks5, httpBind := cfg.ProxyAddresses()
 	if socks5 == "" || httpBind == "" {
 		t.Fatalf("defaults disable a listener: socks5=%q http=%q", socks5, httpBind)
 	}
-	if cfg.Server.Port != 443 {
-		t.Fatalf("default port = %d, want 443", cfg.Server.Port)
+	profile := cfg.Active()
+	if profile.Server.Port != 443 {
+		t.Fatalf("default port = %d, want 443", profile.Server.Port)
+	}
+	if profile.Auth.Domain != "local" {
+		t.Fatalf("default login domain = %q, want local", profile.Auth.Domain)
+	}
+	if !profile.Keep.IsEnabled() || profile.KeepAliveInterval() != 60*time.Second {
+		t.Fatalf("default keep-alive = %v / %v", profile.Keep.IsEnabled(), profile.KeepAliveInterval())
 	}
 }
 
-func TestMissingFileYieldsDefaults(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "absent.json")
-	cfg, err := LoadFile(path)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if cfg.Server.Port != 443 || cfg.Proxy.SOCKS5Bind == "" {
-		t.Fatalf("missing file did not yield defaults: %+v", cfg)
-	}
-}
-
-func TestSaveLoadRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "nested", "config.json")
+func TestTOMLRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "config.toml")
 
 	want := Default()
-	want.Server.Address = "vpn.example.com"
-	want.Server.Port = 4430
-	want.Auth.Username = "alice"
-	want.Auth.StorePass = true
-	want.Auth.Password = "secret"
-	want.Keep.Targets = []string{"http://192.0.2.5/health"}
+	want.ActiveProfile = "工作"
+	want.App.Autostart = true
+	want.App.AutoConnect = true
+	want.Logging.Verbose = true
 	want.Proxy.HTTPBind = ""
+	if _, err := want.AddProfile("工作"); err != nil {
+		t.Fatalf("add profile: %v", err)
+	}
+	index := want.ProfileIndex("工作")
+	want.Profiles[index].Server.Address = "vpn.example.com"
+	want.Profiles[index].Server.Port = 4430
+	want.Profiles[index].Auth.Username = "alice"
+	want.Profiles[index].Auth.Domain = "Radius"
+	want.Profiles[index].Auth.StorePass = true
+	want.Profiles[index].Auth.Password = `pa"ss\word`
+	want.Profiles[index].Keep.SetEnabled(false)
+	want.Profiles[index].Keep.Interval = "90s"
+	want.Profiles[index].Keep.Targets = []string{"http://192.0.2.5/health"}
+	want.Profiles[index].Debug.ClientData = "/tmp/custom-client-data.json"
 
 	if err := SaveFile(path, want); err != nil {
 		t.Fatalf("save: %v", err)
 	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(string(raw), "[[profiles]]") {
+		t.Fatalf("saved file is not profile TOML:\n%s", raw)
+	}
+	if !strings.Contains(string(raw), "active_profile = \"工作\"") {
+		t.Fatalf("active profile not written:\n%s", raw)
+	}
+
 	got, err := LoadFile(path)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if got.Server.Address != want.Server.Address || got.Server.Port != want.Server.Port {
-		t.Fatalf("server = %+v, want %+v", got.Server, want.Server)
+	if got.ActiveProfile != "工作" || len(got.Profiles) != 2 {
+		t.Fatalf("profiles = %v, active = %q", got.ProfileNames(), got.ActiveProfile)
 	}
-	if got.Auth.Password != want.Auth.Password {
+	profile := got.Active()
+	if profile.Server.Address != "vpn.example.com" || profile.Server.Port != 4430 {
+		t.Fatalf("server = %+v", profile.Server)
+	}
+	if profile.Auth.Password != want.Profiles[index].Auth.Password {
 		t.Fatalf("password round-trip lost the value")
 	}
-	if len(got.Keep.Targets) != 1 || got.Keep.Targets[0] != want.Keep.Targets[0] {
-		t.Fatalf("targets = %v, want %v", got.Keep.Targets, want.Keep.Targets)
+	if profile.Auth.Domain != "Radius" || !profile.Auth.StorePass {
+		t.Fatalf("auth = %+v", profile.Auth)
+	}
+	if profile.Keep.IsEnabled() {
+		t.Fatal("keep-alive enabled flag was lost")
+	}
+	if len(profile.Keep.Targets) != 1 || profile.Keep.Targets[0] != "http://192.0.2.5/health" {
+		t.Fatalf("targets = %v", profile.Keep.Targets)
 	}
 	if got.Proxy.HTTPBind != "" {
 		t.Fatalf("http bind = %q, want empty (disabled)", got.Proxy.HTTPBind)
@@ -66,10 +102,13 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if socks5, _ := got.ProxyAddresses(); socks5 == "" {
 		t.Fatal("socks bind was lost")
 	}
+	if !got.Logging.Verbose || !got.App.Autostart || !got.App.AutoConnect {
+		t.Fatalf("global settings lost: %+v %+v", got.App, got.Logging)
+	}
 }
 
 func TestSaveRestrictsPermissions(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
+	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := SaveFile(path, Default()); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -83,11 +122,17 @@ func TestSaveRestrictsPermissions(t *testing.T) {
 	}
 }
 
-// A hand-edited file that omits a listener must keep the other one working
-// rather than silently disabling both.
-func TestPartialFileKeepsListeners(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{"server":{"address":"vpn.example.com"}}`), 0o600); err != nil {
+// A hand-edited file that omits most fields must keep working with defaults.
+func TestPartialFileTakesDefaults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	partial := `
+[[profiles]]
+[profiles.server]
+address = "vpn.example.com"
+[profiles.auth]
+username = "alice"
+`
+	if err := os.WriteFile(path, []byte(partial), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -99,25 +144,223 @@ func TestPartialFileKeepsListeners(t *testing.T) {
 	if socks5 == "" || httpBind == "" {
 		t.Fatalf("partial file disabled a listener: socks5=%q http=%q", socks5, httpBind)
 	}
-	if cfg.Server.Port != 443 {
-		t.Fatalf("port = %d, want the default 443", cfg.Server.Port)
+	profile := cfg.Active()
+	if profile.Name != DefaultProfileName {
+		t.Fatalf("name = %q, want %q", profile.Name, DefaultProfileName)
+	}
+	if profile.Server.Port != 443 {
+		t.Fatalf("port = %d, want the default 443", profile.Server.Port)
+	}
+	if profile.Auth.Domain != "local" {
+		t.Fatalf("domain = %q, want local", profile.Auth.Domain)
+	}
+	if !profile.Keep.IsEnabled() {
+		t.Fatal("an omitted keep-alive setting must default to enabled")
+	}
+	if profile.KeepAliveInterval() != 60*time.Second {
+		t.Fatalf("interval = %v, want 60s", profile.KeepAliveInterval())
+	}
+	if cfg.ActiveProfile != DefaultProfileName {
+		t.Fatalf("active = %q, want the only profile", cfg.ActiveProfile)
+	}
+}
+
+// An explicitly disabled keep-alive must stay disabled.
+func TestKeepAliveExplicitlyDisabled(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := `
+[[profiles]]
+name = "默认"
+[profiles.keepalive]
+enabled = false
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Active().Keep.IsEnabled() {
+		t.Fatal("enabled = false was ignored")
+	}
+}
+
+// Version 1 was never released, so a leftover JSON file is ignored rather than
+// migrated; there is no real v1 state to preserve.
+func TestVersionOneJSONIsIgnored(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	dir := filepath.Join(home, "goTrust")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	legacy := `{"server":{"address":"vpn.example.com","port":8443}}`
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(legacy), 0o600); err != nil {
+		t.Fatalf("write legacy: %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Active().Server.Address != "" {
+		t.Fatalf("the unreleased JSON file was read: %+v", cfg.Active().Server)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("Load created a settings file before the user saved: %v", err)
+	}
+}
+
+func TestNewerVersionIsRefused(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("version = 99\n"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := LoadFile(path); err == nil {
+		t.Fatal("a newer settings version was accepted")
+	}
+}
+
+func TestProfileOperations(t *testing.T) {
+	cfg := Default()
+	if _, err := cfg.AddProfile("工作"); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if cfg.ActiveProfile != "工作" {
+		t.Fatalf("active = %q, want the new profile", cfg.ActiveProfile)
+	}
+	if _, err := cfg.AddProfile("工作"); err == nil {
+		t.Fatal("duplicate name accepted")
+	}
+
+	index := cfg.ProfileIndex("工作")
+	if index < 0 {
+		t.Fatal("profile not found")
+	}
+	copied, err := cfg.DuplicateProfile(index, "工作 副本")
+	if err != nil || copied != 2 {
+		t.Fatalf("duplicate: %d %v", copied, err)
+	}
+	if cfg.ActiveProfile != "工作 副本" {
+		t.Fatalf("active = %q after duplicate", cfg.ActiveProfile)
+	}
+
+	if err := cfg.RenameProfile(2, "备用"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if cfg.ActiveProfile != "备用" {
+		t.Fatalf("renaming the active profile changed the active name to %q", cfg.ActiveProfile)
+	}
+	if err := cfg.RenameProfile(2, DefaultProfileName); err == nil {
+		t.Fatal("renaming onto an existing name was accepted")
+	}
+
+	if err := cfg.DeleteProfile(2); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if len(cfg.Profiles) != 2 {
+		t.Fatalf("profiles = %v", cfg.ProfileNames())
+	}
+	if err := cfg.SelectProfile("missing"); err == nil {
+		t.Fatal("selecting an unknown profile succeeded")
+	}
+
+	cfg.Profiles = cfg.Profiles[:1]
+	cfg.ActiveProfile = cfg.Profiles[0].Name
+	if err := cfg.DeleteProfile(0); err == nil {
+		t.Fatal("deleting the last profile succeeded")
+	}
+}
+
+func TestDuplicateProfileIsIndependent(t *testing.T) {
+	cfg := Default()
+	profile := cfg.Active()
+	profile.Keep.Targets = []string{"http://192.0.2.5/"}
+	cfg.Profiles[0] = profile
+
+	index, err := cfg.DuplicateProfile(0, "副本")
+	if err != nil {
+		t.Fatalf("duplicate: %v", err)
+	}
+	cfg.Profiles[index].Keep.Targets[0] = "http://192.0.2.6/"
+	if cfg.Profiles[0].Keep.Targets[0] != "http://192.0.2.5/" {
+		t.Fatal("profiles share their target slice")
+	}
+}
+
+func TestProfileNamesAreUniqueOnLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := `
+[[profiles]]
+name = "a"
+[[profiles]]
+name = "a"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(cfg.Profiles) != 2 || cfg.Profiles[0].Name == cfg.Profiles[1].Name {
+		t.Fatalf("duplicate names survived: %v", cfg.ProfileNames())
+	}
+}
+
+func TestClientDataPathIsPerProfile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	cfg := Default()
+	path, err := cfg.ClientDataPath()
+	if err != nil {
+		t.Fatalf("path: %v", err)
+	}
+	if filepath.Base(path) != "client_data.json" {
+		t.Fatalf("default profile path = %q, want the v1 file name", path)
+	}
+
+	work := NewProfile("工作")
+	first, err := cfg.ClientDataPathFor(work)
+	if err != nil {
+		t.Fatalf("path: %v", err)
+	}
+	if first == path {
+		t.Fatal("profiles share one client data file")
+	}
+	other, err := cfg.ClientDataPathFor(NewProfile("工作!"))
+	if err != nil {
+		t.Fatalf("path: %v", err)
+	}
+	if first == other {
+		t.Fatalf("different names collapsed to %q", first)
+	}
+	if filepath.Dir(first) != filepath.Dir(path) {
+		t.Fatalf("path %q is outside the config directory", first)
+	}
+
+	custom := NewProfile("custom")
+	custom.Debug.ClientData = "/tmp/custom.json"
+	got, err := cfg.ClientDataPathFor(custom)
+	if err != nil || got != "/tmp/custom.json" {
+		t.Fatalf("override = %q, %v", got, err)
 	}
 }
 
 func TestIntervalFallsBackOnGarbage(t *testing.T) {
 	cfg := Default()
-
-	cfg.Keep.Interval = "not-a-duration"
+	cfg.Profiles[0].Keep.Interval = "not-a-duration"
 	if got := cfg.KeepAliveInterval(); got != 60*time.Second {
 		t.Fatalf("interval = %v, want the default", got)
 	}
 
-	cfg.Keep.Interval = "90s"
+	cfg.Profiles[0].Keep.Interval = "90s"
 	if got := cfg.KeepAliveInterval(); got != 90*time.Second {
 		t.Fatalf("interval = %v, want 90s", got)
 	}
 
-	cfg.Keep.Interval = "0s"
+	cfg.Profiles[0].Keep.Interval = "0s"
 	if got := cfg.KeepAliveInterval(); got != 60*time.Second {
 		t.Fatalf("zero interval = %v, want the default", got)
 	}
@@ -125,46 +368,44 @@ func TestIntervalFallsBackOnGarbage(t *testing.T) {
 
 func TestValidateRejectsUnusableSettings(t *testing.T) {
 	valid := Default()
-	valid.Server.Address = "vpn.example.com"
-	valid.Auth.Username = "alice"
+	valid.Profiles[0].Server.Address = "vpn.example.com"
+	valid.Profiles[0].Auth.Username = "alice"
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid settings rejected: %v", err)
 	}
 
-	noServer := valid
-	noServer.Server.Address = ""
+	noServer := valid.Clone()
+	noServer.Profiles[0].Server.Address = ""
 	if err := noServer.Validate(); err == nil {
 		t.Fatal("an empty server address was accepted")
 	}
 
-	badPort := valid
-	badPort.Server.Port = 70000
+	badPort := valid.Clone()
+	badPort.Profiles[0].Server.Port = 70000
 	if err := badPort.Validate(); err == nil {
 		t.Fatal("port 70000 was accepted")
 	}
 
-	noUser := valid
-	noUser.Auth.Username = ""
+	noUser := valid.Clone()
+	noUser.Profiles[0].Auth.Username = ""
 	if err := noUser.Validate(); err == nil {
 		t.Fatal("an empty username was accepted")
 	}
 
-	noListener := valid
+	noListener := valid.Clone()
 	noListener.Proxy = ProxyConfig{}
 	if err := noListener.Validate(); err == nil {
 		t.Fatal("disabling both listeners was accepted")
 	}
 }
 
-func TestClientDataPathHonoursOverride(t *testing.T) {
+func TestCloneDoesNotShareState(t *testing.T) {
 	cfg := Default()
-	cfg.Debug.ClientData = "/tmp/custom-client-data.json"
-
-	got, err := cfg.ClientDataPath()
-	if err != nil {
-		t.Fatalf("path: %v", err)
-	}
-	if got != "/tmp/custom-client-data.json" {
-		t.Fatalf("path = %q, want the override", got)
+	clone := cfg.Clone()
+	clone.Profiles[0].Name = "changed"
+	clone.Profiles[0].Keep.Targets = append(clone.Profiles[0].Keep.Targets, "http://192.0.2.5/")
+	clone.App.AutoConnect = true
+	if cfg.Profiles[0].Name != DefaultProfileName || len(cfg.Profiles[0].Keep.Targets) != 0 || cfg.App.AutoConnect {
+		t.Fatal("clone shares state with the original")
 	}
 }

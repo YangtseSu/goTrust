@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -78,11 +79,6 @@ type Options struct {
 	// user edits the form after the manager exists, and a login must use what
 	// is on screen now, not what was loaded at startup.
 	Config func() config.Config
-	// Auth supplies the credentials for one login attempt. It is a function
-	// because the user edits the form after the manager exists; reading it at
-	// login time also means a password the user chose not to save never comes
-	// back from disk.
-	Auth func() config.AuthConfig
 	// Prompt builds the handler for one login attempt. It is a function
 	// because a handler that waits for the user must stop waiting when the
 	// attempt's context ends: a cancelled login must not leave a dialog open.
@@ -147,6 +143,9 @@ func (m *Manager) Login(ctx context.Context) error {
 		m.fail(err)
 		return err
 	}
+	// One snapshot drives the whole attempt: a profile switch while this login
+	// runs must not mix one account's gateway with another's credentials.
+	profile := cfg.Active()
 
 	// The session must outlive the login attempt. The caller's context carries
 	// the attempt's deadline and the application cancels it once Login returns,
@@ -170,18 +169,22 @@ func (m *Manager) Login(ctx context.Context) error {
 		return wrapped
 	}
 
-	clientData, err := readClientData(cfg)
+	clientDataPath, err := cfg.ClientDataPathFor(profile)
+	if err != nil {
+		return fail("locate the stored session", err)
+	}
+	clientData, err := readClientData(clientDataPath)
 	if err != nil {
 		return fail("read the stored session", err)
 	}
 
-	loginMethod, err := newLoginMethod(m.credentials())
+	loginMethod, err := newLoginMethod(profile.Auth)
 	if err != nil {
 		return fail("configure the login", err)
 	}
 
 	client := atrust.NewClient(atrust.ClientOptions{
-		Session:        atrust.SessionOptions{Username: m.credentials().Username},
+		Session:        atrust.SessionOptions{Username: profile.Auth.Username},
 		UnderlayDialer: underlayDialer,
 	})
 
@@ -196,15 +199,15 @@ func (m *Manager) Login(ctx context.Context) error {
 	}
 
 	if _, err := client.SetupContext(ctx, atrust.SetupOptions{
-		ServerAddress:            cfg.ServerAddress(),
-		ServerPort:               cfg.Server.Port,
+		ServerAddress:            profile.ServerAddress(),
+		ServerPort:               profile.Server.Port,
 		LoginMethod:              loginMethod,
 		ClientData:               clientData,
 		ChallengeHandler:         prompt,
 		BestNodesRefreshInterval: 5 * time.Minute,
 		SessionRefreshInterval:   60 * time.Second,
 		SaveClientData: func(data []byte) error {
-			return writeClientData(cfg, data)
+			return writeClientData(clientDataPath, data)
 		},
 	}); err != nil {
 		client.Close()
@@ -242,7 +245,7 @@ func (m *Manager) Login(ctx context.Context) error {
 		tunnelIP = ip.String()
 	}
 
-	gateway := net.JoinHostPort(cfg.ServerAddress(), strconv.Itoa(cfg.Server.Port))
+	gateway := net.JoinHostPort(profile.ServerAddress(), strconv.Itoa(profile.Server.Port))
 
 	m.mu.Lock()
 	m.client = client
@@ -254,7 +257,7 @@ func (m *Manager) Login(ctx context.Context) error {
 
 	m.set(State{Phase: PhaseOnline, Detail: gateway, ClientIP: tunnelIP, Since: time.Now()})
 
-	go m.runKeepAlive(sessionCtx, cfg, ipResources)
+	go m.runKeepAlive(sessionCtx, profile, ipResources)
 	return nil
 }
 
@@ -332,13 +335,13 @@ func newStack(client *atrust.Client) (stack.Stack, error) {
 // runKeepAlive holds the session open with real application traffic. Without a
 // target the upstream loop falls back to a DNS probe, which it warns does not
 // extend a session on gateways that expire idle tunnels.
-func (m *Manager) runKeepAlive(ctx context.Context, cfg config.Config, ipResources []clientpkg.IPResource) {
-	if !cfg.Keep.Enabled {
+func (m *Manager) runKeepAlive(ctx context.Context, profile config.Profile, ipResources []clientpkg.IPResource) {
+	if !profile.Keep.IsEnabled() {
 		m.logf("keep-alive is disabled by configuration")
 		return
 	}
 
-	targets, warnings := keepAliveTargets(cfg, ipResources)
+	targets, warnings := keepAliveTargets(profile, ipResources)
 	for _, warning := range warnings {
 		m.logf("keep-alive: %s", warning)
 	}
@@ -351,21 +354,21 @@ func (m *Manager) runKeepAlive(ctx context.Context, cfg config.Config, ipResourc
 		return
 	}
 
-	m.logf("keep-alive: %d target(s) every %s", len(targets), cfg.KeepAliveInterval())
+	m.logf("keep-alive: %d target(s) every %s", len(targets), profile.KeepAliveInterval())
 	service.KeepAlive(ctx, resolver, dialer, service.KeepAliveOptions{
 		Targets:  targets,
-		Interval: cfg.KeepAliveInterval(),
+		Interval: profile.KeepAliveInterval(),
 	})
 }
 
 // keepAliveTargets merges the user's named targets with the ones derived from
 // the granted resources.
-func keepAliveTargets(cfg config.Config, ipResources []clientpkg.IPResource) ([]service.KeepAliveTarget, []string) {
+func keepAliveTargets(profile config.Profile, ipResources []clientpkg.IPResource) ([]service.KeepAliveTarget, []string) {
 	var targets []service.KeepAliveTarget
 	var warnings []string
 
-	if len(cfg.Keep.Targets) > 0 {
-		named, namedWarnings := service.NamedKeepAliveTargets(joinTargets(cfg.Keep.Targets))
+	if len(profile.Keep.Targets) > 0 {
+		named, namedWarnings := service.NamedKeepAliveTargets(joinTargets(profile.Keep.Targets))
 		targets = append(targets, named...)
 		warnings = append(warnings, namedWarnings...)
 	}
@@ -396,14 +399,6 @@ func (m *Manager) settings() config.Config {
 	return m.options.Config()
 }
 
-// credentials reads the login material for this attempt.
-func (m *Manager) credentials() config.AuthConfig {
-	if m.options.Auth == nil {
-		return config.AuthConfig{}
-	}
-	return m.options.Auth()
-}
-
 // newLoginMethod builds what the client needs to authenticate. A nil result is
 // valid: the client falls back to the stored session material.
 func newLoginMethod(cfg config.AuthConfig) (auth.LoginMethod, error) {
@@ -432,11 +427,7 @@ func (m *Manager) fail(err error) {
 
 // readClientData loads the stored session material. A missing file is normal on
 // a first run.
-func readClientData(cfg config.Config) ([]byte, error) {
-	path, err := cfg.ClientDataPath()
-	if err != nil {
-		return nil, err
-	}
+func readClientData(path string) ([]byte, error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -449,10 +440,9 @@ func readClientData(cfg config.Config) ([]byte, error) {
 
 // writeClientData stores the session material. The file carries cookies, the
 // sign key and the sid ticket, so it is restricted to its owner.
-func writeClientData(cfg config.Config, data []byte) error {
-	path, err := cfg.ClientDataPath()
-	if err != nil {
-		return err
+func writeClientData(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
 	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)

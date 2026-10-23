@@ -6,6 +6,8 @@ package session
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -86,21 +88,18 @@ func TestStateChangesAreReported(t *testing.T) {
 	}
 }
 
-// Credentials are read at login time, not captured at construction: the user
-// edits the form after the manager exists.
-func TestCredentialsAreReadAtLoginTime(t *testing.T) {
-	username := "first"
-	manager := New(Options{
-		Config: func() config.Config { return config.Default() },
-		Auth:   func() config.AuthConfig { return config.AuthConfig{Username: username} },
-	})
+// The settings are read at login time, not captured at construction: the
+// settings window can switch profiles after the manager exists.
+func TestSettingsAndProfileAreReadAtLoginTime(t *testing.T) {
+	cfg := config.Default()
+	manager := New(Options{Config: func() config.Config { return cfg }})
 
-	if got := manager.credentials().Username; got != "first" {
-		t.Fatalf("username = %q, want first", got)
+	if got := manager.settings().Active().Auth.Username; got != "" {
+		t.Fatalf("username = %q, want empty", got)
 	}
 
-	username = "second"
-	if got := manager.credentials().Username; got != "second" {
+	cfg.Profiles[0].Auth.Username = "second"
+	if got := manager.settings().Active().Auth.Username; got != "second" {
 		t.Fatalf("username = %q, want second", got)
 	}
 }
@@ -120,10 +119,10 @@ func TestLogoutIsSafeWhenIdle(t *testing.T) {
 // Keep-alive targets come from the configuration first and from the granted
 // resources second, so a user-specified target always wins placement.
 func TestKeepAliveTargetsMergeNamedAndDerived(t *testing.T) {
-	cfg := config.Default()
-	cfg.Keep.Targets = []string{"http://192.0.2.5/health"}
+	profile := config.Default().Active()
+	profile.Keep.Targets = []string{"http://192.0.2.5/health"}
 
-	targets, _ := keepAliveTargets(cfg, nil)
+	targets, _ := keepAliveTargets(profile, nil)
 	if len(targets) != 1 {
 		t.Fatalf("targets = %v, want one", targets)
 	}
@@ -131,7 +130,7 @@ func TestKeepAliveTargetsMergeNamedAndDerived(t *testing.T) {
 		t.Fatalf("target = %+v, want the named target", targets[0])
 	}
 
-	empty := config.Default()
+	empty := config.Default().Active()
 	empty.Keep.Targets = nil
 	targets, _ = keepAliveTargets(empty, nil)
 	if len(targets) != 0 {
@@ -145,5 +144,33 @@ func TestJoinTargets(t *testing.T) {
 	}
 	if got := joinTargets([]string{"a", "b"}); got != "a,b" {
 		t.Fatalf("join = %q, want a,b", got)
+	}
+}
+
+// A first login has no config directory yet: writing the stored session must
+// create it, so a fresh install keeps its ticket.
+func TestWriteClientDataCreatesAPrivateDirectory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "deeper", "client_data.json")
+	if err := writeClientData(path, []byte(`{"sid":"x"}`)); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if mode := fileInfo.Mode().Perm(); mode != 0o600 {
+		t.Fatalf("client data mode = %o, want 600", mode)
+	}
+	dirInfo, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatalf("stat dir: %v", err)
+	}
+	if mode := dirInfo.Mode().Perm(); mode != 0o700 {
+		t.Fatalf("client data directory mode = %o, want 700", mode)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || string(raw) != `{"sid":"x"}` {
+		t.Fatalf("data = %q, %v", raw, err)
 	}
 }

@@ -4,8 +4,9 @@
 /build/
 
 # local configuration and credentials must never be committed
+/config.toml
 /config.json
-/client_data.json
+/client_data*.json
 *.log
 
 # editors

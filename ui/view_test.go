@@ -4,8 +4,10 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/config"
@@ -31,10 +33,7 @@ func TestViewRendersEveryPhase(t *testing.T) {
 					Detail:   "detail for " + string(phase),
 					ClientIP: "192.0.2.10",
 				},
-				Config:   config.Default(),
-				Server:   "vpn.example.com",
-				Port:     "443",
-				Username: "alice",
+				Config: config.Default(),
 			}
 
 			tester := ui.NewTester(View(&state, Actions{}), 520, 560)
@@ -49,33 +48,33 @@ func TestViewRendersEveryPhase(t *testing.T) {
 			if !tester.HasText(phaseLabel(state.Session)) {
 				t.Fatalf("the phase label %q is missing", phaseLabel(state.Session))
 			}
+			if !tester.HasText("配置") {
+				t.Fatal("the active profile is missing")
+			}
 		})
 	}
 }
 
-// The password must not be painted as readable text.
-func TestPasswordIsNotShownAsText(t *testing.T) {
+// The main window names the active account and where it connects, because the
+// credentials now live in the settings window.
+func TestProfileSummaryShowsTheActiveAccount(t *testing.T) {
+	cfg := config.Default()
+	cfg.Profiles[0].Server.Address = "vpn.example.com"
+	cfg.Profiles[0].Auth.Username = "alice"
+
 	state := State{
-		Session:  session.State{Phase: session.PhaseIdle, Detail: "x"},
-		Config:   config.Default(),
-		Server:   "vpn.example.com",
-		Port:     "443",
-		Username: "alice",
-		Password: "hunter2",
-		Domain:   "local",
+		Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
+		Config:  cfg,
 	}
 
 	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
 	tester.Frame()
 
+	if !tester.HasText("配置 默认 ｜ vpn.example.com:443") {
+		t.Fatalf("profile summary missing; texts: %v", tester.Texts())
+	}
 	if tester.HasText("hunter2") {
-		t.Fatal("the password appears as readable text")
-	}
-	if !tester.HasText("alice") && !tester.HasText("用户名") {
-		t.Fatal("the password test rendered an unexpected view")
-	}
-	if !tester.HasText("登录域") {
-		t.Fatal("the login domain field is missing")
+		t.Fatal("a password is painted on the main window")
 	}
 }
 
@@ -91,17 +90,15 @@ func TestButtonsCallTheRightAction(t *testing.T) {
 		{phase: session.PhaseIdle, button: "连接", wantLogin: true},
 		{phase: session.PhaseFailed, button: "连接", wantLogin: true},
 		{phase: session.PhaseOnline, button: "断开", wantLogout: true},
+		{phase: session.PhaseConnecting, button: "断开", wantLogout: true},
 	}
 
 	for _, testCase := range cases {
 		t.Run(string(testCase.phase), func(t *testing.T) {
 			var login, logout int
 			state := State{
-				Session:  session.State{Phase: testCase.phase, Detail: "x"},
-				Config:   config.Default(),
-				Server:   "vpn.example.com",
-				Port:     "443",
-				Username: "alice",
+				Session: session.State{Phase: testCase.phase, Detail: "x"},
+				Config:  config.Default(),
 			}
 			actions := Actions{
 				Login:  func() { login++ },
@@ -123,15 +120,29 @@ func TestButtonsCallTheRightAction(t *testing.T) {
 	}
 }
 
+func TestSettingsButtonOpensTheWindow(t *testing.T) {
+	opened := 0
+	state := State{
+		Session: session.State{Phase: session.PhaseIdle, Detail: "x"},
+		Config:  config.Default(),
+	}
+	tester := ui.NewTester(View(&state, Actions{Settings: func() { opened++ }}), 520, 560)
+	if err := tester.Click("设置"); err != nil {
+		t.Fatalf("click settings: %v", err)
+	}
+	if opened != 1 {
+		t.Fatalf("settings calls = %d, want 1", opened)
+	}
+}
+
 // The listener addresses are what the user copies into another application, so
 // the view has to show every one of them.
-func TestAddressesAreListed(t *testing.T) {
+func TestAddressesAndKeepAliveAreListed(t *testing.T) {
 	state := State{
 		Session:   session.State{Phase: session.PhaseOnline, Detail: "vpn.example.com:443"},
 		Config:    config.Default(),
-		Server:    "vpn.example.com",
-		Port:      "443",
 		Addresses: []string{"127.0.0.1:1080", "127.0.0.1:1081"},
+		KeepAlive: "OK 200 · http://192.0.2.10/",
 	}
 
 	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
@@ -142,4 +153,128 @@ func TestAddressesAreListed(t *testing.T) {
 			t.Fatalf("address %q is missing from the view", address)
 		}
 	}
+	if !tester.HasText("保活 OK 200") {
+		t.Fatal("the keep-alive result is missing")
+	}
+}
+
+func TestTrayStatus(t *testing.T) {
+	cases := []struct {
+		state session.State
+		want  string
+	}{
+		{session.State{Phase: session.PhaseIdle}, "未连接"},
+		{session.State{Phase: session.PhaseConnecting}, "连接中"},
+		{session.State{Phase: session.PhaseOnline, ClientIP: "203.0.113.4"}, "已连接 203.0.113.4"},
+		{session.State{Phase: session.PhaseOnline, Detail: "vpn.example.com:443"}, "已连接 vpn.example.com:443"},
+		{session.State{Phase: session.PhaseFailed, Detail: "bad password"}, "失败: bad password"},
+		{session.State{Phase: session.PhaseFailed, Detail: strings.Repeat("x", 80)}, "失败: "},
+	}
+	for _, testCase := range cases {
+		got := TrayStatus(testCase.state)
+		if testCase.want == "失败: " {
+			if len([]rune(got)) > 60 {
+				t.Fatalf("a long failure was not truncated: %q", got)
+			}
+			continue
+		}
+		if got != testCase.want {
+			t.Fatalf("status = %q, want %q", got, testCase.want)
+		}
+	}
+}
+
+// The tray menu is the only control surface when the window is hidden.
+func TestTrayMenuStatusProfilesAndToggle(t *testing.T) {
+	cfg := config.Default()
+	if _, err := cfg.AddProfile("工作"); err != nil {
+		t.Fatalf("add profile: %v", err)
+	}
+	if err := cfg.SelectProfile(config.DefaultProfileName); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+
+	var login, logout int
+	var selected string
+	state := State{
+		Session: session.State{Phase: session.PhaseOnline, Detail: "vpn.example.com:443", ClientIP: "203.0.113.4"},
+		Config:  cfg,
+	}
+	menu := TrayMenu(&state, Actions{
+		Login:         func() { login++ },
+		Logout:        func() { logout++ },
+		SelectProfile: func(name string) { selected = name },
+	})
+
+	items := menu.Items()
+	if len(items) == 0 {
+		t.Fatal("empty tray menu")
+	}
+	if items[0].Label != "已连接 203.0.113.4" {
+		t.Fatalf("status line = %q", items[0].Label)
+	}
+	if !items[0].Disabled {
+		t.Fatal("the status line is clickable")
+	}
+
+	var toggle, profiles *mygo.MenuItem
+	for _, item := range items {
+		switch item.Label {
+		case "断开":
+			toggle = item
+		case "配置":
+			profiles = item
+		}
+	}
+	if toggle == nil {
+		t.Fatalf("no 断开 toggle in %v", labels(items))
+	}
+	toggle.Click(toggle, nil)
+	if logout != 1 || login != 0 {
+		t.Fatalf("toggle did not disconnect: login=%d logout=%d", login, logout)
+	}
+
+	if profiles == nil {
+		t.Fatalf("no profile submenu in %v", labels(items))
+	}
+	if len(profiles.Submenu) != 2 {
+		t.Fatalf("profile items = %d, want 2", len(profiles.Submenu))
+	}
+	if !profiles.Submenu[0].Checked || profiles.Submenu[1].Checked {
+		t.Fatal("the active profile is not the checked one")
+	}
+	profiles.Submenu[1].Click(profiles.Submenu[1], nil)
+	if selected != "工作" {
+		t.Fatalf("profile click selected %q", selected)
+	}
+}
+
+func TestTrayMenuOffersConnectWhenIdle(t *testing.T) {
+	var login int
+	state := State{
+		Session: session.State{Phase: session.PhaseIdle},
+		Config:  config.Default(),
+	}
+	menu := TrayMenu(&state, Actions{Login: func() { login++ }})
+	var toggle *mygo.MenuItem
+	for _, item := range menu.Items() {
+		if item.Label == "连接" {
+			toggle = item
+		}
+	}
+	if toggle == nil {
+		t.Fatalf("no 连接 toggle in %v", labels(menu.Items()))
+	}
+	toggle.Click(toggle, nil)
+	if login != 1 {
+		t.Fatalf("login calls = %d", login)
+	}
+}
+
+func labels(items []*mygo.MenuItem) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		out = append(out, item.Label)
+	}
+	return out
 }

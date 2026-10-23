@@ -220,6 +220,59 @@
   - the REUSE/package commits follow in a second push after the operator's
     explicit approval
 
+### Phase 11: Config v2, profiles, settings, startup and tray
+
+- **Status:** complete
+- Decisions:
+  - config is TOML (`BurntSushi/toml`), version 2: global `app`/`proxy`/
+    `logging`, `[[profiles]]` with server/auth/keep-alive/debug. Proxy ports
+    stay global
+  - no v1 migration: v1 was never released and the only `config.json` found on
+    this machine holds defaults. The JSON file is ignored; a newer `version`
+    is refused. `.gitignore` now covers `config.toml`
+  - client data is per profile (`client_data-<slug>.json`; `默认` keeps
+    `client_data.json`), so one ticket cannot restore another account
+  - the last keep-alive result arrives by observing the upstream `KeepAlive:`
+    log lines on the shared writer; the fork hook is Phase 14's job
+- Actions taken:
+  - rewrote `config` for TOML v2, profile CRUD, `Clone`, per-profile client
+    data paths, defaults (domain `local`), validation and atomic 0600 writes
+  - added `logging`: 0600 line log under `$XDG_STATE_HOME/goTrust`, 5 MiB × 3
+    rotation, redaction of passwords/cookies/tokens/coordinates, stderr mirror,
+    `OnLine` hook, and the stdlib `log` bridge for the aTrust client
+  - `session` now snapshots the active profile per login instead of reading a
+    flat config; `Options.Auth` is gone, and client data is read/written per
+    profile. Keep-alive enablement, interval and targets come from the profile
+  - main window reduced to status, profile summary, connect, settings and quit;
+    captcha panel unchanged
+  - new settings window (`ui/settings.go`): profile picker plus create, copy,
+    rename and delete; connection, proxies, keep-alive, startup and advanced
+    groups. The draft is a clone, so closing discards edits; `Apply` validates
+    names, ports, interval and listeners but allows an incomplete account
+  - tray menu: disabled status line, connect/disconnect, profile radio
+    submenu, show window, settings, quit, tooltip with the keep-alive result
+  - startup: autostart reconciled with `SetOpenAtLogin`, `WasOpenedAtLogin`
+    hides the window, auto-connect decision with a visible reason, captcha
+    reveals the window, and a failed phase reveals it too
+  - `async` now registers its cancel, so 断开 cancels a login that is waiting
+    on the network or a captcha
+  - README rewritten for TOML, profiles, settings, logs, tray and startup
+- Verification:
+  - config/logging/session/ui/app tests; `go vet`, `gofmt`, `go test -race`
+  - headless run with temp `XDG_*`: created the 0600 log, failed with
+    `server address is empty`, exit 1
+  - real binary with a temp `XDG_CONFIG_HOME` and `autostart = true`:
+    `goTrust ready`, XDG autostart entry written, SIGTERM exit 0, no process
+    left
+  - auto-connect without a saved password: the log records the decision reason
+  - main and settings windows rendered headlessly and inspected; the settings
+    window scrolls its groups and keeps 保存/关闭 visible
+- Notes:
+  - `go mod tidy` cannot run offline here (test deps of deps are not cached);
+    the TOML requirement was moved to the direct block by hand
+  - the live gateway was not re-run: the protocol path was verified in Phase 9
+    and this phase changes wiring, not the aTrust calls
+
 ## Test Results
 
 | Test | Input | Expected | Actual | Status |
@@ -253,6 +306,33 @@
 | Package hardening | `readelf` on the extracted binary | PIE, FULL RELRO, BIND_NOW | all present | pass |
 | namcap | `namcap` PKGBUILD/package | only documented warnings | dlopen deps and unused libresolv only | pass |
 | Packaged binary | extracted `usr/bin/goTrust`, 6 s, SIGTERM | ready line, exit 0 | exit 0 | pass |
+| Config TOML round-trip | profiles, secrets, disabled listener, escaping | equal values, 0600 | equal, 0600 | pass |
+| Config defaults | partial TOML, omitted keep-alive | 443, `local`, enabled, 60 s | as expected | pass |
+| Keep-alive explicit false | `enabled = false` | stays off | stays off | pass |
+| Config newer version | `version = 99` | refused | refused | pass |
+| v1 JSON ignored | leftover `config.json` | defaults, no `config.toml` | as expected | pass |
+| Profile operations | add/copy/rename/select/delete | active follows, last protected | as expected | pass |
+| Client data per profile | `默认` and two other names | distinct files, no traversal | distinct | pass |
+| Log redaction | password/sid/cookie/coordinates | secrets absent | absent | pass |
+| Log rotation | 400-byte limit, 2 backups | bounded files, last line kept | as expected | pass |
+| Log file mode | state dir | 0600 file, 0700 dir | as expected | pass |
+| Settings apply | edits, dedup targets, disabled proxy | normalised profile | as expected | pass |
+| Settings validation | name/port/interval/listeners | rejected with status | rejected | pass |
+| Settings view | all groups, password masked, callbacks | rendered; save/new/toggles fire | as expected | pass |
+| Settings profile hint | new profile selected | switch hint shown | shown | pass |
+| Tray menu | online with two profiles | status disabled, checked profile, clicks | as expected | pass |
+| Auto-connect decision | option off, no gateway/user/secret, stored password/session | connect only with proof | as expected | pass |
+| Keep-alive parse | OK, error, DNS and ordinary lines | status line per case | as expected | pass |
+| Disk config | stored vs unstored password | only stored written | as expected | pass |
+| Headless smoke | temp XDG, no gateway | 0600 log, exit 1 with reason | as expected | pass |
+| Real UI + autostart | temp XDG, `autostart = true` | ready, entry written, exit 0 | as expected | pass |
+| Auto-connect visible failure | no saved password | reason logged and window shown | logged | pass |
+| Settings window render | 560×900 headless | groups, 保存/关闭 visible | rendered | pass |
+| Settings save pipeline | edit draft, save | TOML written, selected profile active | as expected | pass |
+| Unstored password | save with store off | disk empty, memory keeps it | as expected | pass |
+| Rejected save | port 0 | status set, file and live config untouched | as expected | pass |
+| Client data directory | nested path on first login | 0700 dir, 0600 file | as expected | pass |
+| Graceful quit after hide-on-close | SIGTERM, hidden window | exit 0, no process | as expected | pass |
 
 | Live login with captcha | real gateway, operator clicked the image | online with an IP | online, `203.0.113.4` | pass |
 | Live HTTP proxy | `curl -x 127.0.0.1:11081 http://192.0.2.10/` | 200 from the intranet | 200, 507 bytes | pass |
@@ -274,8 +354,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Roadmap updated: phases 11-16 planned, dae deferred last |
-| Where am I going? | Phase 11, settings/startup/tray |
+| Where am I? | Phase 11 complete: TOML v2, profiles, settings window, logging, tray, autostart, auto-connect |
+| Where am I going? | Phase 12, auth methods and second factors |
 | What's the goal? | a buildable, runnable goTrust skeleton |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps) |
 | What have I done? | four packages written and tested; binary built, launched and shut down cleanly |

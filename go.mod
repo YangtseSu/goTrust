@@ -3,6 +3,7 @@ module github.com/YangtseSu/goTrust
 go 1.27.1
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/egoist/mygo v0.6.3
 	github.com/mythologyli/zju-connect v1.3.1-0.20261020024545-4e07ac667f87
 	github.com/things-go/go-socks5 v0.1.1
