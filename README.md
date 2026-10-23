@@ -199,6 +199,21 @@ autostart entry is hidden as well. With 启动后自动连接, the app logs in w
 saved password exists; otherwise it shows the window with the reason instead of
 failing silently. A captcha or a missing credential always reveals the window.
 
+### Desktop integration
+
+`data/goTrust.desktop` and the two hicolor icons (`goTrust.svg`,
+`goTrust-symbolic.svg`) ship with the source tree and are installed by the
+package, so the application menu, the dock and the tray show the same mark: a
+blue tile with a white shield and a downward arrow. The tray gets a PNG embedded
+in the binary (`data/icons/tray-64.png`, 64×64 for HiDPI panels) rendered from
+the scalable SVG, so a packaged binary works without an icon directory beside
+it. After editing the SVG, regenerate the PNG and rebuild:
+
+```sh
+go generate ./...   # needs rsvg-convert
+go build -o goTrust .
+```
+
 ## Reliability
 
 With 断线后自动重连 enabled (off by default), goTrust retries a lost session with

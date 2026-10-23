@@ -341,3 +341,29 @@ dae is deferred last.
 - The snapshot is display data: `resources.json` beside `config.toml`, 0600,
   versioned, holding addresses and names but no credentials. `--print-resources`
   reads it without a login; `--no-ui` prints the snapshot it just fetched.
+
+## UI polish and desktop integration (Phase 15)
+
+- **The tray icon is a tile, not a glyph.** A 16px panel icon needs one bold
+  shape and one colour; a shield with a thick arrow survives, a keyhole reads as
+  a lock and a chevron reads as a letter. Draw at 128, rasterize 16/32 and look
+  before writing the SVG. A 64px PNG in the binary covers HiDPI panels; the
+  package needs only the scalable SVG.
+- **Panel icons move.** GNOME right-aligns the status area, so a changing
+  network-speed label shifts every appindicator by tens of pixels. A fixed crop
+  or a remembered click coordinate is wrong a second later; locate the icon in
+  the same screenshot you act on, or accept that clicks miss.
+- **ydotool absolute pointer input is unreliable on this GNOME session.** Moves
+  start from the top-left, which trips the Activities hot corner, and clicks
+  aimed at the panel landed on the window below (the power button did not open
+  the system menu). Prefer keyboard; when the pointer is unavoidable, park it on
+  a window first, press Esc afterwards, and never trust a click you did not see
+  land.
+- **A click is not the only way a menu is proven.** The tray menu's items and
+  callbacks are a pure function of state (`TrayMenu`), so a tester covers them;
+  the native popup only needs a visual check that the panel shows the icon.
+- **mygo cannot be asked for a unique tray icon name.** It writes `icon-1.png`
+  into a per-process temporary directory and sets the icon by that name; two
+  instances of an app share the name across different theme paths. Nothing broke
+  in one instance, but an extension that caches icons by name can resolve the
+  wrong path after a process exits.

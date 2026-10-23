@@ -256,7 +256,7 @@ func TestSettingsSelectAuthStoresThePair(t *testing.T) {
 		{Name: "统一认证", Type: "auth/cas", Domain: "Radius"},
 	}
 
-	state.SetMethods(methods, "vpn.example.com|443", "已获取 2 种认证方式")
+	state.SetMethods(methods, "vpn.example.com|443", "已获取 2 种认证方式", false)
 	if state.Discovering {
 		t.Fatal("the state is still marked as discovering")
 	}
@@ -295,7 +295,7 @@ func TestSettingsMethodOptionsKeepAStalePair(t *testing.T) {
 		t.Fatalf("options = %v", options)
 	}
 
-	state.SetMethods([]session.AuthMethod{{Name: "密码登录", Type: "auth/psw", Domain: "local"}}, "vpn.example.com|443", "ok")
+	state.SetMethods([]session.AuthMethod{{Name: "密码登录", Type: "auth/psw", Domain: "local"}}, "vpn.example.com|443", "ok", false)
 	state.AddProfile()
 	if state.Methods != nil {
 		t.Fatal("the method list survived a profile switch")
@@ -333,7 +333,7 @@ func TestSettingsViewShowsTheAuthPicker(t *testing.T) {
 		{Name: "密码登录", Type: "auth/psw", Domain: "local"},
 		{Name: "统一认证", Type: "auth/cas", Domain: "local"},
 	}
-	state.SetMethods(methods, "vpn.example.com|443", "已获取 2 种认证方式")
+	state.SetMethods(methods, "vpn.example.com|443", "已获取 2 种认证方式", false)
 	state.SelectAuth(2)
 
 	discovered := 0
@@ -364,7 +364,7 @@ func TestSettingsReloadKeepsMethodsForTheSameGateway(t *testing.T) {
 	cfg := config.Default()
 	cfg.Profiles[0].Server.Address = "vpn.example.com"
 	state := NewSettingsState(cfg, "/tmp/logs")
-	state.SetMethods([]session.AuthMethod{{Type: "auth/psw", Domain: "local"}}, "vpn.example.com|443", "ok")
+	state.SetMethods([]session.AuthMethod{{Type: "auth/psw", Domain: "local"}}, "vpn.example.com|443", "ok", false)
 
 	state.Reload(cfg)
 	if len(state.Methods) != 1 {

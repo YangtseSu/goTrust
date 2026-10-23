@@ -29,8 +29,10 @@ type State struct {
 	Config config.Config
 	// Addresses are the bound proxy listeners.
 	Addresses []string
-	// Status is a one-line message about the last user action.
-	Status string
+	// Status is a one-line message about the last user action. StatusError
+	// paints it as a failure instead of a note.
+	Status      string
+	StatusError bool
 	// Busy disables the controls that would race a login or a logout.
 	Busy bool
 	// Captcha is set while the gateway waits for a click captcha. It replaces
@@ -80,7 +82,7 @@ type Actions struct {
 // View renders one frame of the main window.
 func View(state *State, actions Actions) func(c *ui.Context) {
 	return func(c *ui.Context) {
-		ui.Column(c).Fill().Padding(20).Gap(14).Children(func() {
+		ui.Column(c).Fill().Padding(windowPadding).Gap(sectionGap).Children(func() {
 			header(c, state)
 			switch {
 			case state.Choice != nil:
@@ -101,12 +103,28 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 }
 
 func header(c *ui.Context, state *State) {
-	ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-		ui.Text(c, "goTrust").FontSize(20).Bold()
-		ui.Text(c, phaseLabel(state.Session)).FontSize(13)
+	ui.Column(c).Gap(6).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
+			windowHeading(c, "goTrust")
+			statusChip(c, state)
+		})
+		caption(c, profileSummary(state.Config))
+		if detail := phaseDetail(state.Session); detail != "" && detail != phaseLabel(state.Session) {
+			detailLine(c, detail, phaseTone(state.Session.Phase))
+		}
 	})
-	ui.Text(c, profileSummary(state.Config)).FontSize(12)
-	ui.Text(c, phaseDetail(state.Session)).FontSize(12)
+}
+
+// detailLine is the one-line explanation under the header: muted while
+// nothing is wrong, and in the phase's colour when the session reports a
+// warning or a failure, so the reason is not quieter than the label.
+func detailLine(c *ui.Context, text string, t tone) {
+	line := ui.Text(c, text).FontSize(c.Theme().FontSize)
+	if t == toneWarning || t == toneDanger {
+		line.TextColor(toneColor(c.Theme(), t))
+	} else {
+		line.TextColor(c.Theme().TextMuted)
+	}
 }
 
 // profileSummary names the active account and where it connects.
@@ -214,12 +232,14 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 	captcha := state.Captcha
 	width, height := captcha.DisplaySize()
 
-	ui.Column(c).Gap(10).Children(func() {
-		ui.Text(c, "点击图形验证码").FontSize(16).Bold()
-		ui.Text(c, "请按图中提示的顺序点击字符，然后提交。").FontSize(12)
+	ui.Column(c).Gap(sectionGap).Children(func() {
+		ui.Column(c).Gap(6).Children(func() {
+			panelHeading(c, "点击图形验证码")
+			caption(c, "请按图中提示的顺序点击字符，然后提交。")
+		})
 
 		if captcha.Image == nil || width <= 0 || height <= 0 {
-			ui.Text(c, "验证码图片无法显示，请取消后重试。").FontSize(12)
+			captionTone(c, "验证码图片无法显示，请取消后重试。", toneDanger)
 		} else {
 			ui.Box(c).Width(width).Height(height).Children(func() {
 				image := ui.Image(c, captcha.Image).Width(width).Height(height).Label("图形验证码图片")
@@ -237,51 +257,67 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 					left := float32(point.X)*width/float32(captcha.Width) - 9
 					top := float32(point.Y)*height/float32(captcha.Height) - 9
 					ui.Box(c).Absolute().Left(left).Top(top).Width(18).Height(18).
-						Radius(9).Background(ui.RGBA(214, 48, 49, 0.92)).Center().PassThrough().
+						Radius(9).Background(c.Theme().Danger).Center().PassThrough().
 						Children(func() {
-							ui.Text(c, strconv.Itoa(i+1)).FontSize(10).TextColor(ui.Hex("#ffffff"))
+							ui.Text(c, strconv.Itoa(i+1)).FontSize(10).TextColor(c.Theme().AccentText).Bold()
 						})
 				}
 			})
 		}
 
-		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, fmt.Sprintf("已点击 %d 个位置", len(captcha.Points))).FontSize(12)
-			if ui.Button(c, "撤销").Disabled(len(captcha.Points) == 0).Clicked() && actions.UndoCaptcha != nil {
-				actions.UndoCaptcha()
-			}
-			if ui.Button(c, "清空").Disabled(len(captcha.Points) == 0).Clicked() && actions.ClearCaptcha != nil {
-				actions.ClearCaptcha()
-			}
-			if ui.PrimaryButton(c, "提交").Disabled(len(captcha.Points) == 0).Clicked() && actions.SubmitCaptcha != nil {
-				actions.SubmitCaptcha()
-			}
-			if ui.Button(c, "取消").Clicked() && actions.CancelCaptcha != nil {
-				actions.CancelCaptcha()
-			}
+		ui.Row(c).AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
+			caption(c, fmt.Sprintf("已点击 %d 个位置", len(captcha.Points)))
+			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+				if ui.Button(c, "撤销").Disabled(len(captcha.Points) == 0).Clicked() && actions.UndoCaptcha != nil {
+					actions.UndoCaptcha()
+				}
+				if ui.Button(c, "清空").Disabled(len(captcha.Points) == 0).Clicked() && actions.ClearCaptcha != nil {
+					actions.ClearCaptcha()
+				}
+				if ui.PrimaryButton(c, "提交").Disabled(len(captcha.Points) == 0).Clicked() && actions.SubmitCaptcha != nil {
+					actions.SubmitCaptcha()
+				}
+				if ui.Button(c, "取消").Clicked() && actions.CancelCaptcha != nil {
+					actions.CancelCaptcha()
+				}
+			})
 		})
 	})
 }
 
 func controls(c *ui.Context, state *State, actions Actions) {
-	ui.Row(c).Gap(10).Children(func() {
-		switch state.Session.Phase {
-		case session.PhaseOnline, session.PhaseConnecting, session.PhaseReconnecting:
-			if ui.Button(c, "断开").Clicked() && actions.Logout != nil {
-				actions.Logout()
-			}
-		default:
-			if ui.PrimaryButton(c, "连接").Clicked() && actions.Login != nil {
+	ui.Column(c).Gap(rowGap).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			if phaseActive(state.Session.Phase) {
+				// 断开 stays available while a login runs: it is how a login
+				// waiting on the network or on a prompt is cancelled.
+				if ui.Button(c, "断开").Clicked() && actions.Logout != nil {
+					actions.Logout()
+				}
+			} else if ui.PrimaryButton(c, "连接").Disabled(state.Busy).Clicked() && actions.Login != nil {
 				actions.Login()
 			}
-		}
-		if ui.Button(c, "设置").Clicked() && actions.Settings != nil {
-			actions.Settings()
-		}
-		if ui.Button(c, "退出").Clicked() && actions.Quit != nil {
-			actions.Quit()
-		}
+			if ui.Button(c, "设置").Clicked() && actions.Settings != nil {
+				actions.Settings()
+			}
+			if ui.Button(c, "退出").Clicked() && actions.Quit != nil {
+				actions.Quit()
+			}
+			if state.Busy {
+				busyLine(c)
+			}
+		})
 	})
+}
+
+// phaseActive reports whether the phase has a session that 断开 must end.
+func phaseActive(phase session.Phase) bool {
+	switch phase {
+	case session.PhaseOnline, session.PhaseConnecting, session.PhaseReconnecting:
+		return true
+	default:
+		return false
+	}
 }
 
 // resources lists what the gateway granted this account: the portal's
@@ -290,65 +326,97 @@ func controls(c *ui.Context, state *State, actions Actions) {
 // window is tall.
 func resources(c *ui.Context, state *State, actions Actions) {
 	granted := state.Session.Resources
-	ui.Text(c, fmt.Sprintf("已获授权的资源（%d）", len(granted.Entries))).FontSize(13).Bold()
 
-	if len(granted.Entries) == 0 {
-		switch state.Session.Phase {
-		case session.PhaseOnline:
-			ui.Text(c, "网关没有为该账号授予资源").FontSize(12)
-		case session.PhaseConnecting:
-			ui.Text(c, "登录后显示网关授予的资源").FontSize(12)
-		default:
-			ui.Text(c, "连接后显示网关授予的资源").FontSize(12)
-		}
-		return
-	}
+	ui.Column(c).Grow(1).Gap(rowGap).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
+			sectionHeading(c, "已获授权的资源")
+			caption(c, fmt.Sprintf("%d 项", len(granted.Entries)))
+		})
 
-	ui.Scroll(c).Grow(1).Children(func() {
-		ui.Column(c).Gap(6).Children(func() {
-			for _, entry := range granted.Entries {
-				resourceRow(c, entry, actions)
+		if len(granted.Entries) == 0 {
+			switch state.Session.Phase {
+			case session.PhaseOnline:
+				caption(c, "网关没有为该账号授予资源")
+			case session.PhaseConnecting:
+				caption(c, "登录后显示网关授予的资源")
+			default:
+				caption(c, "连接后显示网关授予的资源")
 			}
+			return
+		}
+
+		ui.Scroll(c).Grow(1).Children(func() {
+			ui.Column(c).Gap(2).Children(func() {
+				for index, entry := range granted.Entries {
+					if index > 0 {
+						ui.Divider(c)
+					}
+					resourceRow(c, entry, actions)
+				}
+			})
 		})
 	})
 }
 
 func resourceRow(c *ui.Context, entry session.ResourceEntry, actions Actions) {
-	ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+	ui.Row(c).AlignItems(ui.Center).Gap(rowGap).PaddingY(6).Children(func() {
 		ui.Column(c).Grow(1).Gap(2).Children(func() {
-			ui.Text(c, entry.Title).FontSize(13)
+			ui.Text(c, entry.Title).FontSize(c.Theme().FontSize)
 			if entry.Detail != "" {
-				ui.Text(c, entry.Detail).FontSize(11)
+				caption(c, entry.Detail)
 			}
 		})
 		if entry.URL != "" {
 			url := entry.URL
-			if ui.Button(c, "打开").Clicked() && actions.OpenResource != nil {
+			if ui.Button(c, "打开").Description("打开 "+entry.Title).Clicked() && actions.OpenResource != nil {
 				actions.OpenResource(url)
 			}
 		}
 		value := entry.Copy
-		if ui.Button(c, "复制").Clicked() && actions.CopyResource != nil {
+		if ui.Button(c, "复制").Description("复制 "+entry.Title).Clicked() && actions.CopyResource != nil {
 			actions.CopyResource(value)
 		}
 	})
 }
 
+// keepAliveTone colours the last probe: a real HTTP answer is success, a
+// failure is danger, and the DNS fallback is a warning because it does not
+// hold the session open.
+func keepAliveTone(keepAlive session.KeepAliveState) tone {
+	switch {
+	case keepAlive.At.IsZero():
+		return toneNeutral
+	case keepAlive.OK && keepAlive.Fallback:
+		return toneWarning
+	case keepAlive.OK:
+		return toneSuccess
+	default:
+		return toneDanger
+	}
+}
+
 func footer(c *ui.Context, state *State) {
 	ui.Divider(c)
-	if len(state.Addresses) == 0 {
-		ui.Text(c, "代理端口尚未开启").FontSize(12)
-	} else {
-		for _, address := range state.Addresses {
-			ui.Text(c, "代理监听 "+address).FontSize(12)
+	ui.Column(c).Gap(4).Children(func() {
+		if len(state.Addresses) == 0 {
+			caption(c, "代理端口尚未开启")
+		} else {
+			for _, address := range state.Addresses {
+				caption(c, "代理监听 "+address)
+			}
 		}
-	}
-	if summary := KeepAliveSummary(state.Session.KeepAlive); summary != "" {
-		ui.Text(c, "保活 "+summary).FontSize(12)
-	}
-	if state.Status != "" {
-		ui.Text(c, state.Status).FontSize(12)
-	}
+		if summary := KeepAliveSummary(state.Session.KeepAlive); summary != "" {
+			captionTone(c, "保活 "+summary, keepAliveTone(state.Session.KeepAlive))
+		}
+		if state.Status != "" {
+			line := ui.Text(c, state.Status).FontSize(c.Theme().FontSize)
+			if state.StatusError {
+				line.TextColor(c.Theme().Danger)
+			} else {
+				line.TextColor(c.Theme().TextMuted)
+			}
+		}
+	})
 }
 
 // TrayStatus is the disabled first line of the tray menu: the phase and, when
@@ -396,9 +464,7 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 	}
 
 	toggle := &mygo.MenuItem{ID: "toggle", Label: "连接"}
-	if state.Session.Phase == session.PhaseOnline ||
-		state.Session.Phase == session.PhaseConnecting ||
-		state.Session.Phase == session.PhaseReconnecting {
+	if phaseActive(state.Session.Phase) {
 		toggle.Label = "断开"
 		toggle.Click = func(*mygo.MenuItem, *mygo.Window) {
 			if actions.Logout != nil {
@@ -406,6 +472,9 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 			}
 		}
 	} else {
+		// A login started while another action is still finishing would race
+		// it; the window disables the same button.
+		toggle.Disabled = state.Busy
 		toggle.Click = func(*mygo.MenuItem, *mygo.Window) {
 			if actions.Login != nil {
 				actions.Login()

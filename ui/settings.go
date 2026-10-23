@@ -32,8 +32,10 @@ type SettingsState struct {
 	Ports      []string
 	Targets    []string
 	Status     string
-	LogDir     string
-	Busy       bool
+	// StatusError paints the status as a failure instead of a confirmation.
+	StatusError bool
+	LogDir      string
+	Busy        bool
 	// Methods are the gateway's offered authentication methods, filled by 获取
 	// 认证方式. MethodsFrom is the gateway they belong to, so a reload or a
 	// profile switch only drops them when the target really changed.
@@ -136,13 +138,14 @@ func (s *SettingsState) Select(index int) bool {
 }
 
 // SetMethods stores the result of a discovery. target is the gateway the list
-// was read from; the caller fills Status with the outcome, so a failed
-// discovery can clear the list and say why.
-func (s *SettingsState) SetMethods(methods []session.AuthMethod, target, status string) {
+// was read from; the caller fills Status with the outcome, and failed marks a
+// discovery that did not produce a list so the window paints it as an error.
+func (s *SettingsState) SetMethods(methods []session.AuthMethod, target, status string, failed bool) {
 	s.Methods = methods
 	s.MethodsFrom = target
 	s.Discovering = false
 	s.Status = status
+	s.StatusError = failed
 }
 
 // dropStaleMethods forgets a list that belongs to another gateway.
@@ -183,6 +186,7 @@ func (s *SettingsState) SelectAuth(index int) {
 	if index == 0 {
 		profile.Auth.AuthType = ""
 		s.Status = "认证方式：自动"
+		s.StatusError = false
 		return
 	}
 	if index-1 >= len(s.Methods) || index < 0 {
@@ -192,6 +196,7 @@ func (s *SettingsState) SelectAuth(index int) {
 	profile.Auth.AuthType = method.Type
 	profile.Auth.Domain = method.Domain
 	s.Status = "认证方式：" + MethodLabel(method)
+	s.StatusError = false
 }
 
 // Target is the gateway the editor points at, with the port from its text
@@ -220,11 +225,13 @@ func (s *SettingsState) AddProfile() {
 	}
 	if _, err := s.Draft.AddProfile(name); err != nil {
 		s.Status = err.Error()
+		s.StatusError = true
 		return
 	}
 	s.refresh()
 	s.Select(s.Draft.ProfileIndex(name))
 	s.Status = "已新建配置 " + name + "；保存后生效"
+	s.StatusError = false
 }
 
 // DuplicateProfile copies the selected profile.
@@ -237,11 +244,13 @@ func (s *SettingsState) DuplicateProfile() {
 	}
 	if _, err := s.Draft.DuplicateProfile(s.Selected, name); err != nil {
 		s.Status = err.Error()
+		s.StatusError = true
 		return
 	}
 	s.refresh()
 	s.Select(s.Draft.ProfileIndex(name))
 	s.Status = "已复制为 " + name + "；保存后生效"
+	s.StatusError = false
 }
 
 // DeleteProfile removes the selected profile, unless it is the last one.
@@ -249,6 +258,7 @@ func (s *SettingsState) DeleteProfile() {
 	s.refresh()
 	if err := s.Draft.DeleteProfile(s.Selected); err != nil {
 		s.Status = err.Error()
+		s.StatusError = true
 		return
 	}
 	s.refresh()
@@ -258,6 +268,7 @@ func (s *SettingsState) DeleteProfile() {
 	}
 	s.Select(active)
 	s.Status = "已删除配置；保存后生效"
+	s.StatusError = false
 }
 
 // Apply folds the buffers into a configuration ready to validate and save. It
@@ -346,15 +357,17 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 		active := state.ActiveAtOpen
 		enabled := profile.Keep.IsEnabled()
 
-		ui.Column(c).Fill().Padding(20).Gap(12).Children(func() {
-			ui.Text(c, "设置").FontSize(20).Bold()
-			ui.Text(c, "保存后：连接信息在下次登录生效，代理端口与保活在下次连接生效。").FontSize(12)
-			if active != "" && active != profile.Name {
-				ui.Text(c, "保存后将切换到配置 "+profile.Name).FontSize(12)
-			}
+		ui.Column(c).Fill().Padding(windowPadding).Gap(sectionGap).Children(func() {
+			ui.Column(c).Gap(6).Children(func() {
+				windowHeading(c, "设置")
+				caption(c, "保存后：连接信息在下次登录生效，代理端口与保活在下次连接生效。")
+				if active != "" && active != profile.Name {
+					captionTone(c, "保存后将切换到配置 "+profile.Name, toneWarning)
+				}
+			})
 
 			ui.Scroll(c).Grow(1).Children(func() {
-				ui.Column(c).Gap(16).Children(func() {
+				ui.Column(c).Gap(sectionGap).Children(func() {
 					ui.Form(c, func() {
 						profileSection(c, state, actions, names)
 						connectionSection(c, state, actions, profile, index)
@@ -366,15 +379,24 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 				})
 			})
 
-			ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
+			ui.Divider(c)
+			if state.Status != "" {
+				line := ui.Text(c, state.Status).FontSize(c.Theme().FontSize)
+				if state.StatusError {
+					line.TextColor(c.Theme().Danger)
+				} else {
+					line.TextColor(c.Theme().TextMuted)
+				}
+			}
+			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 				if ui.PrimaryButton(c, "保存").Clicked() && actions.Save != nil {
 					actions.Save()
 				}
 				if ui.Button(c, "关闭").Clicked() && actions.Close != nil {
 					actions.Close()
 				}
-				if state.Status != "" {
-					ui.Text(c, state.Status).FontSize(12)
+				if state.Busy {
+					busyLine(c)
 				}
 			})
 		})
@@ -431,7 +453,7 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 					actions.DiscoverAuth()
 				}
 			})
-			ui.Text(c, authMethodHint(state)).FontSize(11)
+			caption(c, authMethodHint(state))
 		})
 		ui.Field(c, "登录域", func() {
 			ui.TextInput(c, &profile.Auth.Domain).Placeholder("local")
@@ -439,7 +461,9 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 		ui.Field(c, "密码", func() {
 			ui.TextInput(c, &profile.Auth.Password).Password()
 		})
-		ui.Checkbox(c, &profile.Auth.StorePass, "保存密码（文件权限 0600）")
+		ui.Field(c, "", func() {
+			ui.Checkbox(c, &profile.Auth.StorePass, "保存密码（文件权限 0600）")
+		})
 	})
 }
 
@@ -451,45 +475,57 @@ func proxySection(c *ui.Context, state *SettingsState) {
 		ui.Field(c, "HTTP 监听", func() {
 			ui.TextInput(c, &state.Draft.Proxy.HTTPBind).Placeholder("127.0.0.1:1081")
 		})
-		ui.Text(c, "留空即关闭该监听；两者不能同时留空。").FontSize(12)
+		caption(c, "留空即关闭该监听；两者不能同时留空。")
 	})
 }
 
 func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profile, enabled *bool, index int) {
 	ui.Fieldset(c, "保活", func() {
-		if ui.Checkbox(c, enabled, "启用保活").Changed() {
-			profile.Keep.SetEnabled(*enabled)
-		}
+		ui.Field(c, "", func() {
+			if ui.Checkbox(c, enabled, "启用保活").Changed() {
+				profile.Keep.SetEnabled(*enabled)
+			}
+		})
 		ui.Field(c, "间隔", func() {
 			ui.TextInput(c, &profile.Keep.Interval).Placeholder("90s")
 		})
 		ui.Field(c, "手动目标", func() {
 			ui.TextArea(c, &state.Targets[index]).Placeholder("http://192.0.2.10/，每行一个")
-			ui.Text(c, "只探测 http:// 目标：https 经 CONNECT 隧道，不算应用流量，不续期会话。").FontSize(11)
+			caption(c, "只探测 http:// 目标：https 经 CONNECT 隧道，不算应用流量，不续期会话。")
 		})
 	})
 }
 
 func startupSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
 	ui.Fieldset(c, "启动", func() {
-		if ui.Checkbox(c, &state.Draft.App.Autostart, "登录系统时启动").Changed() && actions.SetAutostart != nil {
-			actions.SetAutostart(state.Draft.App.Autostart)
-		}
-		ui.Checkbox(c, &state.Draft.App.AutoConnect, "启动后自动连接")
-		ui.Checkbox(c, &state.Draft.App.StartHidden, "启动时隐藏窗口")
-		ui.Checkbox(c, &state.Draft.App.AutoReconnect, "断线后自动重连（最多 5 次）")
+		ui.Field(c, "", func() {
+			if ui.Checkbox(c, &state.Draft.App.Autostart, "登录系统时启动").Changed() && actions.SetAutostart != nil {
+				actions.SetAutostart(state.Draft.App.Autostart)
+			}
+		})
+		ui.Field(c, "", func() {
+			ui.Checkbox(c, &state.Draft.App.AutoConnect, "启动后自动连接")
+		})
+		ui.Field(c, "", func() {
+			ui.Checkbox(c, &state.Draft.App.StartHidden, "启动时隐藏窗口")
+		})
+		ui.Field(c, "", func() {
+			ui.Checkbox(c, &state.Draft.App.AutoReconnect, "断线后自动重连（最多 5 次）")
+		})
 	})
 }
 
 func advancedSection(c *ui.Context, state *SettingsState, profile *config.Profile, actions SettingsActions) {
 	ui.Fieldset(c, "高级", func() {
-		if ui.Checkbox(c, &state.Draft.Logging.Verbose, "详细日志").Changed() && actions.SetVerbose != nil {
-			actions.SetVerbose(state.Draft.Logging.Verbose)
-		}
+		ui.Field(c, "", func() {
+			if ui.Checkbox(c, &state.Draft.Logging.Verbose, "详细日志").Changed() && actions.SetVerbose != nil {
+				actions.SetVerbose(state.Draft.Logging.Verbose)
+			}
+		})
 		ui.Field(c, "日志目录", func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-				ui.Text(c, state.LogDir).FontSize(12)
-				if ui.Button(c, "打开").Clicked() && actions.OpenLogs != nil {
+				ui.Text(c, state.LogDir).FontSize(c.Theme().FontSize)
+				if ui.Button(c, "打开").Description("打开日志目录").Clicked() && actions.OpenLogs != nil {
 					actions.OpenLogs()
 				}
 			})

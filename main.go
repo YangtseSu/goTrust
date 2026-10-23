@@ -253,10 +253,12 @@ func (a *app) openWindow(hidden bool) {
 		return
 	}
 	window := mygo.NewWindow(mygo.WindowOptions{
-		Title:  "goTrust",
-		Width:  520,
-		Height: 560,
-		Hidden: hidden,
+		Title:     "goTrust",
+		Width:     540,
+		Height:    640,
+		MinWidth:  440,
+		MinHeight: 400,
+		Hidden:    hidden,
 		Content: ui.View(func(c *ui.Context) {
 			a.mu.RLock()
 			state := a.view
@@ -308,9 +310,11 @@ func (a *app) openSettings() {
 	a.resetSettingsDraft()
 
 	window := mygo.NewWindow(mygo.WindowOptions{
-		Title:  "goTrust 设置",
-		Width:  560,
-		Height: 720,
+		Title:     "goTrust 设置",
+		Width:     600,
+		Height:    760,
+		MinWidth:  560,
+		MinHeight: 440,
 		Content: ui.View(func(c *ui.Context) {
 			a.mu.RLock()
 			state := a.settings
@@ -403,7 +407,7 @@ func (a *app) actions() gotrustui.Actions {
 // failure is reported in the window; the URL is still visible there.
 func (a *app) openResource(url string) {
 	if err := a.openBrowser(url); err != nil {
-		a.setStatus("打开失败: "+err.Error(), false)
+		a.setStatusError("打开失败: " + err.Error())
 		a.logf("open resource %s: %v", url, err)
 	}
 }
@@ -412,7 +416,7 @@ func (a *app) openResource(url string) {
 // status line.
 func (a *app) copyResource(value string) {
 	if err := mygo.Clipboard.Write(transfer.TextData(value)); err != nil {
-		a.setStatus("复制失败: "+err.Error(), false)
+		a.setStatusError("复制失败: " + err.Error())
 		a.logf("copy resource: %v", err)
 		return
 	}
@@ -511,14 +515,14 @@ func (a *app) async(fn func(context.Context) error) {
 			a.mu.Unlock()
 		}()
 
-		a.setStatus("…", true)
+		a.setStatus("", true)
 		err := fn(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				a.setStatus("已取消", false)
 				return
 			}
-			a.setStatus(err.Error(), false)
+			a.setStatusError(err.Error())
 			return
 		}
 		a.setStatus("", false)
@@ -659,11 +663,13 @@ func (a *app) saveSettings() {
 	cfg, err := state.Apply()
 	if err != nil {
 		state.Status = err.Error()
+		state.StatusError = true
 		a.invalidateSettings()
 		return
 	}
 	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
 		state.Status = "保存失败: " + err.Error()
+		state.StatusError = true
 		a.invalidateSettings()
 		a.logf("save settings: %v", err)
 		return
@@ -679,6 +685,7 @@ func (a *app) saveSettings() {
 	if settings != nil {
 		settings.Reload(cfg)
 		settings.Status = "设置已保存"
+		settings.StatusError = false
 	}
 
 	a.reconcileProfileSwitch(previous, cfg)
@@ -693,7 +700,7 @@ func (a *app) selectProfile(name string) {
 		return
 	}
 	if cfg.ProfileIndex(name) < 0 {
-		a.setStatus(fmt.Sprintf("配置 %q 不存在", name), false)
+		a.setStatusError(fmt.Sprintf("配置 %q 不存在", name))
 		return
 	}
 
@@ -703,7 +710,7 @@ func (a *app) selectProfile(name string) {
 
 	cfg.ActiveProfile = name
 	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
-		a.setStatus("切换配置失败: "+err.Error(), false)
+		a.setStatusError("切换配置失败: " + err.Error())
 		a.logf("switch profile: %v", err)
 		return
 	}
@@ -753,6 +760,7 @@ func (a *app) setAutostart(on bool) {
 	if err := mygo.App.SetOpenAtLogin(on); err != nil {
 		if state != nil {
 			state.Status = "开机自启设置失败: " + err.Error()
+			state.StatusError = true
 			a.invalidateSettings()
 		}
 		a.logf("autostart: %v", err)
@@ -761,6 +769,7 @@ func (a *app) setAutostart(on bool) {
 	a.persistFlag(func(cfg *config.Config) { cfg.App.Autostart = on })
 	if state != nil {
 		state.Status = "开机自启已" + map[bool]string{true: "开启", false: "关闭"}[on]
+		state.StatusError = false
 		a.invalidateSettings()
 	}
 }
@@ -782,7 +791,7 @@ func (a *app) persistFlag(mutate func(*config.Config)) {
 	cfg := a.currentConfig()
 	mutate(&cfg)
 	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
-		a.setStatus("保存设置失败: "+err.Error(), false)
+		a.setStatusError("保存设置失败: " + err.Error())
 		a.logf("save settings: %v", err)
 		return
 	}
@@ -796,6 +805,7 @@ func (a *app) openLogs() {
 	if a.logDir == "" {
 		if state != nil {
 			state.Status = "日志目录不可用"
+			state.StatusError = true
 			a.invalidateSettings()
 		}
 		return
@@ -803,6 +813,7 @@ func (a *app) openLogs() {
 	if err := mygo.Shell.OpenPath(a.logDir); err != nil {
 		if state != nil {
 			state.Status = "打开日志目录失败: " + err.Error()
+			state.StatusError = true
 			a.invalidateSettings()
 		}
 		a.logf("open logs: %v", err)
@@ -823,6 +834,7 @@ func (a *app) discoverAuth() {
 	target, err := state.Target()
 	if err != nil {
 		state.Status = err.Error()
+		state.StatusError = true
 		a.invalidateSettings()
 		return
 	}
@@ -850,12 +862,12 @@ func (a *app) discoverAuth() {
 			}
 			switch {
 			case discoverErr != nil:
-				state.SetMethods(nil, key, "获取认证方式失败: "+discoverErr.Error())
+				state.SetMethods(nil, key, "获取认证方式失败: "+discoverErr.Error(), true)
 				a.logf("discover auth methods: %v", discoverErr)
 			case len(methods) == 0:
-				state.SetMethods(nil, key, "网关没有提供认证方式（可能已经登录）")
+				state.SetMethods(nil, key, "网关没有提供认证方式（可能已经登录）", false)
 			default:
-				state.SetMethods(methods, key, fmt.Sprintf("已获取 %d 种认证方式", len(methods)))
+				state.SetMethods(methods, key, fmt.Sprintf("已获取 %d 种认证方式", len(methods)), false)
 				a.logf("gateway offers %d authentication method(s)", len(methods))
 			}
 			a.invalidateSettings()
@@ -939,10 +951,26 @@ func decideAutoConnect(cfg config.Config) autoConnectDecision {
 func (a *app) setStatus(message string, busy bool) {
 	a.mu.Lock()
 	a.view.Status = message
+	a.view.StatusError = false
 	a.view.Busy = busy
 	a.mu.Unlock()
 
 	a.invalidate()
+	// The tray disables 连接 while an idle-phase action is still running.
+	a.refreshTray()
+}
+
+// setStatusError reports a failed action in the window: red, and never with
+// the busy indicator, which would suggest the work is still going on.
+func (a *app) setStatusError(message string) {
+	a.mu.Lock()
+	a.view.Status = message
+	a.view.StatusError = true
+	a.view.Busy = false
+	a.mu.Unlock()
+
+	a.invalidate()
+	a.refreshTray()
 }
 
 func (a *app) invalidate() {

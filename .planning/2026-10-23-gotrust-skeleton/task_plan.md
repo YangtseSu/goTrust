@@ -12,13 +12,12 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 15: UI polish. Layout and typography over every window, state colours and
-busy states, scrolling and sizing, a render pass over every state, then the
-real Wayland smoke including CJK and the tray menu.
+Phase 16: install `gotrust-git` with `pacman -U` once the operator supplies the
+sudo password. Phase 8 (dae export) stays deferred until then.
 
 ## Current Phase
 
-Phase 15
+Phase 16 (the package is built; the install step needs sudo)
 
 ## Phases
 
@@ -273,17 +272,37 @@ discipline; not a new user-facing feature list, but the session must not lie.
 
 Requirement 10, after the functional windows exist.
 
-- [ ] Layout and typography pass over main, settings, captcha, code and SSO
-      views; consistent spacing, section headings and button hierarchy
-- [ ] Status colours and detail lines for idle/connecting/online/failed/
-      reconnecting; a visible busy state and disabled controls while work runs
-- [ ] Window sizing and scrolling: main window with the resource list; a
-      settings window sized for its groups, scrollable when the screen is
-      short
-- [ ] Render every state with `ui.NewTester` and inspect the images; launch the
-      real window on Wayland for a final smoke, including CJK and the tray menu
-- [ ] Accessibility labels and a sane tab order for every input and button
-- **Status:** pending
+- [x] One design system for every window: a four-step type scale derived from
+      the theme's font size, a 24/16/8 spacing grid, and phase colours taken
+      from the theme's semantic tokens instead of hard-coded hex values
+- [x] Layout and typography pass over main, settings, captcha, code, SSO and
+      chooser views; section headings, captions and a primary/secondary button
+      hierarchy
+- [x] Status chip and detail lines per phase; success, warning and failure
+      colours, a spinner and disabled 连接 while work runs, 断开 kept usable as
+      the cancel, and the tray toggle disabled only when it would start a race
+- [x] Window sizing and scrolling: the main window shows the resource list
+      with a pinned footer (`540×640`, minimum `440×400`); the settings window
+      scrolls its groups and pins 保存/关闭 (`600×760`, minimum `560×440`) with
+      a divider and the status line above the actions
+- [x] Render every state (idle, connecting, online, reconnecting, failed, all
+      four prompts, settings, light and dark, both minimum sizes) through
+      `ui.NewTester` and inspect the images, then launch the real window on
+      Wayland: CJK, the settings window opened by keyboard, the new tray icon
+- [x] Accessibility: headings carry `RoleHeading`/`Level`, the phase chip is a
+      named status, repeated resource buttons have descriptions naming their
+      row, every field is wrapped in `Field` (label association) and Tab reaches
+      every action in reading order (tested)
+- [x] New icon: a scalable shield-and-arrow mark drawn at 16/32/128 and
+      inspected, a symbolic variant, a 64×64 tray PNG embedded in the binary,
+      and the desktop entry and icons shipped from `data/` instead of the
+      package's `$srcdir`
+- **Status:** complete
+- **Note:** the native tray menu was not captured on the desktop: ydotool's
+  absolute pointer could not reliably hit panel icons here, and blind clicks on
+  the operator's screen were stopped. The menu's items, toggles and status
+  lines are covered by `TestTrayMenu*`; the icon itself was seen and stayed in
+  the panel.
 
 ### Phase 16: REUSE compliance and Arch package `gotrust-git`
 

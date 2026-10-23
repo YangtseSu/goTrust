@@ -90,27 +90,38 @@ func MethodLabel(method session.AuthMethod) string {
 func codePanel(c *ui.Context, state *State, actions Actions) {
 	prompt := state.Code
 
-	ui.Column(c).Gap(10).Children(func() {
-		ui.Text(c, CodeTitle(prompt.Kind)).FontSize(16).Bold()
-		if prompt.Message != "" {
-			ui.Text(c, prompt.Message).FontSize(12)
-		}
-		ui.Field(c, "验证码", func() {
-			ui.TextInput(c, &prompt.Code).Placeholder("输入收到的验证码")
-		})
-		if prompt.CanSkip {
-			ui.Checkbox(c, &prompt.Skip, "跳过以后的二次认证")
-		}
-		if prompt.AllowTOTPSecret {
-			ui.Checkbox(c, &prompt.StoreSecret, "保存 TOTP 密钥，以后由 goTrust 自动生成验证码")
-			if prompt.StoreSecret {
-				ui.Field(c, "TOTP 密钥", func() {
-					ui.TextInput(c, &prompt.TOTPSecret).Placeholder("Base32 密钥，例如 JBSWY3DPEHPK3PXP")
-				})
-				ui.Text(c, "密钥保存在配置文件中（0600），只在你勾选后写入。").FontSize(11)
+	ui.Column(c).Gap(sectionGap).Children(func() {
+		ui.Column(c).Gap(6).Children(func() {
+			panelHeading(c, CodeTitle(prompt.Kind))
+			if prompt.Message != "" {
+				caption(c, prompt.Message)
 			}
-		}
-		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+		})
+
+		ui.Column(c).Gap(rowGap).Children(func() {
+			ui.Field(c, "验证码", func() {
+				ui.TextInput(c, &prompt.Code).Placeholder("输入收到的验证码").
+					OnSubmit(func() {
+						if prompt.CanSubmit() && actions.SubmitCode != nil {
+							actions.SubmitCode()
+						}
+					})
+			})
+			if prompt.CanSkip {
+				ui.Checkbox(c, &prompt.Skip, "跳过以后的二次认证")
+			}
+			if prompt.AllowTOTPSecret {
+				ui.Checkbox(c, &prompt.StoreSecret, "保存 TOTP 密钥，以后由 goTrust 自动生成验证码")
+				if prompt.StoreSecret {
+					ui.Field(c, "TOTP 密钥", func() {
+						ui.TextInput(c, &prompt.TOTPSecret).Placeholder("Base32 密钥，例如 JBSWY3DPEHPK3PXP")
+					})
+					caption(c, "密钥保存在配置文件中（0600），只在你勾选后写入。")
+				}
+			}
+		})
+
+		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
 			if ui.PrimaryButton(c, "提交").Disabled(!prompt.CanSubmit()).Clicked() && actions.SubmitCode != nil {
 				actions.SubmitCode()
 			}
@@ -125,22 +136,35 @@ func codePanel(c *ui.Context, state *State, actions Actions) {
 func externalPanel(c *ui.Context, state *State, actions Actions) {
 	prompt := state.External
 
-	ui.Column(c).Gap(10).Children(func() {
-		ui.Text(c, ExternalTitle(prompt.Kind)).FontSize(16).Bold()
-		if prompt.Message != "" {
-			ui.Text(c, prompt.Message).FontSize(12)
-		}
-		ui.Text(c, "在浏览器中完成登录后，把地址栏里的完整回调地址粘贴到下面。").FontSize(12)
-		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, prompt.LoginURL).FontSize(11)
-			if ui.Button(c, "在浏览器中打开").Clicked() && actions.OpenExternal != nil {
+	ui.Column(c).Gap(sectionGap).Children(func() {
+		ui.Column(c).Gap(6).Children(func() {
+			panelHeading(c, ExternalTitle(prompt.Kind))
+			if prompt.Message != "" {
+				caption(c, prompt.Message)
+			}
+			caption(c, "在浏览器中完成登录后，把地址栏里的完整回调地址粘贴到下面。")
+		})
+
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			ui.Text(c, prompt.LoginURL).FontSize(textSize(c, captionScale)).
+				TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).MaxLines(2).
+				Ellipsis("…").Label("登录地址：" + prompt.LoginURL)
+			if ui.Button(c, "在浏览器中打开").Shrink(0).Description("在浏览器中打开登录地址").
+				Clicked() && actions.OpenExternal != nil {
 				actions.OpenExternal()
 			}
 		})
+
 		ui.Field(c, "回调地址", func() {
-			ui.TextInput(c, &prompt.Callback).Placeholder("https://…/passport/v1/auth/…?…")
+			ui.TextInput(c, &prompt.Callback).Placeholder("https://…/passport/v1/auth/…?…").
+				OnSubmit(func() {
+					if strings.TrimSpace(prompt.Callback) != "" && actions.SubmitExternal != nil {
+						actions.SubmitExternal()
+					}
+				})
 		})
-		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+
+		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
 			if ui.PrimaryButton(c, "提交").Disabled(strings.TrimSpace(prompt.Callback) == "").Clicked() &&
 				actions.SubmitExternal != nil {
 				actions.SubmitExternal()
@@ -156,17 +180,23 @@ func externalPanel(c *ui.Context, state *State, actions Actions) {
 func choicePanel(c *ui.Context, state *State, actions Actions) {
 	choice := state.Choice
 
-	ui.Column(c).Gap(10).Children(func() {
-		ui.Text(c, "选择认证方式").FontSize(16).Bold()
-		ui.Text(c, fmt.Sprintf("网关提供 %d 种认证方式，请选择一种登录。", len(choice.Methods))).FontSize(12)
-		for index, method := range choice.Methods {
-			label := MethodLabel(method)
-			if ui.Button(c, label).Clicked() && actions.ChooseAuth != nil {
-				actions.ChooseAuth(index)
+	ui.Column(c).Gap(sectionGap).Children(func() {
+		ui.Column(c).Gap(6).Children(func() {
+			panelHeading(c, "选择认证方式")
+			caption(c, fmt.Sprintf("网关提供 %d 种认证方式，请选择一种登录。", len(choice.Methods)))
+		})
+		ui.Column(c).Gap(rowGap).Children(func() {
+			for index, method := range choice.Methods {
+				label := MethodLabel(method)
+				if ui.Button(c, label).Clicked() && actions.ChooseAuth != nil {
+					actions.ChooseAuth(index)
+				}
 			}
-		}
-		if ui.Button(c, "取消").Clicked() && actions.CancelChoice != nil {
-			actions.CancelChoice()
-		}
+		})
+		ui.Row(c).Justify(ui.End).Children(func() {
+			if ui.Button(c, "取消").Clicked() && actions.CancelChoice != nil {
+				actions.CancelChoice()
+			}
+		})
 	})
 }

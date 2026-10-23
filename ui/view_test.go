@@ -189,7 +189,7 @@ func TestResourceListRendersAndActs(t *testing.T) {
 
 	rendered := ui.NewTester(View(&state, Actions{}), 520, 560)
 	rendered.Frame()
-	for _, want := range []string{"已获授权的资源（2）", "Wiki", "Portal · web", "192.0.2.10", "tcp 443"} {
+	for _, want := range []string{"已获授权的资源", "2 项", "Wiki", "Portal · web", "192.0.2.10", "tcp 443"} {
 		if !rendered.HasText(want) {
 			t.Fatalf("%q is missing from the resource list; texts: %v", want, rendered.Texts())
 		}
@@ -218,7 +218,7 @@ func TestResourceListExplainsAnEmptyGrant(t *testing.T) {
 	online := State{Session: session.State{Phase: session.PhaseOnline, Detail: "vpn.example.com:443"}, Config: config.Default()}
 	rendered := ui.NewTester(View(&online, Actions{}), 520, 560)
 	rendered.Frame()
-	if !rendered.HasText("已获授权的资源（0）") || !rendered.HasText("网关没有为该账号授予资源") {
+	if !rendered.HasText("0 项") || !rendered.HasText("网关没有为该账号授予资源") {
 		t.Fatalf("empty grant is not explained; texts: %v", rendered.Texts())
 	}
 

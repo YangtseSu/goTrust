@@ -87,7 +87,7 @@ func (p *uiPrompter) HandleExternalLogin(challenge authchallenge.ExternalLoginCh
 	if challenge.LoginURL != "" {
 		if err := p.app.openBrowser(challenge.LoginURL); err != nil {
 			p.app.logf("open the login URL: %v", err)
-			p.app.setStatus("无法自动打开浏览器，请手动复制链接: "+err.Error(), false)
+			p.app.setStatusError("无法自动打开浏览器，请手动复制链接: " + err.Error())
 		}
 	}
 
@@ -275,7 +275,7 @@ func (a *app) submitCode() {
 	if storeSecret {
 		generated, err := session.GenerateTOTPCode(secret, time.Now())
 		if err != nil {
-			a.setStatus(err.Error(), false)
+			a.setStatusError(err.Error())
 			return
 		}
 		if code == "" {
@@ -324,7 +324,7 @@ func (a *app) storeTOTPSecret(secret string) {
 	cfg.Profiles[index].Auth.TOTPSecret = strings.TrimSpace(secret)
 	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
 		a.logf("save the TOTP secret: %v", err)
-		a.setStatus("保存 TOTP 密钥失败: "+err.Error(), false)
+		a.setStatusError("保存 TOTP 密钥失败: " + err.Error())
 		return
 	}
 	a.applyConfig(cfg)
@@ -364,7 +364,7 @@ func (a *app) openExternal() {
 		return
 	}
 	if err := a.openBrowser(prompt.LoginURL); err != nil {
-		a.setStatus("打开浏览器失败: "+err.Error(), false)
+		a.setStatusError("打开浏览器失败: " + err.Error())
 		a.logf("open the login URL: %v", err)
 	}
 }
@@ -382,7 +382,7 @@ func (a *app) submitExternal() {
 	a.mu.Unlock()
 
 	if err := session.ValidateCallbackURL(kind, callback); err != nil {
-		a.setStatus(err.Error(), false)
+		a.setStatusError(err.Error())
 		return
 	}
 

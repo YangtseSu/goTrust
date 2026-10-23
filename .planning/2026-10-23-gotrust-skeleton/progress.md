@@ -467,6 +467,83 @@
     ladder. That is deliberate (a retry is a full login), but a future phase
     could offer probe-based recovery
 
+### Phase 15: UI polish
+
+- **Status:** complete (all states rendered and inspected; the native tray menu
+  was not captured, see Notes)
+- Decisions:
+  - one design system in `ui/theme.go`: a four-step type scale derived from the
+    theme's `FontSize` (title 1.5x, panel 1.15x, body 1x, caption 0.85x), a
+    24/16/8 spacing grid, and phase colours from the theme's semantic tokens.
+    No hard-coded hex values in the views; light and dark both follow the
+    desktop
+  - the phase is a coloured chip (dot + tinted pill) next to the title; the
+    detail line is muted for idle/connecting/online and takes the warning or
+    danger colour only when the session is reconnecting or has failed
+  - busy is a spinner plus 处理中… and a disabled 连接; 断开 stays enabled
+    because it is the only cancel, and the tray toggle is disabled only when it
+    would start a second action (idle phase)
+  - the settings window pins its actions above a divider with the status line
+    above them, so a long form never hides why a save failed
+  - the mark is a blue tile with a white shield and a downward arrow: drawn at
+    128, rasterized to 16/32 and inspected before choosing it; a symbolic
+    variant is a filled shield with the arrow cut out, which stays legible at
+    16px
+- Actions taken:
+  - `ui/theme.go`: type scale, spacing constants, `tone` (neutral/accent/
+    success/warning/danger), `phaseTone`, `toneColor`, `windowHeading`,
+    `panelHeading`, `sectionHeading`, `caption`, `captionTone`, `statusChip`,
+    `busyLine`
+  - `ui/view.go`: header with the status chip and a non-duplicated detail line;
+    captcha panel with the theme's danger colour for markers; controls with the
+    busy state; resource list with a heading and count, hairline dividers and
+    per-row descriptions on 打开/复制; footer with tone-coloured keep-alive and
+    an error-coloured status; `phaseActive` shared by the window and the tray
+  - `ui/settings.go`, `ui/prompt.go`: shared headings, muted captions, action
+    rows aligned to the end, Enter submits the code and callback fields, and
+    the SSO URL is constrained to two lines with an ellipsis so the open button
+    never leaves the window; checkboxes sit on the form's control column
+  - `ui.SettingsState.StatusError` and `ui.State.StatusError`; `setStatusError`
+    in `main.go` for failed actions, `setStatus` clears the flag and refreshes
+    the tray
+  - window sizes and minimums: main 540×640 (min 440×400), settings 600×760
+    (min 560×440)
+  - accessibility: `RoleHeading`+`Level` on window and panel headings, a named
+    `RoleStatus` chip, `Description` on repeated resource and log buttons,
+    `Label` on the captcha image and spinner; tab order tested in the main
+    window and up to 保存/关闭 in the settings form
+  - icons: `data/icons/hicolor/scalable/apps/goTrust.svg` and the symbolic
+    variant; `data/icons/tray-64.png` generated from the SVG and embedded with
+    `go:embed`; `data/goTrust.desktop`; `go:generate` runs `rsvg-convert`
+  - package: `PKGBUILD` no longer carries a desktop entry and PNGs in
+    `$srcdir`; it installs the desktop entry and both SVGs from the checkout
+  - render harness: `ui/render_test.go` writes every state, dark/light and both
+    minimum sizes to `GOTRUST_RENDER_DIR` and is skipped otherwise
+- Verification:
+  - `go build ./...`, `go vet ./...`, `gofmt -l .`, `go test ./...`,
+    `reuse lint` (47/47) clean
+  - all images inspected: header chip and hierarchy, resource rows, captcha
+    markers, code/SSO/chooser panels, settings groups, light and dark, 440×400
+    and 560×440 minimum sizes
+  - real binary with temporary `XDG_*` directories: window with CJK, the
+    settings window opened by keyboard (Tab Tab Enter), the new tray icon in
+    the GNOME panel at 16px, SIGTERM exit 0 and no process left
+  - icon checked at 16, 32 and 128 before the code was written; the panel icon
+    was identified by zooming a screenshot (it is a blue tile, white shield,
+    blue arrow)
+- Notes:
+  - the native tray menu was not opened on the desktop: ydotool's absolute
+    pointer did not land on panel icons in this session (clicking the power
+    icon focused the window below), and blind clicking on the operator's
+    desktop was stopped. `TestTrayMenu*` covers the items, the toggle and the
+    profile submenu; the icon was seen and stayed
+  - the GNOME appindicator extension logged
+    `gtk_widget_get_scale_factor: assertion 'GTK_IS_WIDGET (widget)' failed`
+    when it was disabled and re-enabled while the app ran. Harmless for the
+    session; a mygo/libayatana lifecycle issue, not a goTrust change
+  - a 64px tray PNG is used for HiDPI panels; the package installs only the
+    scalable SVGs, which the icon theme rasterizes at the requested size
+
 ## Test Results
 
 | Test | Input | Expected | Actual | Status |
@@ -574,6 +651,15 @@
 | Fork after the rewrite | module cache at `1d0673b` | hooks present, no adoption symbol | as expected | pass |
 | Race detector (reliability) | `go test -race . ./session ./ui` | clean | clean | pass |
 | REUSE after the new files | `reuse lint` | 40/40 | 40/40 | pass |
+| Phase tone mapping | idle/connecting/online/reconnecting/failed | neutral/accent/success/warning/danger | as expected | pass |
+| Busy disables connect | Busy with idle phase, click 连接 | no login, 处理中… visible | as expected | pass |
+| Busy keeps disconnect | Busy while connecting, click 断开 | logout fires | as expected | pass |
+| Main tab order | Tab from the top | 连接 → 设置 → 退出 | as expected | pass |
+| Settings tab order | Tab up to the actions | 保存 then 关闭 | as expected | pass |
+| Status tone | failure flag set and cleared | text present both ways | as expected | pass |
+| State renders | every phase, prompts, settings, light/dark, min sizes | PNGs written and inspected | as expected | pass |
+| Icon at panel size | 16/32 px, GNOME panel | shield and arrow legible | as expected | pass |
+| Native window smoke | real binary, temp XDG | CJK, settings by keyboard, exit 0 | as expected | pass |
 
 | Live login with captcha | real gateway, operator clicked the image | online with an IP | online, `203.0.113.4` | pass |
 | Live HTTP proxy | `curl -x 127.0.0.1:11081 http://192.0.2.10/` | 200 from the intranet | 200, 507 bytes | pass |
@@ -596,7 +682,7 @@
 | Question | Answer |
 |----------|--------|
 | Where am I? | Phase 14 complete: reconnect ladder, keep-alive results and expiry states |
-| Where am I going? | Phase 15, UI polish |
+| Where am I going? | Phase 16 install (`pacman -U`), then Phase 8 (dae) if wanted |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal |
-| What have I done? | four packages, the settings/auth/resource windows, the reliability state machine, the fork hooks and the package; the binary builds, runs and exits cleanly |
+| What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; every state is rendered and inspected, the binary runs and exits cleanly |
