@@ -221,10 +221,18 @@ func (a *app) onSessionState(state session.State) {
 func (a *app) startProxy(ctx context.Context) error {
 	socks5, httpBind := a.currentConfig().ProxyAddresses()
 
+	// The resolver resolves names inside the tunnel: a SOCKS5 client sends the
+	// hostname, and the system resolver knows nothing about intranet names.
+	var resolver gotrustproxy.NameResolver
+	if tunnel := a.manager.Resolver(); tunnel != nil {
+		resolver = tunnel
+	}
+
 	server, err := gotrustproxy.New(gotrustproxy.Options{
 		SOCKS5Bind: socks5,
 		HTTPBind:   httpBind,
 		Dial:       a.manager.Dial,
+		Resolver:   resolver,
 		Logf:       a.logf,
 	})
 	if err != nil {

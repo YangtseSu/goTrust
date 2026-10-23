@@ -25,12 +25,23 @@ import (
 // expected to resolve inside the tunnel.
 type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 
+// NameResolver maps a hostname to an address. A SOCKS5 client sends the
+// hostname, so without one the library resolves it with the system resolver:
+// an intranet name would never resolve, and a name that resolves publicly would
+// connect outside the tunnel. The tunnel resolver satisfies this interface.
+type NameResolver interface {
+	Resolve(ctx context.Context, name string) (context.Context, net.IP, error)
+}
+
 // Options configures the two listeners. An empty bind disables that listener.
 type Options struct {
 	SOCKS5Bind string
 	HTTPBind   string
 	// Dial is required.
 	Dial DialFunc
+	// Resolver resolves hostnames inside the tunnel. Nil falls back to the
+	// system resolver, which is only correct for a public destination.
+	Resolver NameResolver
 	// Logf receives listener and request diagnostics. Nil discards them.
 	Logf func(format string, args ...any)
 }
@@ -136,10 +147,14 @@ func (s *Server) startSOCKS5(ctx context.Context, bind string) error {
 		return fmt.Errorf("listen for SOCKS5 on %s: %w", bind, err)
 	}
 
-	server := socks5.NewServer(
+	options := []socks5.Option{
 		socks5.WithAuthMethods([]socks5.Authenticator{socks5.NoAuthAuthenticator{}}),
 		socks5.WithDial(s.options.Dial),
-	)
+	}
+	if s.options.Resolver != nil {
+		options = append(options, socks5.WithResolver(s.options.Resolver))
+	}
+	server := socks5.NewServer(options...)
 
 	s.mu.Lock()
 	s.listeners = append(s.listeners, listener)

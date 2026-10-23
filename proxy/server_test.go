@@ -237,6 +237,81 @@ func TestHTTPForwardProxiesPlainRequests(t *testing.T) {
 	}
 }
 
+// A SOCKS5 client sends the hostname, so the resolver must be the tunnel's, not
+// the system's: otherwise an intranet name never resolves and a public name
+// leaves the tunnel. This test proves the injected resolver is the one asked.
+func TestSOCKS5ResolvesHostnameThroughTheInjectedResolver(t *testing.T) {
+	echo := echoServer(t)
+	bind := freePort(t)
+
+	_, portText, err := net.SplitHostPort(echo.Addr().String())
+	if err != nil {
+		t.Fatalf("split echo address: %v", err)
+	}
+
+	var asked []string
+	resolver := resolverFunc(func(ctx context.Context, name string) (context.Context, net.IP, error) {
+		asked = append(asked, name)
+		return ctx, net.ParseIP("127.0.0.1"), nil
+	})
+
+	server, err := New(Options{SOCKS5Bind: bind, Dial: directDial, Resolver: resolver})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = server.Close() }()
+
+	conn, err := net.Dial("tcp", bind)
+	if err != nil {
+		t.Fatalf("dial the proxy: %v", err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	if _, err := conn.Write([]byte{0x05, 0x01, 0x00}); err != nil {
+		t.Fatalf("write greeting: %v", err)
+	}
+	reply := make([]byte, 2)
+	if _, err := io.ReadFull(conn, reply); err != nil {
+		t.Fatalf("read greeting: %v", err)
+	}
+
+	// CONNECT with a domain name, which is what a browser sends.
+	host := "intranet.example"
+	port, err := net.LookupPort("tcp", portText)
+	if err != nil {
+		t.Fatalf("parse port: %v", err)
+	}
+	request := []byte{0x05, 0x01, 0x00, 0x03, byte(len(host))}
+	request = append(request, host...)
+	request = binary.BigEndian.AppendUint16(request, uint16(port))
+	if _, err := conn.Write(request); err != nil {
+		t.Fatalf("write connect: %v", err)
+	}
+
+	connectReply := make([]byte, 10)
+	if _, err := io.ReadFull(conn, connectReply); err != nil {
+		t.Fatalf("read connect reply: %v", err)
+	}
+	if connectReply[1] != 0x00 {
+		t.Fatalf("connect reply code = %#x, want 0", connectReply[1])
+	}
+	if len(asked) != 1 || asked[0] != host {
+		t.Fatalf("resolver saw %v, want [%s]", asked, host)
+	}
+}
+
+type resolverFunc func(ctx context.Context, name string) (context.Context, net.IP, error)
+
+func (f resolverFunc) Resolve(ctx context.Context, name string) (context.Context, net.IP, error) {
+	return f(ctx, name)
+}
+
 func TestDirectHitExplainsItself(t *testing.T) {
 	bind := freePort(t)
 	server, err := New(Options{HTTPBind: bind, Dial: directDial})

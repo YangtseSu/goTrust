@@ -284,8 +284,7 @@ func (m *Manager) Dial(ctx context.Context, network, addr string) (net.Conn, err
 	return dialer.Dial(ctx, network, addr)
 }
 
-// Resolver exposes the tunnel resolver for diagnostics. It is nil while no
-// session exists.
+// Resolver exposes the tunnel resolver. It is nil while no session exists.
 func (m *Manager) Resolver() *resolve.Resolver {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
