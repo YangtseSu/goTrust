@@ -327,6 +327,64 @@
   - `github.com/pquerna/otp` moved from the indirect block to the direct block
     by hand (`go mod tidy` cannot run offline here)
 
+### Phase 13: Granted resources
+
+- **Status:** complete (derivation, cache and the window verified by tests and a
+  seeded cache; the live gateway was not re-run in this phase)
+- Decisions:
+  - the portal's app list names applications, so the fork now carries the name
+    and launch hints instead of dropping them; alias/fork pin work stays in the
+    fork, not in goTrust
+  - one row per app, one per domain name, one per IP range (ports merged), one
+    per DNS name; ordering is apps, domains, IPs, DNS, each sorted
+  - URL suggestion only where a browser link is real: a single host and a
+    tcp/all rule covering 443 (https) or 80 (http); ranges and UDP rules get no
+    link
+  - the cache is `resources.json` beside `config.toml` (0600, versioned) and
+    holds addresses, never credentials. `--print-resources` reads it without a
+    login; `--no-ui` prints what the login just fetched
+- Actions taken:
+  - fork `YangtseSu/zju-connect` dev `7958d6a` (pushed): `resourceApp` keeps
+    `name`, the group `name`, `accessAddress`, `openModel.model` and
+    `webRelativeDomainList`; `client.App` + `Client.Apps()` expose them, while
+    the address rules still reference the app by ID. Tests cover the parse and
+    the empty pre-parse answer. go.mod moved to
+    `v1.3.2-0.20261023210742-7958d6a202ff`
+  - `session/resources.go`: `Resources` (apps, IP/domain/DNS rules, derived
+    `Entries`), `buildResources`, sorting, port/protocol rendering, URL
+    suggestion, `FormatResources`, and the versioned snapshot with an atomic
+    0600 write
+  - `session.Login` retains the snapshot in `State.Resources` and writes the
+    cache; `Logout` clears it. A failed fetch of one rule set is logged and
+    leaves that set empty
+  - main: `--print-resources`, stdout list after a `--no-ui` login, and the
+    open/copy actions (`mygo.Shell.OpenExternal`, `mygo.Clipboard`)
+  - main window: scrollable resource list below the connection controls, with
+    per-row 打开/复制 and offline/empty hints
+  - README: status and a "Granted resources" section
+- Verification:
+  - `go build ./...`, `go vet ./...`, `gofmt -l .`, `go test ./...` clean;
+    the fork's `go test ./...` clean before the push
+  - derivation: 7 rows from five IP rules (duplicate collapsed), three domain
+    names, one DNS name; ordering, details and copy values asserted
+  - URL suggestion: exact/covered 80/443, https first, UDP/no-port/no-host
+    rejected; app access address, scheme-less value and web-domain fallback
+  - cache: 0600, nested directory created, entries survive the round trip,
+    version 99 refused, missing file an error
+  - `--print-resources` with a seeded cache printed four rows and exited 0;
+    without a cache it exited 1 with the path in the message
+  - main window rendered headlessly at 520×560 with eight rows: apps, domains,
+    IPs and DNS visible, the list clips and scrolls, buttons aligned; the PNG
+    was inspected and deleted
+  - real binary with a temporary `XDG_CONFIG_HOME`/`XDG_STATE_HOME`:
+    `goTrust ready`, tray and window alive, SIGTERM exit 0
+- Notes:
+  - the live gateway was not re-run, so the portal's actual app list was not
+    observed end to end; the parse is covered by the fork's fixture tests and
+    the UI by seeded state
+  - `--no-ui` needs a gateway that does not ask for a second factor; the print
+    path after a successful login was therefore not exercised live
+
 ## Test Results
 
 | Test | Input | Expected | Actual | Status |
@@ -433,8 +491,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 12 complete: auth-method discovery, stored pair, code and SSO prompts |
-| Where am I going? | Phase 13, granted resources |
+| Where am I? | Phase 13 complete: resources retained, displayed and cached |
+| Where am I going? | Phase 14, reliability |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors) |
-| What have I done? | four packages written and tested; binary built, launched and shut down cleanly |
+| What have I done? | four packages, the settings/auth/resource windows, the fork extension and the package; the binary builds, runs and exits cleanly |

@@ -12,12 +12,12 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 13: retain the granted resources, derive display entries and URLs, show
-them in the main window and cache them for `--print-resources`.
+Phase 14: reliability. Auto-reconnect with the 1/2/4/8/16 s ladder, keep-alive
+result fields in `session.State`, and session-expiry/reauthentication states.
 
 ## Current Phase
 
-Phase 13
+Phase 14
 
 ## Phases
 
@@ -200,21 +200,28 @@ pre-login call, so method discovery needs no protocol change. aTrust matches
 Requirement 8, informed by `atrust-quadlet --apps`: the user must see what the
 account may reach and which URL to open in a browser.
 
-- [ ] Retain IP, domain and DNS resources plus app IDs in `session.State`
-      instead of discarding them after setup
-- [ ] Check whether the resource model can carry app names and launch URLs;
+- [x] Retain IP, domain and DNS resources plus app IDs in `session.State`
+      instead of discarding them after setup (`State.Resources`, cleared by
+      Logout)
+- [x] Check whether the resource model can carry app names and launch URLs;
       extend the fork's `resourceApp` if the fields are available, otherwise
-      derive display entries from addresses/ports
-- [ ] Display model: domain `name[:port]`, IP/range with port range and protocol,
-      DNS name→IP; suggest `http://`/`https://` for a single IP with port 80/443
-- [ ] Main window: scrollable resource list with open-in-browser and copy
+      derive display entries from addresses/ports. The portal payload names
+      each app, so the fork now parses `name`, group `name`, `accessAddress`,
+      `openModel.model` and `webRelativeDomainList` into `client.App`, exposed
+      by `Client.Apps()`; the pin moved to
+      `v1.3.2-0.20261023210742-7958d6a202ff` (fork dev `7958d6a`)
+- [x] Display model: domain `name[:port]`, IP/range with port range and protocol,
+      DNS name→IP; apps with group and launch method. `http://`/`https://` is
+      suggested for a single host whose rule covers 80/443, https first; app
+      rows use the portal's access address or first web domain
+- [x] Main window: scrollable resource list with open-in-browser and copy
       actions, plus gateway, tunnel IP and proxy addresses
-- [ ] Cache the last snapshot in the config directory at 0600 and print it in
-      `--no-ui` runs; add `--print-resources` for headless use (Quadlet's
-      `--apps` equivalent)
-- [ ] Tests: derivation/formatting, URL suggestion, empty session, cache
-      round-trip; no real intranet address in the repository
-- **Status:** pending
+- [x] Cache the last snapshot in the config directory at 0600 and print it in
+      `--no-ui` runs; `--print-resources` prints the cached snapshot and exits
+      without a login
+- [x] Tests: derivation/formatting, URL suggestion, empty session, cache
+      round-trip, app metadata; no real intranet address in the repository
+- **Status:** complete
 
 ### Phase 14: Reliability
 
@@ -283,8 +290,10 @@ the repository is public. Then a self-use VCS package; it does not go to AUR.
 ## Key Questions
 
 1. Can the resource model carry app names and launch URLs, or only the
-   address/port rules the fork parses? (Phase 13: extend the parser if the
-   fields exist, otherwise derive display URLs)
+   address/port rules the fork parses? **Answered in Phase 13:** the portal's
+   app list carries `name`, group `name`, `accessAddress`, `openModel.model` and
+   `webRelativeDomainList`; the fork parses them into `client.App` and exposes
+   `Apps()`. Address rules remain the routing model.
 2. What signal does the embedded client give when the session needs a relogin?
    The upstream logs `aTrust session requires reauthentication`; if no callback
    exists, Phase 14 needs a small fork hook or dial-failure detection.

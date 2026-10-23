@@ -182,6 +182,13 @@ func Path() (string, error) {
 	return filepath.Join(dir, "config.toml"), nil
 }
 
+// ResourcesPath is where the last granted resource snapshot is cached. It
+// lives beside the settings file, so --config points the cache at the same
+// place as the configuration it belongs to.
+func ResourcesPath(configPath string) string {
+	return filepath.Join(filepath.Dir(configPath), "resources.json")
+}
+
 // Load reads the settings file, creating the directory if it does not exist.
 // A missing file is not an error: it yields the defaults, which is what a
 // first launch must see.

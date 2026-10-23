@@ -58,6 +58,9 @@ type State struct {
 	// ClientIP is the address the gateway assigned, empty until online and
 	// empty for a TCP-only gateway.
 	ClientIP string
+	// Resources is what the gateway granted this account. It is retained from
+	// the login that established the tunnel and cleared by Logout.
+	Resources Resources
 	// Since is when the phase was entered.
 	Since time.Time
 }
@@ -91,6 +94,9 @@ type Options struct {
 	ChooseAuth func(ctx context.Context, methods []AuthMethod) (AuthMethod, error)
 	// Logf receives progress lines. Nil discards them.
 	Logf func(format string, args ...any)
+	// ResourceCachePath is where the last granted resources are cached for
+	// --print-resources. Empty disables the cache.
+	ResourceCachePath string
 	// OnState is called on every transition, from the goroutine that caused it.
 	OnState func(State)
 }
@@ -252,6 +258,16 @@ func (m *Manager) Login(ctx context.Context) error {
 	if err != nil {
 		m.logf("DNS resources unavailable: %v", err)
 	}
+	apps, err := client.Apps()
+	if err != nil {
+		m.logf("applications unavailable: %v", err)
+	}
+	resources := buildResources(ipResources, domainResources, dnsResource, apps)
+	if resources.Empty() {
+		m.logf("the gateway granted no resources to this account")
+	} else {
+		m.logf("the gateway granted %d displayable resources", len(resources.Entries))
+	}
 
 	vpnStack, err := newStack(client)
 	if err != nil {
@@ -279,10 +295,30 @@ func (m *Manager) Login(ctx context.Context) error {
 	m.cancel = cancel
 	m.mu.Unlock()
 
-	m.set(State{Phase: PhaseOnline, Detail: gateway, ClientIP: tunnelIP, Since: time.Now()})
+	m.set(State{Phase: PhaseOnline, Detail: gateway, ClientIP: tunnelIP, Resources: resources, Since: time.Now()})
+	m.cacheResources(profile, gateway, tunnelIP, resources)
 
 	go m.runKeepAlive(sessionCtx, profile, ipResources)
 	return nil
+}
+
+// cacheResources stores the last grant beside the settings, so
+// --print-resources works without another login. A cache that cannot be
+// written is a convenience lost, not a login failure.
+func (m *Manager) cacheResources(profile config.Profile, gateway, tunnelIP string, resources Resources) {
+	if m.options.ResourceCachePath == "" {
+		return
+	}
+	snapshot := ResourceSnapshot{
+		SavedAt:   time.Now(),
+		Profile:   profile.Name,
+		Gateway:   gateway,
+		TunnelIP:  tunnelIP,
+		Resources: resources,
+	}
+	if err := WriteResourceCache(m.options.ResourceCachePath, snapshot); err != nil {
+		m.logf("cache the granted resources: %v", err)
+	}
 }
 
 // Logout tears the session down. It is safe to call when idle.

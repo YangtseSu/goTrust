@@ -315,3 +315,26 @@ dae is deferred last.
 - `mygo.Shell.OpenExternal(url)` is the system-browser call; it is routed
   through the main thread. A failed open is not fatal: the URL and a retry
   button remain in the panel.
+
+#### Granted resources (verified 2026-10-24)
+
+- The portal's resource answer carries the app list the client's own "App
+  Details" panel shows:
+  `data.appList.data.appInfo[] = { name, apps[] }`, and each app has `id`,
+  `name`, `accessAddress`, `openModel.model`, `webRelativeDomainList[]` and
+  `addressList[]` (`{protocol, port, host, ip[]}`).
+- Routing needs only the address rules (`IPResource`, `DomainResource`,
+  `DNSResource`). The display layer needs the app fields, which the fork used
+  to drop; `client.App` + `Client.Apps()` now keep the name, group, access
+  address, open model and web domains, linked to the rules by `AppID`.
+- An application whose `accessModel` is not `L3VPN` still belongs in the app
+  list even though it contributes no rules; goTrust lists it with no address
+  row. `accessAddress` wins over the first `webRelativeDomainList` entry as a
+  launch hint, and a value without a scheme is prefixed with `https://`.
+- A browser link is only honest for a single host with a tcp/all rule covering
+  443 (https) or 80 (http); a range or a UDP-only rule gets none. The
+  keep-alive's stricter rule (port 80 only, because the probe is plain HTTP) is
+  a different question and stays in `service`.
+- The snapshot is display data: `resources.json` beside `config.toml`, 0600,
+  versioned, holding addresses and names but no credentials. `--print-resources`
+  reads it without a login; `--no-ui` prints the snapshot it just fetched.

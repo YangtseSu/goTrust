@@ -158,6 +158,66 @@ func TestAddressesAndKeepAliveAreListed(t *testing.T) {
 	}
 }
 
+// The granted resources are the point of the window after a login: the rows
+// and their buttons have to reach the browser and the clipboard.
+func TestResourceListRendersAndActs(t *testing.T) {
+	resources := session.Resources{Entries: []session.ResourceEntry{
+		{Kind: session.ResourceApp, Title: "Wiki", Detail: "Portal · web", URL: "https://wiki.example.com", Copy: "https://wiki.example.com"},
+		{Kind: session.ResourceIP, Title: "192.0.2.10", Detail: "tcp 443", Copy: "192.0.2.10"},
+	}}
+	state := State{
+		Session: session.State{
+			Phase:     session.PhaseOnline,
+			Detail:    "vpn.example.com:443",
+			ClientIP:  "192.0.2.10",
+			Resources: resources,
+		},
+		Config: config.Default(),
+	}
+
+	rendered := ui.NewTester(View(&state, Actions{}), 520, 560)
+	rendered.Frame()
+	for _, want := range []string{"已获授权的资源（2）", "Wiki", "Portal · web", "192.0.2.10", "tcp 443"} {
+		if !rendered.HasText(want) {
+			t.Fatalf("%q is missing from the resource list; texts: %v", want, rendered.Texts())
+		}
+	}
+
+	var opened string
+	openTester := ui.NewTester(View(&state, Actions{OpenResource: func(url string) { opened = url }}), 520, 560)
+	if err := openTester.Click("打开"); err != nil {
+		t.Fatalf("click 打开: %v", err)
+	}
+	if opened != "https://wiki.example.com" {
+		t.Fatalf("opened %q, want the app URL", opened)
+	}
+
+	var copied string
+	copyTester := ui.NewTester(View(&state, Actions{CopyResource: func(value string) { copied = value }}), 520, 560)
+	if err := copyTester.Click("复制"); err != nil {
+		t.Fatalf("click 复制: %v", err)
+	}
+	if copied != "https://wiki.example.com" {
+		t.Fatalf("copied %q, want the app copy value", copied)
+	}
+}
+
+func TestResourceListExplainsAnEmptyGrant(t *testing.T) {
+	online := State{Session: session.State{Phase: session.PhaseOnline, Detail: "vpn.example.com:443"}, Config: config.Default()}
+	rendered := ui.NewTester(View(&online, Actions{}), 520, 560)
+	rendered.Frame()
+	if !rendered.HasText("已获授权的资源（0）") || !rendered.HasText("网关没有为该账号授予资源") {
+		t.Fatalf("empty grant is not explained; texts: %v", rendered.Texts())
+	}
+
+	idle := State{Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"}, Config: config.Default()}
+	rendered = ui.NewTester(View(&idle, Actions{}), 520, 560)
+	rendered.Frame()
+	if !rendered.HasText("连接后显示网关授予的资源") {
+		t.Fatalf("idle hint is missing; texts: %v", rendered.Texts())
+	}
+}
+
 func TestTrayStatus(t *testing.T) {
 	cases := []struct {
 		state session.State

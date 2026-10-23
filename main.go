@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 	zjuconnectlog "github.com/mythologyli/zju-connect/log"
 
@@ -32,11 +33,21 @@ import (
 func main() {
 	headless := flag.Bool("no-ui", false, "run without a window; connect, serve the proxies, and exit on SIGINT or SIGTERM")
 	configPath := flag.String("config", "", "TOML settings file (default: the user config directory)")
+	printResources := flag.Bool("print-resources", false, "print the resources cached by the last login and exit")
 	flag.Parse()
 
 	cfg, path, err := loadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("settings: %v", err)
+	}
+
+	if *printResources {
+		snapshot, err := session.ReadResourceCache(config.ResourcesPath(path))
+		if err != nil {
+			log.Fatalf("resources: %v", err)
+		}
+		fmt.Println(session.FormatResources(snapshot.Resources))
+		return
 	}
 
 	application := &app{
@@ -77,9 +88,10 @@ func main() {
 	// A headless run cannot show a captcha, a code dialog or the method
 	// chooser, so it fails with a message instead of waiting for a window.
 	sessionOptions := session.Options{
-		Config:  application.currentConfig,
-		Logf:    application.logf,
-		OnState: application.onSessionState,
+		Config:            application.currentConfig,
+		Logf:              application.logf,
+		OnState:           application.onSessionState,
+		ResourceCachePath: config.ResourcesPath(path),
 	}
 	if *headless {
 		sessionOptions.Prompt = func(context.Context) session.Prompter {
@@ -174,6 +186,7 @@ func (a *app) runHeadless(ctx context.Context) {
 	if err := a.connect(ctx); err != nil {
 		a.logger.Fatalf("connect: %v", err)
 	}
+	fmt.Println(session.FormatResources(a.manager.State().Resources))
 	<-ctx.Done()
 	a.disconnect()
 }
@@ -381,7 +394,30 @@ func (a *app) actions() gotrustui.Actions {
 		CancelExternal: func() { a.cancelExternal(errors.New("external login cancelled")) },
 		ChooseAuth:     a.chooseAuthIndex,
 		CancelChoice:   func() { a.cancelChoice(errors.New("authentication method cancelled")) },
+
+		OpenResource: a.openResource,
+		CopyResource: a.copyResource,
 	}
+}
+
+// openResource opens a granted application or address in the browser. A
+// failure is reported in the window; the URL is still visible there.
+func (a *app) openResource(url string) {
+	if err := a.openBrowser(url); err != nil {
+		a.setStatus("打开失败: "+err.Error(), false)
+		a.logf("open resource %s: %v", url, err)
+	}
+}
+
+// copyResource puts a resource value on the clipboard and confirms it in the
+// status line.
+func (a *app) copyResource(value string) {
+	if err := mygo.Clipboard.Write(transfer.TextData(value)); err != nil {
+		a.setStatus("复制失败: "+err.Error(), false)
+		a.logf("copy resource: %v", err)
+		return
+	}
+	a.setStatus("已复制", false)
 }
 
 // settingsActions are the settings window's callbacks.

@@ -7,6 +7,7 @@
 /config.toml
 /config.json
 /client_data*.json
+/resources.json
 *.log
 
 # editors

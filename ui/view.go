@@ -73,6 +73,10 @@ type Actions struct {
 	// ChooseAuth picks one of the offered authentication methods by index.
 	ChooseAuth   func(int)
 	CancelChoice func()
+	// OpenResource opens a granted resource's suggested URL in the browser;
+	// CopyResource puts an entry's copy value on the clipboard.
+	OpenResource func(string)
+	CopyResource func(string)
 }
 
 // View renders one frame of the main window.
@@ -91,6 +95,7 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 				externalPanel(c, state, actions)
 			default:
 				controls(c, state, actions)
+				resources(c, state, actions)
 			}
 			footer(c, state)
 		})
@@ -225,6 +230,56 @@ func controls(c *ui.Context, state *State, actions Actions) {
 		}
 		if ui.Button(c, "退出").Clicked() && actions.Quit != nil {
 			actions.Quit()
+		}
+	})
+}
+
+// resources lists what the gateway granted this account: the portal's
+// applications first, then the address rules they are reached through. The
+// list scrolls, because an account can be granted far more entries than the
+// window is tall.
+func resources(c *ui.Context, state *State, actions Actions) {
+	granted := state.Session.Resources
+	ui.Text(c, fmt.Sprintf("已获授权的资源（%d）", len(granted.Entries))).FontSize(13).Bold()
+
+	if len(granted.Entries) == 0 {
+		switch state.Session.Phase {
+		case session.PhaseOnline:
+			ui.Text(c, "网关没有为该账号授予资源").FontSize(12)
+		case session.PhaseConnecting:
+			ui.Text(c, "登录后显示网关授予的资源").FontSize(12)
+		default:
+			ui.Text(c, "连接后显示网关授予的资源").FontSize(12)
+		}
+		return
+	}
+
+	ui.Scroll(c).Grow(1).Children(func() {
+		ui.Column(c).Gap(6).Children(func() {
+			for _, entry := range granted.Entries {
+				resourceRow(c, entry, actions)
+			}
+		})
+	})
+}
+
+func resourceRow(c *ui.Context, entry session.ResourceEntry, actions Actions) {
+	ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+		ui.Column(c).Grow(1).Gap(2).Children(func() {
+			ui.Text(c, entry.Title).FontSize(13)
+			if entry.Detail != "" {
+				ui.Text(c, entry.Detail).FontSize(11)
+			}
+		})
+		if entry.URL != "" {
+			url := entry.URL
+			if ui.Button(c, "打开").Clicked() && actions.OpenResource != nil {
+				actions.OpenResource(url)
+			}
+		}
+		value := entry.Copy
+		if ui.Button(c, "复制").Clicked() && actions.CopyResource != nil {
+			actions.CopyResource(value)
 		}
 	})
 }

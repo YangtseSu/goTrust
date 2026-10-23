@@ -16,11 +16,11 @@ It is deliberately narrow:
 ## Status
 
 The session layer, the local proxy listeners, the tray, the in-window click
-captcha, the settings window, profiles, file logging and autostart are
-implemented. The protocol path was verified against a real gateway in Phase 9;
-the settings/profile/startup paths are verified by tests and a headless smoke
-run. A final live pass over the settings window is the remaining step; see
-`.planning/` for the current phase.
+captcha, the settings window, profiles, file logging, autostart and the granted
+resource list are implemented. The protocol path was verified against a real
+gateway in Phase 9; the settings/profile/startup/resource paths are verified by
+tests and headless smoke runs. A final live pass over the settings window is the
+remaining step; see `.planning/` for the current phase.
 
 ## Why a new project rather than a fork
 
@@ -211,6 +211,26 @@ client logs through Go's standard logger, which is bridged to the same writer.
 
 `--no-ui` mirrors the log to stderr, which is where a headless run's operator
 looks. 高级 → 打开 opens the log directory from the settings window.
+
+## Granted resources
+
+After a login the main window lists what the account may reach. Portal
+applications come first, with the group and launch method the portal reports and
+an 打开 button when it gives a launch address; then domain rules, IPv4 addresses
+and ranges with their protocols and ports, and DNS name→IP mappings. A single
+host that allows TCP 443 (or 80) gets an `https://` (`http://`) link, and 复制
+puts the URL or the address on the clipboard.
+
+The last snapshot is cached at `resources.json` beside `config.toml` (0600). It
+holds intranet addresses but no credentials. `--print-resources` prints that
+snapshot and exits without logging in:
+
+```sh
+goTrust --print-resources
+```
+
+A `--no-ui` run prints the list it just fetched to stdout after connecting, so a
+headless deployment can publish what the account was granted.
 
 ## Using it
 

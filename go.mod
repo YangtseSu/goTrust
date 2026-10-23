@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/egoist/mygo v0.6.3
-	github.com/mythologyli/zju-connect v1.3.1-0.20261020024545-4e07ac667f87
+	github.com/mythologyli/zju-connect v1.3.2-0.20261023210742-7958d6a202ff
 	github.com/pquerna/otp v1.5.0
 	github.com/things-go/go-socks5 v0.1.1
 )
@@ -53,4 +53,4 @@ require (
 
 // Upstream main lacks the aTrust session-lifecycle and keep-alive fixes this
 // app depends on; the fork's dev branch carries them and its CI is green.
-replace github.com/mythologyli/zju-connect => github.com/YangtseSu/zju-connect v1.3.1-0.20261020024545-4e07ac667f87
+replace github.com/mythologyli/zju-connect => github.com/YangtseSu/zju-connect v1.3.2-0.20261023210742-7958d6a202ff
