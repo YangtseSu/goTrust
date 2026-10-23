@@ -1,0 +1,447 @@
+// Package session owns one aTrust login and everything that hangs off it: the
+// tunnel client, its netstack, the resolver, the dialer and the keep-alive.
+//
+// The package is deliberately the only place that knows the upstream module's
+// assembly order. The UI and the proxy layer talk to it through State and
+// Manager.Dial, never through the client type.
+package session
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"strconv"
+	"sync"
+	"time"
+
+	clientpkg "github.com/mythologyli/zju-connect/client"
+	"github.com/mythologyli/zju-connect/client/atrust"
+	"github.com/mythologyli/zju-connect/client/atrust/auth"
+	"github.com/mythologyli/zju-connect/client/authchallenge"
+	"github.com/mythologyli/zju-connect/dial"
+	"github.com/mythologyli/zju-connect/resolve"
+	"github.com/mythologyli/zju-connect/service"
+	"github.com/mythologyli/zju-connect/stack"
+	"github.com/mythologyli/zju-connect/stack/gvisor"
+	"github.com/mythologyli/zju-connect/stack/tcptunnel"
+	"github.com/mythologyli/zju-connect/underlay"
+
+	"github.com/YangtseSu/goTrust/config"
+)
+
+// Phase is the lifecycle position of the session, in the order a user sees it.
+type Phase string
+
+const (
+	// PhaseIdle means no session exists.
+	PhaseIdle Phase = "idle"
+	// PhaseConnecting covers the whole login and data-path setup.
+	PhaseConnecting Phase = "connecting"
+	// PhaseOnline means the tunnel is usable and the proxies may serve.
+	PhaseOnline Phase = "online"
+	// PhaseFailed means the last attempt stopped with Detail as the reason.
+	PhaseFailed Phase = "failed"
+)
+
+// State is one snapshot of the session, safe to render in a UI.
+type State struct {
+	Phase Phase
+	// Detail explains the phase: the current step while connecting, the error
+	// when failed, and the gateway address when online.
+	Detail string
+	// ClientIP is the address the gateway assigned, empty until online and
+	// empty for a TCP-only gateway.
+	ClientIP string
+	// Since is when the phase was entered.
+	Since time.Time
+}
+
+// ErrNotOnline reports a dial attempt while no session exists.
+var ErrNotOnline = errors.New("the session is not online")
+
+// Prompter asks the user for whatever the login needs beyond a password: a
+// one-time code, a captcha answer, or a URL to open in a browser.
+//
+// The alias mirrors authchallenge.Handler on purpose: the same value is handed
+// to the client. A headless run can supply one that fails with a clear message
+// instead of waiting on a dialog that will never appear.
+type Prompter = authchallenge.Handler
+
+// Options describe one login attempt.
+type Options struct {
+	// Config reads the settings in effect. Like Auth it is a function: the
+	// user edits the form after the manager exists, and a login must use what
+	// is on screen now, not what was loaded at startup.
+	Config func() config.Config
+	// Auth supplies the credentials for one login attempt. It is a function
+	// because the user edits the form after the manager exists; reading it at
+	// login time also means a password the user chose not to save never comes
+	// back from disk.
+	Auth func() config.AuthConfig
+	// Prompt is required for accounts with a second factor.
+	Prompt Prompter
+	// Logf receives progress lines. Nil discards them.
+	Logf func(format string, args ...any)
+	// OnState is called on every transition, from the goroutine that caused it.
+	OnState func(State)
+}
+
+// Manager holds the live session and serialises login, logout and dialling.
+type Manager struct {
+	options Options
+	logf    func(format string, args ...any)
+
+	mu       sync.RWMutex
+	state    State
+	client   *atrust.Client
+	dialer   *dial.Dialer
+	resolver *resolve.Resolver
+	underlay *underlay.Dialer
+	cancel   context.CancelFunc
+	login    sync.Mutex
+}
+
+// New creates a manager in the idle phase.
+func New(options Options) *Manager {
+	logf := options.Logf
+	if logf == nil {
+		logf = func(string, ...any) {}
+	}
+	return &Manager{
+		options: options,
+		logf:    logf,
+		state:   State{Phase: PhaseIdle, Detail: "not connected", Since: time.Now()},
+	}
+}
+
+// State returns the current snapshot.
+func (m *Manager) State() State {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.state
+}
+
+// Login establishes a session. It returns once the tunnel is usable, or with
+// the reason it is not. Calling it while online is an error rather than a
+// silent reconnect: a second full login rotates the device token and drops
+// other clients of the same account.
+func (m *Manager) Login(ctx context.Context) error {
+	m.login.Lock()
+	defer m.login.Unlock()
+
+	switch m.State().Phase {
+	case PhaseConnecting, PhaseOnline:
+		return fmt.Errorf("the session is already %s", m.State().Phase)
+	}
+
+	cfg := m.settings()
+	if err := cfg.Validate(); err != nil {
+		m.fail(err)
+		return err
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	m.set(State{Phase: PhaseConnecting, Detail: "preparing the tunnel", Since: time.Now()})
+
+	underlayDialer, err := underlay.New(underlay.Options{})
+	if err != nil {
+		cancel()
+		m.fail(fmt.Errorf("create the underlay dialer: %w", err))
+		return err
+	}
+
+	// From here on every failure has to release what was already opened.
+	fail := func(stage string, cause error) error {
+		cancel()
+		_ = underlayDialer.Close()
+		wrapped := fmt.Errorf("%s: %w", stage, cause)
+		m.fail(wrapped)
+		return wrapped
+	}
+
+	clientData, err := readClientData(cfg)
+	if err != nil {
+		return fail("read the stored session", err)
+	}
+
+	loginMethod, err := newLoginMethod(m.credentials())
+	if err != nil {
+		return fail("configure the login", err)
+	}
+
+	client := atrust.NewClient(atrust.ClientOptions{
+		Session:        atrust.SessionOptions{Username: m.credentials().Username},
+		UnderlayDialer: underlayDialer,
+	})
+
+	m.set(State{Phase: PhaseConnecting, Detail: "logging in", Since: time.Now()})
+
+	if _, err := client.SetupContext(ctx, atrust.SetupOptions{
+		ServerAddress:            cfg.ServerAddress(),
+		ServerPort:               cfg.Server.Port,
+		LoginMethod:              loginMethod,
+		ClientData:               clientData,
+		ChallengeHandler:         m.options.Prompt,
+		BestNodesRefreshInterval: 5 * time.Minute,
+		SessionRefreshInterval:   60 * time.Second,
+		SaveClientData: func(data []byte) error {
+			return writeClientData(cfg, data)
+		},
+	}); err != nil {
+		client.Close()
+		return fail("log in", err)
+	}
+
+	m.set(State{Phase: PhaseConnecting, Detail: "opening the data path", Since: time.Now()})
+
+	ipResources, err := client.IPResources()
+	if err != nil {
+		m.logf("IP resources unavailable: %v", err)
+	}
+	domainResources, err := client.DomainResources()
+	if err != nil {
+		m.logf("domain resources unavailable: %v", err)
+	}
+	dnsResource, err := client.DNSResource()
+	if err != nil {
+		m.logf("DNS resources unavailable: %v", err)
+	}
+
+	vpnStack, err := newStack(client)
+	if err != nil {
+		client.Close()
+		return fail("open the data path", err)
+	}
+
+	resolver := resolve.NewResolver(vpnStack, "auto", "auto", 3600, domainResources, dnsResource, true)
+	vpnStack.SetupResolve(service.NewDnsServer(resolver, []string{"auto", "auto"}))
+	vpnStack.SetupIPPool(resolver.IPPool)
+	go vpnStack.Run()
+
+	tunnelIP := ""
+	if ip, ipErr := client.IP(); ipErr == nil && ip != nil {
+		tunnelIP = ip.String()
+	}
+
+	gateway := net.JoinHostPort(cfg.ServerAddress(), strconv.Itoa(cfg.Server.Port))
+
+	m.mu.Lock()
+	m.client = client
+	m.resolver = resolver
+	m.underlay = underlayDialer
+	m.dialer = dial.NewDialer(vpnStack, resolver, ipResources, false, "")
+	m.cancel = cancel
+	m.mu.Unlock()
+
+	m.set(State{Phase: PhaseOnline, Detail: gateway, ClientIP: tunnelIP, Since: time.Now()})
+
+	go m.runKeepAlive(ctx, cfg, ipResources)
+	return nil
+}
+
+// Logout tears the session down. It is safe to call when idle.
+func (m *Manager) Logout() {
+	m.login.Lock()
+	defer m.login.Unlock()
+
+	m.mu.Lock()
+	cancel := m.cancel
+	client := m.client
+	underlayDialer := m.underlay
+
+	m.cancel = nil
+	m.client = nil
+	m.dialer = nil
+	m.resolver = nil
+	m.underlay = nil
+	m.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if client != nil {
+		client.Close()
+	}
+	if underlayDialer != nil {
+		_ = underlayDialer.Close()
+	}
+	m.set(State{Phase: PhaseIdle, Detail: "not connected", Since: time.Now()})
+}
+
+// Dial opens a connection through the tunnel. It is the proxy layer's only
+// dependency on this package.
+func (m *Manager) Dial(ctx context.Context, network, addr string) (net.Conn, error) {
+	m.mu.RLock()
+	dialer := m.dialer
+	phase := m.state.Phase
+	m.mu.RUnlock()
+
+	if phase != PhaseOnline || dialer == nil {
+		return nil, ErrNotOnline
+	}
+	return dialer.Dial(ctx, network, addr)
+}
+
+// Resolver exposes the tunnel resolver for diagnostics. It is nil while no
+// session exists.
+func (m *Manager) Resolver() *resolve.Resolver {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.resolver
+}
+
+// newStack picks the data path the gateway supports. A TCP-only gateway hands
+// out no address, so the netstack cannot come up and the TCP tunnel is the only
+// option there.
+func newStack(client *atrust.Client) (stack.Stack, error) {
+	if client.CanUseTCPTunnel() {
+		return tcptunnel.NewStack(client)
+	}
+	if ip, err := client.IP(); err != nil || ip == nil {
+		m, tcpErr := tcptunnel.NewStack(client)
+		if tcpErr != nil {
+			return nil, fmt.Errorf("no tunnel address and no TCP tunnel: %w", tcpErr)
+		}
+		return m, nil
+	}
+	gvisorStack, err := gvisor.NewStack(client)
+	if err != nil {
+		return nil, err
+	}
+	return gvisorStack, nil
+}
+
+// runKeepAlive holds the session open with real application traffic. Without a
+// target the upstream loop falls back to a DNS probe, which it warns does not
+// extend a session on gateways that expire idle tunnels.
+func (m *Manager) runKeepAlive(ctx context.Context, cfg config.Config, ipResources []clientpkg.IPResource) {
+	if !cfg.Keep.Enabled {
+		m.logf("keep-alive is disabled by configuration")
+		return
+	}
+
+	targets, warnings := keepAliveTargets(cfg, ipResources)
+	for _, warning := range warnings {
+		m.logf("keep-alive: %s", warning)
+	}
+
+	m.mu.RLock()
+	dialer := m.dialer
+	resolver := m.resolver
+	m.mu.RUnlock()
+	if dialer == nil || resolver == nil {
+		return
+	}
+
+	m.logf("keep-alive: %d target(s) every %s", len(targets), cfg.KeepAliveInterval())
+	service.KeepAlive(ctx, resolver, dialer, service.KeepAliveOptions{
+		Targets:  targets,
+		Interval: cfg.KeepAliveInterval(),
+	})
+}
+
+// keepAliveTargets merges the user's named targets with the ones derived from
+// the granted resources.
+func keepAliveTargets(cfg config.Config, ipResources []clientpkg.IPResource) ([]service.KeepAliveTarget, []string) {
+	var targets []service.KeepAliveTarget
+	var warnings []string
+
+	if len(cfg.Keep.Targets) > 0 {
+		named, namedWarnings := service.NamedKeepAliveTargets(joinTargets(cfg.Keep.Targets))
+		targets = append(targets, named...)
+		warnings = append(warnings, namedWarnings...)
+	}
+	if len(ipResources) > 0 {
+		derived, derivedWarnings := service.DeriveKeepAliveTargets(ipResources)
+		targets = append(targets, derived...)
+		warnings = append(warnings, derivedWarnings...)
+	}
+	return targets, warnings
+}
+
+func joinTargets(targets []string) string {
+	joined := ""
+	for index, target := range targets {
+		if index > 0 {
+			joined += ","
+		}
+		joined += target
+	}
+	return joined
+}
+
+// config reads the settings in effect.
+func (m *Manager) settings() config.Config {
+	if m.options.Config == nil {
+		return config.Default()
+	}
+	return m.options.Config()
+}
+
+// credentials reads the login material for this attempt.
+func (m *Manager) credentials() config.AuthConfig {
+	if m.options.Auth == nil {
+		return config.AuthConfig{}
+	}
+	return m.options.Auth()
+}
+
+// newLoginMethod builds what the client needs to authenticate. A nil result is
+// valid: the client falls back to the stored session material.
+func newLoginMethod(cfg config.AuthConfig) (auth.LoginMethod, error) {
+	return auth.NewLoginMethod(auth.LoginMethodOptions{
+		AuthType: cfg.AuthType,
+		Username: cfg.Username,
+		Password: cfg.Password,
+		Domain:   cfg.Domain,
+	})
+}
+
+func (m *Manager) set(state State) {
+	m.mu.Lock()
+	m.state = state
+	m.mu.Unlock()
+
+	if m.options.OnState != nil {
+		m.options.OnState(state)
+	}
+}
+
+func (m *Manager) fail(err error) {
+	m.logf("session failed: %v", err)
+	m.set(State{Phase: PhaseFailed, Detail: err.Error(), Since: time.Now()})
+}
+
+// readClientData loads the stored session material. A missing file is normal on
+// a first run.
+func readClientData(cfg config.Config) ([]byte, error) {
+	path, err := cfg.ClientDataPath()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return raw, nil
+}
+
+// writeClientData stores the session material. The file carries cookies, the
+// sign key and the sid ticket, so it is restricted to its owner.
+func writeClientData(cfg config.Config, data []byte) error {
+	path, err := cfg.ClientDataPath()
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	// WriteFile does not change the mode of an existing file, and an older
+	// version may have created it readable by others.
+	return os.Chmod(path, 0o600)
+}

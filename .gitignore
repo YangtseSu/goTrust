@@ -1,0 +1,14 @@
+# build output
+/goTrust
+/dist/
+/build/
+
+# local configuration and credentials must never be committed
+/config.json
+/client_data.json
+*.log
+
+# editors
+.idea/
+.vscode/
+*.swp
