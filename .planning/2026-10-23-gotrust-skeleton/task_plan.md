@@ -323,9 +323,12 @@ the repository is public. Then a self-use VCS package; it does not go to AUR.
       `hicolor-icon-theme` (WebKitGTK is lazy and stays out)
 - [x] `check()` runs `go test ./...`; `pkgver()` uses a rev-count/hash fallback;
       build is `-trimpath`, PIE, FULL RELRO/BIND_NOW via the external linker
-- [x] `makepkg -f` built `gotrust-git r7`; `namcap` only reports the
-      intentional dlopen/external-linker warnings; the extracted binary starts
-      and exits 0 on SIGTERM
+- [x] `makepkg -fC` rebuilt `gotrust-git r18` after Phase 15; the
+      desktop entry and both scalable icons now come from `data/` in the
+      checkout instead of the package `$srcdir`. `namcap` keeps only the
+      intentional purego/dlopen and libresolv warnings; the extracted binary
+      starts, writes `goTrust ready`, and exits 0 on SIGTERM; the installed
+      desktop entry passes `desktop-file-validate` (one category hint)
 - [ ] Install with `pacman -U` after the operator supplies the sudo password;
       the package is built and tested from its extracted tree
 - **Status:** in_progress

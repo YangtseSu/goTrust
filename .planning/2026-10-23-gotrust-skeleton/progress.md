@@ -528,6 +528,11 @@
   - real binary with temporary `XDG_*` directories: window with CJK, the
     settings window opened by keyboard (Tab Tab Enter), the new tray icon in
     the GNOME panel at 16px, SIGTERM exit 0 and no process left
+  - `makepkg -fC` rebuilt `gotrust-git r18`; the package now holds
+    `/usr/bin/goTrust`, the desktop entry, both scalable icons and the licence;
+    `desktop-file-validate` passes (one category hint), the extracted binary
+    starts and exits 0, and `go generate ./...` regenerates the tray PNG with no
+    diff
   - icon checked at 16, 32 and 128 before the code was written; the panel icon
     was identified by zooming a screenshot (it is a blue tile, white shield,
     blue arrow)
@@ -660,6 +665,10 @@
 | State renders | every phase, prompts, settings, light/dark, min sizes | PNGs written and inspected | as expected | pass |
 | Icon at panel size | 16/32 px, GNOME panel | shield and arrow legible | as expected | pass |
 | Native window smoke | real binary, temp XDG | CJK, settings by keyboard, exit 0 | as expected | pass |
+| Package after Phase 15 | `makepkg -fC`, `pacman -Qlp` | binary, desktop, two SVGs, licence | r18, all present | pass |
+| Desktop entry | `desktop-file-validate` | valid, hint only | valid | pass |
+| Packaged binary | extracted `usr/bin/goTrust` | ready line, exit 0 | as expected | pass |
+| Icon regeneration | `go generate ./...` | same PNG, no diff | no diff | pass |
 
 | Live login with captcha | real gateway, operator clicked the image | online with an IP | online, `203.0.113.4` | pass |
 | Live HTTP proxy | `curl -x 127.0.0.1:11081 http://192.0.2.10/` | 200 from the intranet | 200, 507 bytes | pass |
