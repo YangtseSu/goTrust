@@ -59,7 +59,9 @@ permissions.
 
 ## Logging in
 
-Fill in the gateway, port, username and password, then press 连接. If the
+Fill in the gateway, port, username, login domain and password, then press
+连接. The login domain must match what the gateway's `authConfig` offers, for
+example `local` or `Radius`; the upstream client does not guess it. If the
 gateway asks for a click captcha, the window replaces the form with the image:
 click the characters in the order the image asks for, then 提交. 撤销 removes
 the last click, 清空 clears them all, and 取消 abandons the login.

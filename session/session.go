@@ -145,7 +145,10 @@ func (m *Manager) Login(ctx context.Context) error {
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	// The session must outlive the login attempt. The caller's context carries
+	// the attempt's deadline and the application cancels it once Login returns,
+	// so deriving the session from it would stop the keep-alive immediately.
+	sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	m.set(State{Phase: PhaseConnecting, Detail: "preparing the tunnel", Since: time.Now()})
 
 	underlayDialer, err := underlay.New(underlay.Options{})
@@ -248,7 +251,7 @@ func (m *Manager) Login(ctx context.Context) error {
 
 	m.set(State{Phase: PhaseOnline, Detail: gateway, ClientIP: tunnelIP, Since: time.Now()})
 
-	go m.runKeepAlive(ctx, cfg, ipResources)
+	go m.runKeepAlive(sessionCtx, cfg, ipResources)
 	return nil
 }
 

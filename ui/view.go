@@ -34,6 +34,8 @@ type State struct {
 	Password string
 	Server   string
 	Port     string
+	// Domain is the gateway's login domain, as its authConfig names it.
+	Domain string
 	// Captcha is set while the gateway waits for a click captcha. It replaces
 	// the login fields until the user submits or cancels it.
 	Captcha *Captcha
@@ -127,6 +129,9 @@ func fields(c *ui.Context, state *State, actions Actions) {
 			})
 			ui.Field(c, "用户名", func() {
 				ui.TextInput(c, &state.Username)
+			})
+			ui.Field(c, "登录域", func() {
+				ui.TextInput(c, &state.Domain).Placeholder("local")
 			})
 			ui.Field(c, "密码", func() {
 				ui.TextInput(c, &state.Password).Password()

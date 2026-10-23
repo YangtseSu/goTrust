@@ -199,6 +199,10 @@ func (s *Server) startHTTP(ctx context.Context, bind string) error {
 			s.logf("HTTP proxy stopped: %v", err)
 		}
 	}()
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+	}()
 	return nil
 }
 

@@ -43,6 +43,7 @@ func main() {
 	app.view.Server, app.view.Port = cfg.ServerAddress(), strconv.Itoa(cfg.Server.Port)
 	app.view.Username = cfg.Auth.Username
 	app.view.Password = cfg.Auth.Password
+	app.view.Domain = cfg.Auth.Domain
 
 	app.manager = session.New(session.Options{
 		Config: app.currentConfig,
@@ -80,6 +81,9 @@ type app struct {
 	proxy  *gotrustproxy.Server
 	window atomicWindow
 	tray   atomicTray
+	// proxyCancel ends the listeners of the live session. It is separate from
+	// the login attempt's context, which the async helper cancels on return.
+	proxyCancel context.CancelFunc
 	// captcha is the reply channel of the challenge the window is showing,
 	// nil when no login waits on the user.
 	captcha chan captchaResult
@@ -214,7 +218,23 @@ func (a *app) connect(ctx context.Context) error {
 	if err := a.manager.Login(ctx); err != nil {
 		return err
 	}
-	return a.startProxy(ctx)
+
+	// ctx is the attempt's deadline, which async cancels as soon as this
+	// returns. The listeners must live until the session ends.
+	proxyCtx, cancel := context.WithCancel(context.Background())
+	if err := a.startProxy(proxyCtx); err != nil {
+		cancel()
+		return err
+	}
+
+	a.mu.Lock()
+	previous := a.proxyCancel
+	a.proxyCancel = cancel
+	a.mu.Unlock()
+	if previous != nil {
+		previous()
+	}
+	return nil
 }
 
 // onSessionState mirrors the session into the view and refreshes what is on
@@ -273,9 +293,14 @@ func (a *app) disconnect() {
 	a.mu.Lock()
 	server := a.proxy
 	a.proxy = nil
+	cancel := a.proxyCancel
+	a.proxyCancel = nil
 	a.view.Addresses = nil
 	a.mu.Unlock()
 
+	if cancel != nil {
+		cancel()
+	}
 	if server != nil {
 		_ = server.Close()
 	}
@@ -320,6 +345,7 @@ func (a *app) currentConfig() config.Config {
 		cfg.Server.Port = port
 	}
 	cfg.Auth.Username = view.Username
+	cfg.Auth.Domain = strings.TrimSpace(view.Domain)
 	return cfg
 }
 
@@ -329,6 +355,7 @@ func (a *app) currentAuth() config.AuthConfig {
 
 	auth := a.cfg.Auth
 	auth.Username = a.view.Username
+	auth.Domain = strings.TrimSpace(a.view.Domain)
 	auth.Password = a.view.Password
 	return auth
 }

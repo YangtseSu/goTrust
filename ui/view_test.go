@@ -59,6 +59,7 @@ func TestPasswordIsNotShownAsText(t *testing.T) {
 		Port:     "443",
 		Username: "alice",
 		Password: "hunter2",
+		Domain:   "local",
 	}
 
 	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
@@ -69,6 +70,9 @@ func TestPasswordIsNotShownAsText(t *testing.T) {
 	}
 	if !tester.HasText("alice") && !tester.HasText("用户名") {
 		t.Fatal("the password test rendered an unexpected view")
+	}
+	if !tester.HasText("登录域") {
+		t.Fatal("the login domain field is missing")
 	}
 }
 

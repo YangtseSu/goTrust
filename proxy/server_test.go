@@ -399,3 +399,45 @@ func TestBindFailureClosesWhatWasBound(t *testing.T) {
 		t.Fatalf("addresses = %v, want none after a failed start", addresses)
 	}
 }
+
+// Both listeners must stop when the session context ends. A login attempt's
+// deadline is not that context: the app passes one that lives with the session.
+func TestContextCancellationClosesBothListeners(t *testing.T) {
+	socks5Bind := freePort(t)
+	httpBind := freePort(t)
+
+	server, err := New(Options{SOCKS5Bind: socks5Bind, HTTPBind: httpBind, Dial: directDial})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	defer func() { _ = server.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	for _, address := range []string{socks5Bind, httpBind} {
+		conn, err := net.DialTimeout("tcp", address, time.Second)
+		if err != nil {
+			t.Fatalf("dial %s before cancel: %v", address, err)
+		}
+		_ = conn.Close()
+	}
+
+	cancel()
+
+	for _, address := range []string{socks5Bind, httpBind} {
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			conn, err := net.DialTimeout("tcp", address, 100*time.Millisecond)
+			if err != nil {
+				break
+			}
+			_ = conn.Close()
+			if time.Now().After(deadline) {
+				t.Fatalf("%s still accepts connections after the context ended", address)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
