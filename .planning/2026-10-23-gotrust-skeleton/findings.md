@@ -74,6 +74,65 @@ Observed: `gvisor.NewStack => false IP not available` without a live session (ex
 
 Not verified: a live login, a proxy request through a real tunnel, and the keep-alive against a real gateway. The account on this machine belongs to the operator's production service, so the skeleton must not consume a login attempt.
 
+### Transparent proxy: dae, as a daemon, not a library (researched 2026-10-23)
+
+Question: implement eBPF transparent proxying by integrating
+[daeuniverse/dae](https://github.com/daeuniverse/dae) or by running it?
+
+| | dae | goTrust |
+|---|---|---|
+| Licence | AGPL-3.0 | AGPL-3.0 — same, so licensing is not the obstacle |
+| Stars / release | 6.3k, v2.1.1, last push 2026-09-30 | — |
+| Platform | Linux only; the official macOS path is a Lima VM; nothing for Windows | linux/darwin/windows |
+| Kernel | ≥ 5.17 (`bpf_loop`), BTF, cgroup2, tc hooks, `CONFIG_NET_CLS_BPF` | none |
+| Privilege | root, `CAP_BPF` + `CAP_NET_ADMIN` | no elevation |
+| Shape | `cmd/run.go` daemon; `control/` is 200+ internal files plus BPF C and generated objects; no stable library API | 4 packages, 2.4k lines, own `main` |
+
+Decision: **run dae as a separate systemd daemon; goTrust stays the node.**
+
+Why not integrate:
+
+1. Platform. eBPF at the tc hook has no Windows or macOS equivalent; linking dae would make the binary Linux-only or force build tags around the whole data path.
+2. Privilege. Attaching BPF programs needs root. Integrating puts root inside the GUI process, which is exactly what the "no elevation" decision removed, and this time it cannot be removed.
+3. Lifecycle. BPF maps, cgroup attachment and tc qdiscs need cleanup when the process dies. A GUI crash would leave hooks attached; a supervised daemon is the right owner.
+4. API surface. `control/` has no embedding contract; `cmd/run.go` is the only assembly point. Embedding means forking a fast-moving AGPL project.
+5. Duplication. Routing rules, DNS interception, SNI sniffing, node groups, health checks and full-cone NAT all already exist in dae.
+
+Composition (verified against dae's `example.dae`):
+
+```dae
+node { atrust_node: 'socks5://127.0.0.1:1080' }
+
+group {
+    atrust {
+        filter: name(atrust_node)
+        policy: fixed(0)
+    }
+}
+
+routing {
+    pname(goTrust) -> must_direct
+    dip(10.0.0.0/8) -> atrust
+    dip(172.16.0.0/12) -> atrust
+    dip(geoip:private) -> direct
+    fallback: direct
+}
+```
+
+Three operational traps, all sourced from dae's own examples:
+
+1. **Loop.** dae captures local process traffic, including goTrust's TLS to the gateway. Without `pname(goTrust) -> must_direct`, that traffic is routed back into goTrust. dae's README does the same for `NetworkManager` and its naiveproxy guide does it for `pname(naiveproxy)`.
+2. **Rule order.** The example presets `dip(geoip:private) -> direct`. Intranet destinations are private addresses, so the intranet prefixes must be matched before that preset or they never reach the node.
+3. **DNS.** dae derives domain→IP from DNS requests that pass through it. A gateway with split DNS needs the intranet zone routed in `dns { upstream { … } }`, or intranet names never resolve.
+
+Machine readiness on this host: `dae` installed, kernel 7.3 (well above the 5.17 floor), `cgroup2fs`, BPF JIT enabled.
+
+### SOCKS5 resolver bug found while researching the dae outbound (fixed)
+
+`things-go/go-socks5` resolves the FQDN in `handleRequest` before calling the dialer, using `sf.resolver`, which defaults to the system resolver. goTrust did not pass one, so a SOCKS5 client's hostname was resolved locally: intranet names failed outright and public names would have connected outside the tunnel.
+
+`resolve.Resolver.Resolve` already matches `socks5.NameResolver`, so the fix is to inject it. Verified by a test that asserts the injected resolver receives the hostname.
+
 ## Technical Decisions
 
 | Decision | Rationale |
@@ -85,6 +144,8 @@ Not verified: a live login, a proxy request through a real tunnel, and the keep-
 | Config in JSON under `os.UserConfigDir()/goTrust` | No cgo, no third-party config parser in the skeleton |
 | `Options.Config` and `Options.Auth` are functions | The user edits the form after the manager exists; a login must use what is on screen |
 | `mygo.App.Quit`, not `Exit` | `Exit` skips quit events, so the tray, the listeners and the single-instance lock outlive the process |
+| Transparent proxy delegated to `dae`, not embedded | eBPF is Linux-only and needs root; a separate daemon keeps goTrust cross-platform and unprivileged |
+| `proxy.Options.Resolver` injected from the session | The library would otherwise resolve SOCKS5 hostnames with the system resolver, outside the tunnel |
 | `ui.TextInput`, not `ui.EditableText` | `EditableText` is an inline-rename control that paints its value; only `TextInput` honours `Password()` |
 | Listeners own their `context` lifecycle | Removes the `hook_func` dependency that blocks external shutdown |
 
@@ -102,6 +163,8 @@ Not verified: a live login, a proxy request through a real tunnel, and the keep-
 - Embeddable packages: `client`, `client/atrust`, `client/authchallenge`, `dial`, `resolve`, `stack/gvisor`, `underlay`, `service`
 - mygo docs: `https://mygo.egoist.dev/`, `docs/` in `egoist/mygo`
 - SOCKS5 library already used upstream: `github.com/things-go/go-socks5 v0.1.1`
+- dae: `https://github.com/daeuniverse/dae`, config reference `example.dae`, `docs/en/configuration/routing.md`, `docs/en/proxy-protocols.md`
+- dae prototype path: `node { 'socks5://host:port' }` plus a `group` with `filter: name(...)`
 
 ## Visual/Browser Findings
 

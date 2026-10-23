@@ -6,11 +6,11 @@ A buildable, runnable Go desktop app skeleton in `~/projects/goTrust` that start
 
 ## Next Step
 
-Phase 7 verification: launch the built binary with a live gateway configuration and observe a real login, a real proxy request, and the tray.
+Phase 8: add `--print-dae-config`, emitting a dae `node`/`group`/`routing` fragment for the current listeners and the session's intranet prefixes, with tests for the loop rule and the rule ordering.
 
 ## Current Phase
 
-Phase 7
+Phase 8
 
 ## Phases
 
@@ -64,8 +64,26 @@ Phase 7
 - [x] `go build ./...` and `go vet ./...` clean
 - [x] Proxy integration test with a fake dialer and a local echo server
 - [x] Launch the real binary, observe window and tray, then SIGTERM
-- [ ] Live gateway login, proxy request and keep-alive on a real account
-- **Status:** in_progress
+- [x] SOCKS5 resolves hostnames through the tunnel resolver (regression test)
+- **Status:** complete
+
+### Phase 8: Transparent proxy via dae (next)
+
+Research is in `findings.md`; dae stays a separate daemon.
+
+- [ ] `--print-dae-config` emits `node`/`group`/`routing` for the configured listeners
+- [ ] Intranet prefixes derived from the session's IP resources, not hardcoded
+- [ ] The emitted rules always start with `pname(goTrust) -> must_direct`
+- [ ] Intranet prefixes precede any private-range preset, and the reason is a comment in the output
+- [ ] Tests: prefix derivation, loop rule present, ordering, an unconnected session still emits a usable template
+- [ ] README section "Transparent proxy (optional)" with the daemon boundary and the DNS caveat
+- **Status:** pending
+
+### Phase 9: Live gateway verification (blocked)
+
+- [ ] Real login, proxied request and keep-alive against a gateway
+- **Status:** pending
+- **Blocked on:** an account that may be consumed; the only account on this host belongs to the operator's production service
 
 ## Key Questions
 

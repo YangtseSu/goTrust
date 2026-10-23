@@ -81,6 +81,18 @@
 - Remaining:
   - a live login, a proxied request and the keep-alive against a real gateway
 
+### Transparent proxy research
+
+- **Status:** complete (recorded, implementation deferred to Phase 8)
+- Actions taken:
+  - compared dae and goTrust on licence, platform, kernel, privilege and API shape
+  - read `example.dae`, `proxy-protocols.md`, `how-it-works.md` and the kernel requirements
+  - confirmed dae's socks5 outbound syntax and the three configuration traps
+  - found and fixed the SOCKS5 resolver bug while reading the outbound path
+- Files created/modified:
+  - `proxy/server.go`, `proxy/server_test.go`, `main.go` (resolver injection)
+  - `.planning/2026-10-23-gotrust-skeleton/findings.md` (research record)
+
 ## Test Results
 
 | Test | Input | Expected | Actual | Status |
@@ -99,6 +111,7 @@
 | Password masking | `hunter2` in the field | not readable | rendered as dots | pass |
 | Graceful quit | SIGTERM | exits, socket removed | exits, socket removed | pass |
 | Cross-compile | 3 targets, `CGO_ENABLED=0` | builds | builds | pass |
+| SOCKS5 resolver injection | CONNECT with a hostname | injected resolver asked | asked with the hostname | pass |
 
 ## Error Log
 
@@ -111,8 +124,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 7, verification (live-gateway check outstanding) |
-| Where am I going? | live login, proxied request, keep-alive |
+| Where am I? | Phase 8, dae config emitter (Phase 9 needs an account) |
+| Where am I going? | `--print-dae-config`, README, then live verification |
 | What's the goal? | a buildable, runnable goTrust skeleton |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps) |
 | What have I done? | four packages written and tested; binary built, launched and shut down cleanly |
