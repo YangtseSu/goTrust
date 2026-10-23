@@ -93,6 +93,36 @@
   - `proxy/server.go`, `proxy/server_test.go`, `main.go` (resolver injection)
   - `.planning/2026-10-23-gotrust-skeleton/findings.md` (research record)
 
+### Click captcha
+
+- **Status:** complete
+- Actions taken:
+  - read the reference implementation in `EZ4Connect`
+    (`GraphCaptchaWindow`, `CaptchaCanvas`) and the upstream
+    `authchallenge` flow: aTrust sends an image and expects
+    `{"coordinates":[[x,y],…],"width":W,"height":H}`
+  - added `ui.Captcha` with the source image, its pixel size and the picked
+    points; display size keeps the aspect ratio and clicks map back to image
+    pixels
+  - drew the panel in the main window: numbered markers, 撤销/清空/提交/取消,
+    and the login fields are hidden while the prompt is up
+  - changed `session.Options.Prompt` to take the login context, so cancelling
+    the login releases a handler that is waiting for the user
+  - added `uiPrompter` in `prompt.go`: decodes the image, publishes the panel,
+    blocks the login goroutine on a buffered channel, and converts the points
+    to `authchallenge.ClickCaptchaResponse`
+  - `--no-ui` still refuses the click captcha, but now says the window is
+    required
+  - raised the async deadline to 5 minutes so the captcha wait fits
+  - rendered the panel with the mygo test renderer and verified the numbered
+    markers and button row visually; launched the binary and stopped it with
+    SIGTERM
+- Files created/modified:
+  - `ui/captcha.go`, `ui/view.go`, `ui/captcha_test.go`
+  - `session/session.go` (`Prompt` signature)
+  - `main.go`, `prompt.go`, `prompt_test.go`
+  - `README.md`, this plan
+
 ## Test Results
 
 | Test | Input | Expected | Actual | Status |
@@ -112,6 +142,15 @@
 | Graceful quit | SIGTERM | exits, socket removed | exits, socket removed | pass |
 | Cross-compile | 3 targets, `CGO_ENABLED=0` | builds | builds | pass |
 | SOCKS5 resolver injection | CONNECT with a hostname | injected resolver asked | asked with the hostname | pass |
+| Captcha pixel mapping | 100×50 image drawn at 400×200, centre click | `{50 25}`; edges rejected | correct | pass |
+| Captcha panel | two pre-picked points | count, numbered markers, click adds a point | all present; click mapped to `{25 25}` | pass |
+| Captcha buttons | 撤销/清空/提交/取消 | each action once; empty submit disabled | correct | pass |
+| Captcha submit payload | two points through `uiPrompter` | size 80×40 and points in order | correct | pass |
+| Captcha cancellation | window cancel and login-context cancel | handler returns error, panel cleared | both | pass |
+| Captcha bad image | empty and non-image bytes | error, no panel | both | pass |
+| Captcha panel render | mygo test renderer, 520×560 | numbered markers and buttons visible | rendered | pass |
+| Race detector | `go test -race . ./ui ./session` | no data race | clean | pass |
+| Binary after the change | launch, 6 s, SIGTERM | ready line, exit 0 | exit 0 | pass |
 
 ## Error Log
 
@@ -124,8 +163,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 8, dae config emitter (Phase 9 needs an account) |
-| Where am I going? | `--print-dae-config`, README, then live verification |
+| Where am I? | Phase 10 done (click captcha); Phase 9 waits on an account |
+| Where am I going? | live login/proxy/keep-alive, or `--print-dae-config` while waiting |
 | What's the goal? | a buildable, runnable goTrust skeleton |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps) |
 | What have I done? | four packages written and tested; binary built, launched and shut down cleanly |

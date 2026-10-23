@@ -6,11 +6,13 @@ A buildable, runnable Go desktop app skeleton in `~/projects/goTrust` that start
 
 ## Next Step
 
-Phase 8: add `--print-dae-config`, emitting a dae `node`/`group`/`routing` fragment for the current listeners and the session's intranet prefixes, with tests for the loop rule and the rule ordering.
+Phase 9: a real login, proxied request and keep-alive once a disposable
+account is provided. Phase 8 (`--print-dae-config`) remains available if
+verification must wait.
 
 ## Current Phase
 
-Phase 8
+Phase 9
 
 ## Phases
 
@@ -83,7 +85,23 @@ Research is in `findings.md`; dae stays a separate daemon.
 
 - [ ] Real login, proxied request and keep-alive against a gateway
 - **Status:** pending
-- **Blocked on:** an account that may be consumed; the only account on this host belongs to the operator's production service
+- **Blocked on:** a disposable account. The only account on this host belongs
+  to the operator's production service.
+
+### Phase 10: Click captcha (complete)
+
+The gateway the operator uses asks for a click captcha. The reference
+implementation is `EZ4Connect`'s `GraphCaptchaWindow`/`CaptchaCanvas`; the
+protocol writes `{"coordinates":[[x,y],…],"width":W,"height":H}`.
+
+- [x] `ui.Captcha`: image, source size, picked points, display mapping
+- [x] In-window panel: numbered markers, 撤销/清空/提交/取消, fields hidden while pending
+- [x] `session.Options.Prompt` takes the login context so a cancel releases the handler
+- [x] `uiPrompter` decodes the image, blocks the login goroutine, and returns the points
+- [x] `--no-ui` keeps refusing with a message that names the window requirement
+- [x] Tests: pixel mapping, panel clicks, submit payload, window/context cancel, bad image
+- [x] README "Logging in" section
+- **Status:** complete
 
 ## Key Questions
 

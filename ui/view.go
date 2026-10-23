@@ -7,6 +7,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -33,6 +34,9 @@ type State struct {
 	Password string
 	Server   string
 	Port     string
+	// Captcha is set while the gateway waits for a click captcha. It replaces
+	// the login fields until the user submits or cancels it.
+	Captcha *Captcha
 }
 
 // Actions are what the window can ask the application to do.
@@ -43,6 +47,14 @@ type Actions struct {
 	Quit   func()
 	// Save remembers the edited settings without connecting.
 	Save func()
+	// The captcha callbacks drive the pending click captcha: one point in
+	// image pixels at a time, an undo, a clear, the submit, and a cancel that
+	// abandons the login.
+	AddCaptchaPoint func(Point)
+	UndoCaptcha     func()
+	ClearCaptcha    func()
+	SubmitCaptcha   func()
+	CancelCaptcha   func()
 }
 
 // View renders one frame.
@@ -50,8 +62,12 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 	return func(c *ui.Context) {
 		ui.Column(c).Fill().Padding(20).Gap(14).Children(func() {
 			header(c, state)
-			fields(c, state, actions)
-			controls(c, state, actions)
+			if state.Captcha != nil {
+				captchaPanel(c, state, actions)
+			} else {
+				fields(c, state, actions)
+				controls(c, state, actions)
+			}
 			footer(c, state)
 		})
 	}
@@ -115,6 +131,62 @@ func fields(c *ui.Context, state *State, actions Actions) {
 			ui.Field(c, "密码", func() {
 				ui.TextInput(c, &state.Password).Password()
 			})
+		})
+	})
+}
+
+// captchaPanel replaces the login fields while the gateway waits for a click
+// captcha. The image is drawn at a known size so a click maps back to the
+// pixels the gateway expects, and the picked points are numbered in order.
+func captchaPanel(c *ui.Context, state *State, actions Actions) {
+	captcha := state.Captcha
+	width, height := captcha.DisplaySize()
+
+	ui.Column(c).Gap(10).Children(func() {
+		ui.Text(c, "点击图形验证码").FontSize(16).Bold()
+		ui.Text(c, "请按图中提示的顺序点击字符，然后提交。").FontSize(12)
+
+		if captcha.Image == nil || width <= 0 || height <= 0 {
+			ui.Text(c, "验证码图片无法显示，请取消后重试。").FontSize(12)
+		} else {
+			ui.Box(c).Width(width).Height(height).Children(func() {
+				image := ui.Image(c, captcha.Image).Width(width).Height(height).Label("图形验证码图片")
+				image.OnClick(func() {
+					x, y, ok := image.PointerPosition()
+					if !ok {
+						return
+					}
+					point, ok := captcha.PointAt(x, y)
+					if ok && actions.AddCaptchaPoint != nil {
+						actions.AddCaptchaPoint(point)
+					}
+				})
+				for i, point := range captcha.Points {
+					left := float32(point.X)*width/float32(captcha.Width) - 9
+					top := float32(point.Y)*height/float32(captcha.Height) - 9
+					ui.Box(c).Absolute().Left(left).Top(top).Width(18).Height(18).
+						Radius(9).Background(ui.RGBA(214, 48, 49, 0.92)).Center().PassThrough().
+						Children(func() {
+							ui.Text(c, strconv.Itoa(i+1)).FontSize(10).TextColor(ui.Hex("#ffffff"))
+						})
+				}
+			})
+		}
+
+		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+			ui.Text(c, fmt.Sprintf("已点击 %d 个位置", len(captcha.Points))).FontSize(12)
+			if ui.Button(c, "撤销").Disabled(len(captcha.Points) == 0).Clicked() && actions.UndoCaptcha != nil {
+				actions.UndoCaptcha()
+			}
+			if ui.Button(c, "清空").Disabled(len(captcha.Points) == 0).Clicked() && actions.ClearCaptcha != nil {
+				actions.ClearCaptcha()
+			}
+			if ui.PrimaryButton(c, "提交").Disabled(len(captcha.Points) == 0).Clicked() && actions.SubmitCaptcha != nil {
+				actions.SubmitCaptcha()
+			}
+			if ui.Button(c, "取消").Clicked() && actions.CancelCaptcha != nil {
+				actions.CancelCaptcha()
+			}
 		})
 	})
 }

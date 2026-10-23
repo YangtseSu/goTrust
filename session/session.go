@@ -80,8 +80,11 @@ type Options struct {
 	// login time also means a password the user chose not to save never comes
 	// back from disk.
 	Auth func() config.AuthConfig
-	// Prompt is required for accounts with a second factor.
-	Prompt Prompter
+	// Prompt builds the handler for one login attempt. It is a function
+	// because a handler that waits for the user must stop waiting when the
+	// attempt's context ends: a cancelled login must not leave a dialog open.
+	// A gateway without a second factor never calls it.
+	Prompt func(ctx context.Context) Prompter
 	// Logf receives progress lines. Nil discards them.
 	Logf func(format string, args ...any)
 	// OnState is called on every transition, from the goroutine that caused it.
@@ -178,12 +181,20 @@ func (m *Manager) Login(ctx context.Context) error {
 
 	m.set(State{Phase: PhaseConnecting, Detail: "logging in", Since: time.Now()})
 
+	// A nil handler panics the upstream client when a gateway asks for a
+	// challenge, so a configuration without one still gets a handler that
+	// refuses with a reason.
+	var prompt Prompter = authchallenge.UnsupportedHandler{}
+	if m.options.Prompt != nil {
+		prompt = m.options.Prompt(ctx)
+	}
+
 	if _, err := client.SetupContext(ctx, atrust.SetupOptions{
 		ServerAddress:            cfg.ServerAddress(),
 		ServerPort:               cfg.Server.Port,
 		LoginMethod:              loginMethod,
 		ClientData:               clientData,
-		ChallengeHandler:         m.options.Prompt,
+		ChallengeHandler:         prompt,
 		BestNodesRefreshInterval: 5 * time.Minute,
 		SessionRefreshInterval:   60 * time.Second,
 		SaveClientData: func(data []byte) error {

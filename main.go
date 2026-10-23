@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/mythologyli/zju-connect/client/authchallenge"
 
 	"github.com/YangtseSu/goTrust/config"
 	gotrustproxy "github.com/YangtseSu/goTrust/proxy"
@@ -47,9 +45,14 @@ func main() {
 	app.view.Password = cfg.Auth.Password
 
 	app.manager = session.New(session.Options{
-		Config:  app.currentConfig,
-		Auth:    app.currentAuth,
-		Prompt:  cliPrompter{logger: logger},
+		Config: app.currentConfig,
+		Auth:   app.currentAuth,
+		Prompt: func(ctx context.Context) session.Prompter {
+			if *headless {
+				return cliPrompter{logger: logger}
+			}
+			return &uiPrompter{app: app, ctx: ctx}
+		},
 		Logf:    logger.Printf,
 		OnState: app.onSessionState,
 	})
@@ -77,6 +80,9 @@ type app struct {
 	proxy  *gotrustproxy.Server
 	window atomicWindow
 	tray   atomicTray
+	// captcha is the reply channel of the challenge the window is showing,
+	// nil when no login waits on the user.
+	captcha chan captchaResult
 }
 
 func loadConfig(path string) (config.Config, error) {
@@ -177,13 +183,21 @@ func (a *app) actions() gotrustui.Actions {
 			})
 		},
 		Quit: func() { mygo.App.Quit() },
+
+		AddCaptchaPoint: a.addCaptchaPoint,
+		UndoCaptcha:     a.undoCaptchaPoint,
+		ClearCaptcha:    a.clearCaptchaPoints,
+		SubmitCaptcha:   a.submitCaptcha,
+		CancelCaptcha:   func() { a.cancelCaptcha(errors.New("captcha cancelled")) },
 	}
 }
 
 // async runs work off the UI thread and reports the outcome in the status line.
 func (a *app) async(fn func(context.Context) error) {
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		// The login may wait on a person reading a captcha, so the deadline
+		// covers more than the network work.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
 		a.setStatus("…", true)
@@ -254,6 +268,8 @@ func (a *app) startProxy(ctx context.Context) error {
 }
 
 func (a *app) disconnect() {
+	a.cancelCaptcha(errors.New("login cancelled"))
+
 	a.mu.Lock()
 	server := a.proxy
 	a.proxy = nil
@@ -323,30 +339,11 @@ func (a *app) setStatus(message string, busy bool) {
 	a.view.Busy = busy
 	a.mu.Unlock()
 
+	a.invalidate()
+}
+
+func (a *app) invalidate() {
 	if window := a.window.Load(); window != nil {
 		window.Invalidate()
 	}
-}
-
-// cliPrompter answers the login prompts nothing else can: in a window build the
-// dialog is the right place, and here it refuses rather than blocking forever on
-// a stdin that may not exist.
-type cliPrompter struct {
-	logger *log.Logger
-}
-
-func (p cliPrompter) HandleCodeChallenge(challenge authchallenge.CodeChallenge) (authchallenge.CodeResponse, error) {
-	return authchallenge.CodeResponse{}, fmt.Errorf("this login needs a one-time code (%s) and the dialog is not implemented yet", challenge.Message)
-}
-
-func (p cliPrompter) HandleTextCaptcha(authchallenge.TextCaptchaChallenge) (authchallenge.TextCaptchaResponse, error) {
-	return authchallenge.TextCaptchaResponse{}, errors.New("this gateway asked for a text captcha, which the skeleton does not handle yet")
-}
-
-func (p cliPrompter) HandleClickCaptcha(authchallenge.ClickCaptchaChallenge) (authchallenge.ClickCaptchaResponse, error) {
-	return authchallenge.ClickCaptchaResponse{}, errors.New("this gateway asked for a click captcha, which the skeleton does not handle yet")
-}
-
-func (p cliPrompter) HandleExternalLogin(challenge authchallenge.ExternalLoginChallenge) (authchallenge.ExternalLoginResponse, error) {
-	return authchallenge.ExternalLoginResponse{}, fmt.Errorf("this login needs a browser at %s, which the skeleton does not open yet", challenge.LoginURL)
 }
