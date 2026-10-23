@@ -4,11 +4,13 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/session"
 )
 
 func TestSettingsApplyBuildsAProfile(t *testing.T) {
@@ -242,5 +244,137 @@ func TestSettingsReloadDiscardsEdits(t *testing.T) {
 	state.Reload(config.Default())
 	if state.NameText != config.DefaultProfileName || state.Ports[0] != "443" {
 		t.Fatalf("reload kept edits: %q %q", state.NameText, state.Ports[0])
+	}
+}
+
+// Choosing a discovered method stores the exact pair the gateway matches;
+// choosing 自动 clears it again.
+func TestSettingsSelectAuthStoresThePair(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	methods := []session.AuthMethod{
+		{Name: "密码登录", Type: "auth/psw", Domain: "local"},
+		{Name: "统一认证", Type: "auth/cas", Domain: "Radius"},
+	}
+
+	state.SetMethods(methods, "vpn.example.com|443", "已获取 2 种认证方式")
+	if state.Discovering {
+		t.Fatal("the state is still marked as discovering")
+	}
+	state.SelectAuth(2)
+	if pair := state.Draft.Profiles[0].Auth; pair.AuthType != "auth/cas" || pair.Domain != "Radius" {
+		t.Fatalf("pair = %s · %s", pair.AuthType, pair.Domain)
+	}
+	if state.Status != "认证方式："+MethodLabel(methods[1]) {
+		t.Fatalf("status = %q", state.Status)
+	}
+
+	// The saved-but-not-offered entry changes nothing.
+	state.SelectAuth(3)
+	if got := state.Draft.Profiles[0].Auth.AuthType; got != "auth/cas" {
+		t.Fatalf("the trailing entry changed the pair to %q", got)
+	}
+
+	state.SelectAuth(0)
+	if got := state.Draft.Profiles[0].Auth.AuthType; got != "" {
+		t.Fatalf("automatic left %q stored", got)
+	}
+}
+
+// A saved pair the gateway no longer lists is still shown, and switching
+// profiles drops the list because it belongs to the other gateway.
+func TestSettingsMethodOptionsKeepAStalePair(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	state.Draft.Profiles[0].Auth.AuthType = "auth/radius"
+	state.Draft.Profiles[0].Auth.Domain = "local"
+
+	options := methodOptions(state.Methods, "auth/radius", "local")
+	if len(options) != 2 || options[0] != authAutoLabel {
+		t.Fatalf("options = %v", options)
+	}
+	if !strings.Contains(options[1], "网关未提供") {
+		t.Fatalf("options = %v", options)
+	}
+
+	state.SetMethods([]session.AuthMethod{{Name: "密码登录", Type: "auth/psw", Domain: "local"}}, "vpn.example.com|443", "ok")
+	state.AddProfile()
+	if state.Methods != nil {
+		t.Fatal("the method list survived a profile switch")
+	}
+}
+
+// Discovery queries the gateway in the draft, so the port text field has to be
+// usable before a save.
+func TestSettingsTargetReadsTheDraft(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	if _, err := state.Target(); err == nil {
+		t.Fatal("an empty gateway address produced a target")
+	}
+
+	state.Draft.Profiles[0].Server.Address = " vpn.example.com "
+	state.Ports[0] = "8443"
+	profile, err := state.Target()
+	if err != nil {
+		t.Fatalf("target: %v", err)
+	}
+	if profile.ServerAddress() != "vpn.example.com" || profile.Server.Port != 8443 {
+		t.Fatalf("target = %+v", profile.Server)
+	}
+
+	state.Ports[0] = "0"
+	if _, err := state.Target(); err == nil {
+		t.Fatal("an out-of-range port produced a target")
+	}
+}
+
+// The settings window shows the picker, the discover button and the hint.
+func TestSettingsViewShowsTheAuthPicker(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	methods := []session.AuthMethod{
+		{Name: "密码登录", Type: "auth/psw", Domain: "local"},
+		{Name: "统一认证", Type: "auth/cas", Domain: "local"},
+	}
+	state.SetMethods(methods, "vpn.example.com|443", "已获取 2 种认证方式")
+	state.SelectAuth(2)
+
+	discovered := 0
+	actions := SettingsActions{
+		DiscoverAuth: func() { discovered++ },
+	}
+
+	tester := ui.NewTester(SettingsView(state, actions), 560, 1600)
+	tester.Frame()
+
+	for _, wanted := range []string{"认证方式", "获取认证方式", "网关提供 2 种认证方式", MethodLabel(methods[1])} {
+		if !tester.HasText(wanted) {
+			t.Fatalf("%q is missing from the settings window", wanted)
+		}
+	}
+
+	if err := tester.Click("获取认证方式"); err != nil {
+		t.Fatalf("click discover: %v", err)
+	}
+	if discovered != 1 {
+		t.Fatalf("discover calls = %d", discovered)
+	}
+}
+
+// A save keeps the discovered list when the gateway did not change; editing
+// the address drops it, because the pairs belong to the old gateway.
+func TestSettingsReloadKeepsMethodsForTheSameGateway(t *testing.T) {
+	cfg := config.Default()
+	cfg.Profiles[0].Server.Address = "vpn.example.com"
+	state := NewSettingsState(cfg, "/tmp/logs")
+	state.SetMethods([]session.AuthMethod{{Type: "auth/psw", Domain: "local"}}, "vpn.example.com|443", "ok")
+
+	state.Reload(cfg)
+	if len(state.Methods) != 1 {
+		t.Fatalf("methods after reload = %+v", state.Methods)
+	}
+
+	other := cfg.Clone()
+	other.Profiles[0].Server.Address = "other.example.com"
+	state.Reload(other)
+	if state.Methods != nil {
+		t.Fatalf("methods survived a gateway change: %+v", state.Methods)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -73,17 +74,24 @@ func main() {
 		}
 	}
 
-	application.manager = session.New(session.Options{
-		Config: application.currentConfig,
-		Prompt: func(ctx context.Context) session.Prompter {
-			if *headless {
-				return cliPrompter{logger: application.logger}
-			}
-			return &uiPrompter{app: application, ctx: ctx}
-		},
+	// A headless run cannot show a captcha, a code dialog or the method
+	// chooser, so it fails with a message instead of waiting for a window.
+	sessionOptions := session.Options{
+		Config:  application.currentConfig,
 		Logf:    application.logf,
 		OnState: application.onSessionState,
-	})
+	}
+	if *headless {
+		sessionOptions.Prompt = func(context.Context) session.Prompter {
+			return cliPrompter{logger: application.logger}
+		}
+	} else {
+		sessionOptions.Prompt = func(ctx context.Context) session.Prompter {
+			return &uiPrompter{app: application, ctx: ctx}
+		}
+		sessionOptions.ChooseAuth = application.chooseAuth
+	}
+	application.manager = session.New(sessionOptions)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -124,8 +132,15 @@ type app struct {
 	// that is waiting on the network or on the user.
 	attempt *attemptCancel
 	// captcha is the reply channel of the challenge the window is showing,
-	// nil when no login waits on the user.
-	captcha chan captchaResult
+	// nil when no login waits on the user. code, external and choice are the
+	// same for a one-time code, an SSO callback and the method chooser.
+	captcha  chan captchaResult
+	code     chan codeResult
+	external chan externalResult
+	choice   chan choiceResult
+	// browser opens a URL; nil uses the desktop's default browser. Tests
+	// replace it because opening a browser is a visible side effect.
+	browser func(string) error
 	// stopping suppresses the failure reveal while 断开 cancels a login: the
 	// user asked for it, so the window must not pop up with "cancelled".
 	stopping bool
@@ -358,6 +373,14 @@ func (a *app) actions() gotrustui.Actions {
 		ClearCaptcha:    a.clearCaptchaPoints,
 		SubmitCaptcha:   a.submitCaptcha,
 		CancelCaptcha:   func() { a.cancelCaptcha(errors.New("captcha cancelled")) },
+
+		SubmitCode:     a.submitCode,
+		CancelCode:     func() { a.cancelCode(errors.New("code cancelled")) },
+		OpenExternal:   a.openExternal,
+		SubmitExternal: a.submitExternal,
+		CancelExternal: func() { a.cancelExternal(errors.New("external login cancelled")) },
+		ChooseAuth:     a.chooseAuthIndex,
+		CancelChoice:   func() { a.cancelChoice(errors.New("authentication method cancelled")) },
 	}
 }
 
@@ -391,6 +414,10 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 		SetAutostart: a.setAutostart,
 		SetVerbose:   a.setVerbose,
 		OpenLogs:     a.openLogs,
+		DiscoverAuth: a.discoverAuth,
+		SelectAuth: func(index int) {
+			mutate(func(state *gotrustui.SettingsState) { state.SelectAuth(index) })
+		},
 	}
 }
 
@@ -545,12 +572,17 @@ func (a *app) startProxy(ctx context.Context) error {
 }
 
 func (a *app) disconnect() {
-	a.cancelCaptcha(errors.New("login cancelled"))
+	// Mark the stop first: releasing a prompt wakes the login goroutine, and a
+	// failure it reports to a user who asked to disconnect must not grab the
+	// window.
+	a.mu.Lock()
+	a.stopping = true
+	a.mu.Unlock()
+	a.cancelPrompts(errors.New("login cancelled"))
 
 	a.mu.Lock()
 	attempt := a.attempt
 	a.attempt = nil
-	a.stopping = true
 	server := a.proxy
 	a.proxy = nil
 	cancel := a.proxyCancel
@@ -739,6 +771,66 @@ func (a *app) openLogs() {
 		}
 		a.logf("open logs: %v", err)
 	}
+}
+
+// discoverAuth asks the gateway in the settings draft for its authentication
+// methods. The request runs off the UI thread; the answer is applied on it, so
+// the view never reads a half-updated draft.
+func (a *app) discoverAuth() {
+	a.mu.RLock()
+	state := a.settings
+	a.mu.RUnlock()
+	if state == nil {
+		return
+	}
+
+	target, err := state.Target()
+	if err != nil {
+		state.Status = err.Error()
+		a.invalidateSettings()
+		return
+	}
+
+	key := keyForTarget(target)
+	state.Discovering = true
+	state.Methods = nil
+	state.MethodsFrom = ""
+	state.Status = "正在向网关查询认证方式…"
+	a.invalidateSettings()
+
+	go func() {
+		// The pre-login request has a 20 s transport timeout of its own; the
+		// context covers the underlay dial and a hung TLS handshake.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		methods, discoverErr := session.DiscoverAuthMethods(ctx, target)
+
+		mygo.RunOnMain(func() {
+			a.mu.RLock()
+			current := a.settings
+			a.mu.RUnlock()
+			if current != state {
+				return
+			}
+			switch {
+			case discoverErr != nil:
+				state.SetMethods(nil, key, "获取认证方式失败: "+discoverErr.Error())
+				a.logf("discover auth methods: %v", discoverErr)
+			case len(methods) == 0:
+				state.SetMethods(nil, key, "网关没有提供认证方式（可能已经登录）")
+			default:
+				state.SetMethods(methods, key, fmt.Sprintf("已获取 %d 种认证方式", len(methods)))
+				a.logf("gateway offers %d authentication method(s)", len(methods))
+			}
+			a.invalidateSettings()
+		})
+	}()
+}
+
+// keyForTarget names the gateway a discovery ran against, in the same form the
+// settings draft uses.
+func keyForTarget(profile config.Profile) string {
+	return profile.ServerAddress() + "|" + strconv.Itoa(profile.Server.Port)
 }
 
 // applyConfig makes cfg the settings in effect. It does not touch a live

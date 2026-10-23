@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/egoist/mygo v0.6.3
 	github.com/mythologyli/zju-connect v1.3.1-0.20261020024545-4e07ac667f87
+	github.com/pquerna/otp v1.5.0
 	github.com/things-go/go-socks5 v0.1.1
 )
 
@@ -24,7 +25,6 @@ require (
 	github.com/mythologyli/sing-tun v0.0.0-20260201144630-c04d9db95dc7 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
-	github.com/pquerna/otp v1.5.0 // indirect
 	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
 	github.com/sagernet/go-tun2socks v1.16.12-0.20220818015926-16cb67876a61 // indirect

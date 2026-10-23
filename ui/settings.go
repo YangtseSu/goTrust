@@ -13,6 +13,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/session"
 )
 
 // SettingsState is the settings window's draft. It is a clone of the live
@@ -33,6 +34,12 @@ type SettingsState struct {
 	Status     string
 	LogDir     string
 	Busy       bool
+	// Methods are the gateway's offered authentication methods, filled by 获取
+	// 认证方式. MethodsFrom is the gateway they belong to, so a reload or a
+	// profile switch only drops them when the target really changed.
+	Methods     []session.AuthMethod
+	MethodsFrom string
+	Discovering bool
 	// ActiveAtOpen is the profile the saved settings point at. It differs from
 	// the edited one after a dropdown choice, which is what the save hint
 	// reports.
@@ -52,6 +59,10 @@ type SettingsActions struct {
 	// SetVerbose changes the running log level immediately.
 	SetVerbose func(bool)
 	OpenLogs   func()
+	// DiscoverAuth asks the gateway in the draft for its authentication
+	// methods; SelectAuth stores the chosen one in the draft.
+	DiscoverAuth func()
+	SelectAuth   func(int)
 }
 
 // NewSettingsState copies cfg into an editable draft and selects the active
@@ -92,6 +103,7 @@ func (s *SettingsState) refresh() {
 func (s *SettingsState) Reload(cfg config.Config) {
 	s.Draft = cfg.Clone()
 	s.ActiveAtOpen = cfg.ActiveProfile
+	s.Discovering = false
 	s.Selected = s.Draft.ActiveIndex()
 	if s.Selected < 0 {
 		s.Selected = 0
@@ -103,6 +115,7 @@ func (s *SettingsState) Reload(cfg config.Config) {
 		s.NameText = s.Draft.Profiles[s.Selected].Name
 		s.SelectText = s.NameText
 	}
+	s.dropStaleMethods()
 }
 
 // Select edits the profile at index. It reports whether the selection changed;
@@ -116,7 +129,87 @@ func (s *SettingsState) Select(index int) bool {
 	s.Selected = index
 	s.NameText = s.Draft.Profiles[index].Name
 	s.SelectText = s.NameText
+	if changed {
+		s.dropStaleMethods()
+	}
 	return changed
+}
+
+// SetMethods stores the result of a discovery. target is the gateway the list
+// was read from; the caller fills Status with the outcome, so a failed
+// discovery can clear the list and say why.
+func (s *SettingsState) SetMethods(methods []session.AuthMethod, target, status string) {
+	s.Methods = methods
+	s.MethodsFrom = target
+	s.Discovering = false
+	s.Status = status
+}
+
+// dropStaleMethods forgets a list that belongs to another gateway.
+func (s *SettingsState) dropStaleMethods() {
+	if s.MethodsFrom == "" {
+		s.Methods = nil
+		return
+	}
+	if s.MethodsFrom != s.targetKey() {
+		s.Methods = nil
+		s.MethodsFrom = ""
+	}
+}
+
+// targetKey names the gateway the draft points at, port buffer included. Two
+// gateways at different ports are different targets even at one address.
+func (s *SettingsState) targetKey() string {
+	s.refresh()
+	if s.Selected < 0 || s.Selected >= len(s.Draft.Profiles) {
+		return ""
+	}
+	profile := s.Draft.Profiles[s.Selected]
+	return targetKey(profile.ServerAddress(), s.Ports[s.Selected])
+}
+
+// targetKey is the key discovery records and the draft checks: the address
+// without surrounding spaces and the port as typed.
+func targetKey(address, port string) string {
+	return strings.TrimSpace(address) + "|" + strings.TrimSpace(port)
+}
+
+// SelectAuth stores the method at index in the draft: 0 is automatic and the
+// indexes after it are the discovered methods. The trailing "saved but not
+// offered" entry changes nothing.
+func (s *SettingsState) SelectAuth(index int) {
+	s.refresh()
+	profile := &s.Draft.Profiles[s.Selected]
+	if index == 0 {
+		profile.Auth.AuthType = ""
+		s.Status = "认证方式：自动"
+		return
+	}
+	if index-1 >= len(s.Methods) || index < 0 {
+		return
+	}
+	method := s.Methods[index-1]
+	profile.Auth.AuthType = method.Type
+	profile.Auth.Domain = method.Domain
+	s.Status = "认证方式：" + MethodLabel(method)
+}
+
+// Target is the gateway the editor points at, with the port from its text
+// field. Discovery has to use the draft: the user is usually editing a new
+// gateway when asking what it offers.
+func (s *SettingsState) Target() (config.Profile, error) {
+	s.refresh()
+	profile := s.Draft.Profiles[s.Selected]
+	port, err := strconv.Atoi(strings.TrimSpace(s.Ports[s.Selected]))
+	if err != nil || port < 1 || port > 65535 {
+		return profile, errors.New("端口必须是 1-65535 之间的数字")
+	}
+	profile.Server.Port = port
+	profile.Server.Address = strings.TrimSpace(profile.Server.Address)
+	if profile.ServerAddress() == "" {
+		return profile, errors.New("请先填写网关地址")
+	}
+	return profile, nil
 }
 
 // AddProfile appends a blank profile and selects it.
@@ -206,6 +299,7 @@ func (s *SettingsState) Apply() (config.Config, error) {
 	profile.Server.Port = port
 	profile.Auth.Username = strings.TrimSpace(profile.Auth.Username)
 	profile.Auth.Domain = strings.TrimSpace(profile.Auth.Domain)
+	profile.Auth.AuthType = strings.TrimSpace(profile.Auth.AuthType)
 	profile.Keep.Interval = interval
 	profile.Keep.Targets = splitTargets(s.Targets[index])
 
@@ -263,7 +357,7 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 				ui.Column(c).Gap(16).Children(func() {
 					ui.Form(c, func() {
 						profileSection(c, state, actions, names)
-						connectionSection(c, state, profile, index)
+						connectionSection(c, state, actions, profile, index)
 						proxySection(c, state)
 						keepAliveSection(c, state, profile, &enabled, index)
 						startupSection(c, state, actions)
@@ -313,7 +407,7 @@ func profileSection(c *ui.Context, state *SettingsState, actions SettingsActions
 	})
 }
 
-func connectionSection(c *ui.Context, state *SettingsState, profile *config.Profile, index int) {
+func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActions, profile *config.Profile, index int) {
 	ui.Fieldset(c, "连接", func() {
 		ui.Field(c, "网关地址", func() {
 			ui.TextInput(c, &profile.Server.Address).Placeholder("vpn.example.com")
@@ -323,6 +417,21 @@ func connectionSection(c *ui.Context, state *SettingsState, profile *config.Prof
 		})
 		ui.Field(c, "用户名", func() {
 			ui.TextInput(c, &profile.Auth.Username)
+		})
+		ui.Field(c, "认证方式", func() {
+			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+				options := methodOptions(state.Methods, profile.Auth.AuthType, profile.Auth.Domain)
+				chosen := methodValue(state.Methods, profile.Auth.AuthType, profile.Auth.Domain)
+				if ui.Select(c, &chosen, options).Changed() {
+					if picked := indexOf(options, chosen); picked >= 0 && actions.SelectAuth != nil {
+						actions.SelectAuth(picked)
+					}
+				}
+				if ui.Button(c, "获取认证方式").Disabled(state.Discovering).Clicked() && actions.DiscoverAuth != nil {
+					actions.DiscoverAuth()
+				}
+			})
+			ui.Text(c, authMethodHint(state)).FontSize(11)
 		})
 		ui.Field(c, "登录域", func() {
 			ui.TextInput(c, &profile.Auth.Domain).Placeholder("local")
@@ -397,4 +506,59 @@ func indexOf(values []string, value string) int {
 		}
 	}
 	return -1
+}
+
+// authAutoLabel is the first entry of the method picker: let the gateway's
+// list decide.
+const authAutoLabel = "自动（网关唯一方式）"
+
+// methodOptions builds the picker's entries. A saved pair the gateway did not
+// list is kept as a trailing entry so the select never shows a blank value; it
+// is informational, not selectable.
+func methodOptions(methods []session.AuthMethod, authType, domain string) []string {
+	options := []string{authAutoLabel}
+	for _, method := range methods {
+		options = append(options, MethodLabel(method))
+	}
+	if saved := savedMethodLabel(methods, authType, domain); saved != "" {
+		options = append(options, saved)
+	}
+	return options
+}
+
+// methodValue is the picker's current value for a profile.
+func methodValue(methods []session.AuthMethod, authType, domain string) string {
+	if authType == "" {
+		return authAutoLabel
+	}
+	if saved := savedMethodLabel(methods, authType, domain); saved != "" {
+		return saved
+	}
+	return MethodLabel(session.AuthMethod{Type: authType, Domain: domain})
+}
+
+// savedMethodLabel reports the entry that names a stored pair the discovered
+// list does not contain, or "" when the pair is offered or nothing is stored.
+func savedMethodLabel(methods []session.AuthMethod, authType, domain string) string {
+	if authType == "" {
+		return ""
+	}
+	for _, method := range methods {
+		if method.Matches(authType, domain) {
+			return ""
+		}
+	}
+	return fmt.Sprintf("已保存：%s · %s（网关未提供）", authType, domain)
+}
+
+// authMethodHint explains what the picker currently means for the login.
+func authMethodHint(state *SettingsState) string {
+	switch {
+	case state.Discovering:
+		return "正在向网关查询认证方式…"
+	case len(state.Methods) == 0:
+		return "尚未查询。自动模式使用网关提供的唯一方式；多种方式时登录会询问。"
+	default:
+		return fmt.Sprintf("网关提供 %d 种认证方式。固定一种可避免每次登录询问。", len(state.Methods))
+	}
 }

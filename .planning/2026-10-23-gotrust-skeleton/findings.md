@@ -284,3 +284,34 @@ dae is deferred last.
   `ldd`/`namcap`, not guessed (`ez4connect-git/PKGBUILD`).
 - `gotrust-git` can build from a local `git+file://` source until the repository
   is public; the source URL is the only release-time change.
+
+#### Auth methods and second factors (verified 2026-10-24)
+
+- `atrust.GetAuthInfoList(serverAddress, serverPort, bindInterface,
+  autoDetectInterface, localDNSServer, debugTLSLogFile)` is public but builds
+  its own underlay dialer and takes no `context.Context`, so a cancelled login
+  cannot stop it. `auth.NewSessionContext(ctx, host, keyLogWriter,
+  dialContext...)` + `Session.GetAuthInfoList()` is the exported path that can:
+  the request context is linked to the session lifetime.
+- The host format matters: the client omits the port at 443
+  (`client/atrust/client.go:492`), so discovery has to use the same form or the
+  session cookie and certificate are checked against a different name.
+- An empty `authServerInfoList` is a valid `authConfig` answer (gateway thinks
+  the client is already logged in); it must not fail the login, because the
+  client then restores its stored session.
+- aTrust matches `authType` + `loginDomain` as an exact pair. Offering
+  `auth/psw` at `local` and `Radius` means two methods, not one.
+- `auth.NewLoginMethod` also accepts `auth/smsCheckCode`, but its
+  `LoginMethodOptions.Phone` has no source in this app; a primary SMS method is
+  therefore refused with a message instead of sending an empty phone.
+- `SetupOptions.TOTPSecret` lets the client generate TOTP codes without the
+  handler (`auth/token.go:22`); storing a secret changes the next login, while
+  the current challenge still needs a code (or can be answered locally with
+  `totp.GenerateCode`).
+- CAS/OAuth2 callbacks are validated by the client after the handler returns
+  (`validateCASCallbackURL`, `validateHTTPSOauth2CallbackURL`): path plus
+  `ticket`/`code`. Validating in the panel keeps a wrong paste there instead of
+  failing the whole login.
+- `mygo.Shell.OpenExternal(url)` is the system-browser call; it is routed
+  through the main thread. A failed open is not fatal: the URL and a retry
+  button remain in the panel.

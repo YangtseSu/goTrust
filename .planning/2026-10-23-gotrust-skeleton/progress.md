@@ -282,6 +282,51 @@
   - the live gateway was not re-run: the protocol path was verified in Phase 9
     and this phase changes wiring, not the aTrust calls
 
+### Phase 12: Auth methods and second factors
+
+- **Status:** complete (SMS/TOTP/SSO untested live; the verified account has no
+  second factor and no SSO endpoint)
+- Actions taken:
+  - `session/authmethod.go`: `DiscoverAuthMethods` asks the gateway's
+    `authConfig` for its method list on its own underlay dialer (the fork's
+    `atrust.GetAuthInfoList` builds one internally and takes no context, so the
+    exported `auth.NewSessionContext` + `Session.GetAuthInfoList` path is used
+    instead); `ResolveAuthMethod` makes a stored pair authoritative only while
+    the gateway still offers it and reports `ErrAuthMethodChoice` otherwise
+  - login: discovery runs after validation, a nil method list (already logged
+    in) leaves the stored-session restore to the client, a stale stored pair
+    fails with the offered list, and `Options.ChooseAuth` asks the window; the
+    chosen pair is persisted to the active profile
+  - config: `auth_type` and `totp_secret` are wired into the login
+    (`SetupOptions.TOTPSecret`); an empty `auth_type` means automatic
+  - UI: `CodePrompt`, `ExternalLogin` and `AuthChoice` panels replace the
+    connection controls, with `session.GenerateTOTPCode` for an opt-in TOTP
+    secret and `session.ValidateCallbackURL` for CAS/OAuth2 pastes
+  - settings: 认证方式 picker (自动 + discovered pairs + a "saved but not
+    offered" entry), 获取认证方式 button that queries the draft's gateway off
+    the UI thread, and per-profile clearing of a stale list
+  - prompt lifecycle: every panel gets the same cancel/context release as the
+    click captcha; 断开 releases all four through `cancelPrompts`
+- Verification:
+  - `go build`, `go vet`, `gofmt -l`, `go test ./...`, `go test -race . ./session ./ui`,
+    `reuse lint` (36/36 files)
+  - discovery against an `httptest` TLS gateway: mapping, dedupe, empty list,
+    context cancellation; ResolveAuthMethod table; RFC 6238 TOTP vector
+  - headless run against `127.0.0.1:1`: exits 1 after
+    `discover the authentication methods: … connection refused`
+  - real binary with a temp config: `goTrust ready`, settings window opened
+    from the 设置 button, SIGTERM exit 0 (repeated with and without the
+    settings window)
+  - the four panels rendered through `ui.NewTester` and inspected (code, TOTP
+    with the secret field, SSO, chooser)
+- Notes:
+  - the settings window was not clicked through the new picker on the real
+    desktop; Phase 15 does the final UI smoke
+  - primary SMS login is refused with a clear message because the settings
+    window collects no phone number
+  - `github.com/pquerna/otp` moved from the indirect block to the direct block
+    by hand (`go mod tidy` cannot run offline here)
+
 ## Test Results
 
 | Test | Input | Expected | Actual | Status |
@@ -347,6 +392,26 @@
 | Settings open from 按钮 | RunOnMain-deferred open, real config | no GL errors, window shows | as expected | pass |
 | Quit with settings open | SIGTERM | exit 0, no crash | exit 0 | pass |
 | Keep-alive default | fresh profile | 90 s | 90 s | pass |
+| Resolve auth method | one method / stored pair / stale pair / several | automatic / exact / list error / choice | as expected | pass |
+| Discover auth methods | fake TLS gateway, duplicate and typeless entries | three mapped, deduped | as expected | pass |
+| Discover empty list | `isLogin: 1` answer | empty, no error | empty | pass |
+| Discover cancellation | cancel mid-request | error, no list | cancelled | pass |
+| Auth host | 443, 8443, IPv6 | port omitted / joined | as expected | pass |
+| Primary login guard | `auth/smsCheckCode` | refused without a phone number | refused | pass |
+| Callback validation | CAS/OAuth2 good and bad pastes | ticket/code/path/https enforced | as expected | pass |
+| TOTP generation | RFC 6238 vector, bad secret | 287082; error | as expected | pass |
+| Code prompt submit | SMS with skip | code and skip reach the client | as expected | pass |
+| TOTP secret opt-in | secret entered, store ticked | 6-digit code, 0600 file updated | as expected | pass |
+| TOTP bad secret | `not base32!` | panel stays, status explains | as expected | pass |
+| Code prompt cancel | window and login context | handler returns, panel clears | both | pass |
+| SSO prompt | bad paste then valid CAS callback | bad kept open, valid returns | as expected | pass |
+| Auth chooser | two methods, pick the second | returned and persisted to TOML | as expected | pass |
+| Auth chooser cancel | login context ends | returns `context.Canceled` | as expected | pass |
+| Settings auth picker | select pair, trailing entry, auto | pair stored, trailing no-op, auto clears | as expected | pass |
+| Settings discovery target | draft address/port, bad port | trimmed / 8443 / rejected | as expected | pass |
+| Settings auth view | two methods | picker, button, hint, callback | rendered | pass |
+| New panels render | code, TOTP, SSO, chooser 520×560 | all texts and buttons | rendered | pass |
+| Discovery failure smoke | `--no-ui`, gateway `127.0.0.1:1` | exit 1 with the reason | as expected | pass |
 
 | Live login with captcha | real gateway, operator clicked the image | online with an IP | online, `203.0.113.4` | pass |
 | Live HTTP proxy | `curl -x 127.0.0.1:11081 http://192.0.2.10/` | 200 from the intranet | 200, 507 bytes | pass |
@@ -368,8 +433,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 11 complete: TOML v2, profiles, settings window, logging, tray, autostart, auto-connect |
-| Where am I going? | Phase 12, auth methods and second factors |
-| What's the goal? | a buildable, runnable goTrust skeleton |
-| What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps) |
+| Where am I? | Phase 12 complete: auth-method discovery, stored pair, code and SSO prompts |
+| Where am I going? | Phase 13, granted resources |
+| What's the goal? | a daily-use aTrust tray client |
+| What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors) |
 | What have I done? | four packages written and tested; binary built, launched and shut down cleanly |

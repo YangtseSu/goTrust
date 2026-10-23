@@ -8,10 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
+	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/mythologyli/zju-connect/client/authchallenge"
 
+	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/session"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
 )
 
@@ -22,6 +27,24 @@ type captchaResult struct {
 	err      error
 }
 
+// codeResult answers a one-time code challenge.
+type codeResult struct {
+	response authchallenge.CodeResponse
+	err      error
+}
+
+// externalResult answers a CAS/OAuth2 challenge with the pasted callback.
+type externalResult struct {
+	response authchallenge.ExternalLoginResponse
+	err      error
+}
+
+// choiceResult answers the authentication-method chooser.
+type choiceResult struct {
+	method session.AuthMethod
+	err    error
+}
+
 // uiPrompter renders the click captcha in the main window and waits for the
 // user. The context is the login attempt's: cancelling the login closes the
 // prompt instead of leaving a dialog nobody will answer.
@@ -29,6 +52,51 @@ type uiPrompter struct {
 	cliPrompter
 	app *app
 	ctx context.Context
+}
+
+func (p *uiPrompter) HandleCodeChallenge(challenge authchallenge.CodeChallenge) (authchallenge.CodeResponse, error) {
+	reply := make(chan codeResult, 1)
+	p.app.beginCode(&gotrustui.CodePrompt{
+		Kind:            challenge.Kind,
+		Message:         challenge.Message,
+		CanSkip:         challenge.CanSkipSecondaryAuth,
+		AllowTOTPSecret: challenge.Kind == authchallenge.CodeTOTP,
+	}, reply)
+	defer p.app.endCode(reply)
+
+	select {
+	case result := <-reply:
+		return result.response, result.err
+	case <-p.ctx.Done():
+		return authchallenge.CodeResponse{}, p.ctx.Err()
+	}
+}
+
+func (p *uiPrompter) HandleExternalLogin(challenge authchallenge.ExternalLoginChallenge) (authchallenge.ExternalLoginResponse, error) {
+	reply := make(chan externalResult, 1)
+	p.app.beginExternal(&gotrustui.ExternalLogin{
+		Kind:     challenge.Kind,
+		LoginURL: challenge.LoginURL,
+		Message:  challenge.Message,
+	}, reply)
+	defer p.app.endExternal(reply)
+
+	// A browser that cannot be opened is not fatal: the window shows the URL
+	// and a button that tries again. An empty URL means the gateway expects a
+	// callback without a page, so there is nothing to open.
+	if challenge.LoginURL != "" {
+		if err := p.app.openBrowser(challenge.LoginURL); err != nil {
+			p.app.logf("open the login URL: %v", err)
+			p.app.setStatus("无法自动打开浏览器，请手动复制链接: "+err.Error(), false)
+		}
+	}
+
+	select {
+	case result := <-reply:
+		return result.response, result.err
+	case <-p.ctx.Done():
+		return authchallenge.ExternalLoginResponse{}, p.ctx.Err()
+	}
 }
 
 func (p *uiPrompter) HandleClickCaptcha(challenge authchallenge.ClickCaptchaChallenge) (authchallenge.ClickCaptchaResponse, error) {
@@ -69,12 +137,7 @@ func (a *app) beginCaptcha(captcha *gotrustui.Captcha, reply chan captchaResult)
 	a.mu.Unlock()
 
 	a.setStatus("请在窗口中点击图形验证码", false)
-
-	// A login started from the tray would otherwise wait on a hidden window.
-	if window := a.window.Load(); window != nil {
-		window.Show()
-		window.Focus()
-	}
+	a.revealWindow()
 	a.invalidate()
 }
 
@@ -165,6 +228,308 @@ func (a *app) cancelCaptcha(cause error) {
 	a.invalidate()
 }
 
+// beginCode publishes a one-time code challenge.
+func (a *app) beginCode(prompt *gotrustui.CodePrompt, reply chan codeResult) {
+	a.mu.Lock()
+	a.view.Code = prompt
+	a.code = reply
+	a.mu.Unlock()
+
+	a.setStatus("请在窗口中输入验证码", false)
+	a.revealWindow()
+	a.invalidate()
+}
+
+func (a *app) endCode(reply chan codeResult) {
+	a.mu.Lock()
+	if a.code == reply {
+		a.code = nil
+		a.view.Code = nil
+	}
+	a.mu.Unlock()
+
+	a.invalidate()
+}
+
+// submitCode answers the pending code challenge. A TOTP secret the user chose
+// to store is validated, used for this attempt if no code was typed, and
+// written to the settings file.
+func (a *app) submitCode() {
+	a.mu.Lock()
+	prompt := a.view.Code
+	reply := a.code
+	if prompt == nil || reply == nil {
+		a.mu.Unlock()
+		return
+	}
+	code := strings.TrimSpace(prompt.Code)
+	secret := strings.TrimSpace(prompt.TOTPSecret)
+	storeSecret := prompt.AllowTOTPSecret && prompt.StoreSecret && secret != ""
+	skip := prompt.Skip && prompt.CanSkip
+	a.mu.Unlock()
+
+	if code == "" && !storeSecret {
+		a.setStatus("请输入验证码", false)
+		return
+	}
+	if storeSecret {
+		generated, err := session.GenerateTOTPCode(secret, time.Now())
+		if err != nil {
+			a.setStatus(err.Error(), false)
+			return
+		}
+		if code == "" {
+			code = generated
+		}
+	}
+
+	a.mu.Lock()
+	if a.code == reply {
+		a.code = nil
+		a.view.Code = nil
+	}
+	a.mu.Unlock()
+
+	if storeSecret {
+		a.storeTOTPSecret(secret)
+	}
+
+	a.invalidate()
+	a.setStatus("已提交验证码，正在登录…", true)
+	reply <- codeResult{response: authchallenge.CodeResponse{Code: code, SkipSecondaryAuth: skip}}
+}
+
+func (a *app) cancelCode(cause error) {
+	a.mu.Lock()
+	reply := a.code
+	a.code = nil
+	a.view.Code = nil
+	a.mu.Unlock()
+
+	if reply != nil {
+		reply <- codeResult{err: cause}
+	}
+	a.invalidate()
+}
+
+// storeTOTPSecret writes the secret into the active profile. The settings file
+// already holds the password with owner-only permissions, so the secret goes
+// to the same place and only after the user ticked the box.
+func (a *app) storeTOTPSecret(secret string) {
+	cfg := a.currentConfig()
+	index := cfg.ActiveIndex()
+	if index < 0 {
+		return
+	}
+	cfg.Profiles[index].Auth.TOTPSecret = strings.TrimSpace(secret)
+	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+		a.logf("save the TOTP secret: %v", err)
+		a.setStatus("保存 TOTP 密钥失败: "+err.Error(), false)
+		return
+	}
+	a.applyConfig(cfg)
+	a.logf("stored a TOTP secret for profile %s", cfg.ActiveProfile)
+}
+
+// beginExternal publishes an SSO challenge. The browser is opened by the
+// handler, so the user can finish the login outside the app.
+func (a *app) beginExternal(prompt *gotrustui.ExternalLogin, reply chan externalResult) {
+	a.mu.Lock()
+	a.view.External = prompt
+	a.external = reply
+	a.mu.Unlock()
+
+	a.setStatus("请在浏览器中完成登录", false)
+	a.revealWindow()
+	a.invalidate()
+}
+
+func (a *app) endExternal(reply chan externalResult) {
+	a.mu.Lock()
+	if a.external == reply {
+		a.external = nil
+		a.view.External = nil
+	}
+	a.mu.Unlock()
+
+	a.invalidate()
+}
+
+// openExternal reopens the login page, for a browser that was closed too early.
+func (a *app) openExternal() {
+	a.mu.RLock()
+	prompt := a.view.External
+	a.mu.RUnlock()
+	if prompt == nil {
+		return
+	}
+	if err := a.openBrowser(prompt.LoginURL); err != nil {
+		a.setStatus("打开浏览器失败: "+err.Error(), false)
+		a.logf("open the login URL: %v", err)
+	}
+}
+
+func (a *app) submitExternal() {
+	a.mu.Lock()
+	prompt := a.view.External
+	reply := a.external
+	if prompt == nil || reply == nil {
+		a.mu.Unlock()
+		return
+	}
+	kind := prompt.Kind
+	callback := strings.TrimSpace(prompt.Callback)
+	a.mu.Unlock()
+
+	if err := session.ValidateCallbackURL(kind, callback); err != nil {
+		a.setStatus(err.Error(), false)
+		return
+	}
+
+	a.mu.Lock()
+	if a.external == reply {
+		a.external = nil
+		a.view.External = nil
+	}
+	a.mu.Unlock()
+
+	a.invalidate()
+	a.setStatus("已提交回调地址，正在登录…", true)
+	reply <- externalResult{response: authchallenge.ExternalLoginResponse{CallbackURL: callback}}
+}
+
+func (a *app) cancelExternal(cause error) {
+	a.mu.Lock()
+	reply := a.external
+	a.external = nil
+	a.view.External = nil
+	a.mu.Unlock()
+
+	if reply != nil {
+		reply <- externalResult{err: cause}
+	}
+	a.invalidate()
+}
+
+// chooseAuth is session.Options.ChooseAuth: it shows the offered methods and
+// blocks the login goroutine until the window answers or the attempt ends.
+func (a *app) chooseAuth(ctx context.Context, methods []session.AuthMethod) (session.AuthMethod, error) {
+	reply := make(chan choiceResult, 1)
+	a.beginChoice(&gotrustui.AuthChoice{Methods: methods}, reply)
+	defer a.endChoice(reply)
+
+	select {
+	case result := <-reply:
+		if result.err != nil {
+			return session.AuthMethod{}, result.err
+		}
+		// Remember the answer: auto mode asks only once per gateway, and the
+		// store method is what the settings window shows next time.
+		a.storeAuthChoice(result.method)
+		return result.method, nil
+	case <-ctx.Done():
+		return session.AuthMethod{}, ctx.Err()
+	}
+}
+
+func (a *app) beginChoice(choice *gotrustui.AuthChoice, reply chan choiceResult) {
+	a.mu.Lock()
+	a.view.Choice = choice
+	a.choice = reply
+	a.mu.Unlock()
+
+	a.setStatus("请选择认证方式", false)
+	a.revealWindow()
+	a.invalidate()
+}
+
+func (a *app) endChoice(reply chan choiceResult) {
+	a.mu.Lock()
+	if a.choice == reply {
+		a.choice = nil
+		a.view.Choice = nil
+	}
+	a.mu.Unlock()
+
+	a.invalidate()
+}
+
+// chooseAuthIndex answers the chooser with the method at index.
+func (a *app) chooseAuthIndex(index int) {
+	a.mu.Lock()
+	choice := a.view.Choice
+	reply := a.choice
+	if choice == nil || reply == nil || index < 0 || index >= len(choice.Methods) {
+		a.mu.Unlock()
+		return
+	}
+	method := choice.Methods[index]
+	a.choice = nil
+	a.view.Choice = nil
+	a.mu.Unlock()
+
+	a.invalidate()
+	a.setStatus("认证方式："+gotrustui.MethodLabel(method), true)
+	reply <- choiceResult{method: method}
+}
+
+func (a *app) cancelChoice(cause error) {
+	a.mu.Lock()
+	reply := a.choice
+	a.choice = nil
+	a.view.Choice = nil
+	a.mu.Unlock()
+
+	if reply != nil {
+		reply <- choiceResult{err: cause}
+	}
+	a.invalidate()
+}
+
+// storeAuthChoice pins the chosen pair in the active profile, so a later login
+// does not ask again.
+func (a *app) storeAuthChoice(method session.AuthMethod) {
+	cfg := a.currentConfig()
+	index := cfg.ActiveIndex()
+	if index < 0 {
+		return
+	}
+	cfg.Profiles[index].Auth.AuthType = method.Type
+	cfg.Profiles[index].Auth.Domain = method.Domain
+	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+		a.logf("save the authentication method: %v", err)
+		return
+	}
+	a.applyConfig(cfg)
+	a.logf("stored authentication method %s · %s", method.Type, method.Domain)
+}
+
+// cancelPrompts releases every pending question, so a disconnect cannot leave
+// a login goroutine waiting on a panel that is gone.
+func (a *app) cancelPrompts(cause error) {
+	a.cancelCaptcha(cause)
+	a.cancelCode(cause)
+	a.cancelExternal(cause)
+	a.cancelChoice(cause)
+}
+
+// revealWindow brings the main window forward: a login started from the tray
+// would otherwise wait on a hidden window.
+func (a *app) revealWindow() {
+	if window := a.window.Load(); window != nil {
+		window.Show()
+		window.Focus()
+	}
+}
+
+// openBrowser opens a URL with the desktop's default browser.
+func (a *app) openBrowser(url string) error {
+	if a.browser != nil {
+		return a.browser(url)
+	}
+	return mygo.Shell.OpenExternal(url)
+}
+
 // cliPrompter answers the login prompts a window would show. It is used by
 // --no-ui, where refusing with a clear message beats blocking on a window that
 // will never open.
@@ -173,7 +538,9 @@ type cliPrompter struct {
 }
 
 func (p cliPrompter) HandleCodeChallenge(challenge authchallenge.CodeChallenge) (authchallenge.CodeResponse, error) {
-	return authchallenge.CodeResponse{}, fmt.Errorf("this login needs a one-time code (%s), which goTrust does not ask for yet", challenge.Message)
+	return authchallenge.CodeResponse{}, fmt.Errorf(
+		"this login needs a %s one-time code, which requires the window; run again without --no-ui",
+		challenge.Kind)
 }
 
 func (p cliPrompter) HandleTextCaptcha(authchallenge.TextCaptchaChallenge) (authchallenge.TextCaptchaResponse, error) {
@@ -185,5 +552,7 @@ func (p cliPrompter) HandleClickCaptcha(authchallenge.ClickCaptchaChallenge) (au
 }
 
 func (p cliPrompter) HandleExternalLogin(challenge authchallenge.ExternalLoginChallenge) (authchallenge.ExternalLoginResponse, error) {
-	return authchallenge.ExternalLoginResponse{}, fmt.Errorf("this login needs a browser at %s, which goTrust does not open yet", challenge.LoginURL)
+	return authchallenge.ExternalLoginResponse{}, fmt.Errorf(
+		"this login needs a browser at %s and a pasted callback URL, which requires the window; run again without --no-ui",
+		challenge.LoginURL)
 }

@@ -35,6 +35,11 @@ type State struct {
 	// Captcha is set while the gateway waits for a click captcha. It replaces
 	// the connection controls until the user submits or cancels it.
 	Captcha *Captcha
+	// Code, External and Choice are the other pre-login questions. A login
+	// asks one at a time, so at most one of the four is set.
+	Code     *CodePrompt
+	External *ExternalLogin
+	Choice   *AuthChoice
 	// KeepAlive is the last keep-alive result, parsed from the log line the
 	// upstream loop writes.
 	KeepAlive string
@@ -58,6 +63,16 @@ type Actions struct {
 	ClearCaptcha    func()
 	SubmitCaptcha   func()
 	CancelCaptcha   func()
+	// The second-factor callbacks answer a code challenge (SMS, TOTP, RADIUS)
+	// and an external SSO login.
+	SubmitCode     func()
+	CancelCode     func()
+	OpenExternal   func()
+	SubmitExternal func()
+	CancelExternal func()
+	// ChooseAuth picks one of the offered authentication methods by index.
+	ChooseAuth   func(int)
+	CancelChoice func()
 }
 
 // View renders one frame of the main window.
@@ -65,9 +80,16 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 	return func(c *ui.Context) {
 		ui.Column(c).Fill().Padding(20).Gap(14).Children(func() {
 			header(c, state)
-			if state.Captcha != nil {
+			switch {
+			case state.Choice != nil:
+				choicePanel(c, state, actions)
+			case state.Captcha != nil:
 				captchaPanel(c, state, actions)
-			} else {
+			case state.Code != nil:
+				codePanel(c, state, actions)
+			case state.External != nil:
+				externalPanel(c, state, actions)
+			default:
 				controls(c, state, actions)
 			}
 			footer(c, state)

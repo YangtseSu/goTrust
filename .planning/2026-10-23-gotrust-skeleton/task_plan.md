@@ -12,12 +12,12 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 12: discover the gateway's auth methods, store the chosen pair, and add
-the code and external-SSO prompts.
+Phase 13: retain the granted resources, derive display entries and URLs, show
+them in the main window and cache them for `--print-resources`.
 
 ## Current Phase
 
-Phase 12
+Phase 13
 
 ## Phases
 
@@ -168,25 +168,32 @@ Requirements 3 and 4. The fork exposes `atrust.GetAuthInfoList` as a public
 pre-login call, so method discovery needs no protocol change. aTrust matches
 `authType` and `loginDomain` exactly.
 
-- [ ] `session.DiscoverAuthMethods(ctx, cfg)` wrapping `atrust.GetAuthInfoList`
-      (server, port, underlay settings); return name, type, domain, URL
-- [ ] Settings: "获取认证方式" button and a list/dropdown; store the chosen
+- [x] `session.DiscoverAuthMethods(ctx, cfg)` over the gateway's `authConfig`
+      (server, port, own underlay dialer, context cancellation); returns name,
+      type, domain and URL. `atrust.GetAuthInfoList` itself builds a dialer and
+      takes no context, so the exported session call is used instead
+- [x] Settings: "获取认证方式" button and a list/dropdown; store the chosen
       `auth_type` and `login_domain`; keep `local` as the default domain
-- [ ] Resolution: auto mode uses the only offered method, else the saved one,
+- [x] Resolution: auto mode uses the only offered method, else the saved one,
       else asks the user to choose; a stored method the gateway no longer offers
       fails with the list instead of a silent fallback
-- [ ] Code challenge dialog for SMS/TOTP/RADIUS: message, code input, and
+- [x] Code challenge dialog for SMS/TOTP/RADIUS: message, code input, and
       "跳过以后的二次认证" when the challenge allows it; optional TOTP secret
-      (store only on opt-in) generates the code upstream
-- [ ] External SSO (CAS/OAuth2): open `LoginURL` in the system browser and take
+      (store only on opt-in) generates the code in-app and is passed upstream
+- [x] External SSO (CAS/OAuth2): open `LoginURL` in the system browser and take
       the callback URL, validating path and ticket/code; a built-in webview is a
       later option, not a dependency
-- [ ] Cancel and login-context timeout release the handler, as the click
-      captcha already does
-- [ ] Tests: auth-info parsing/resolution, prompter dialogs and cancel, SSO
-      callback validation; mark SMS/TOTP/SSO **untested live** (the verified
+- [x] Cancel and login-context timeout release the handler, as the click
+      captcha already does; 断开 releases all pending prompts
+- [x] Tests: auth-info parsing/resolution, prompter dialogs and cancel, SSO
+      callback validation; SMS/TOTP/SSO marked **untested live** (the verified
       account has no second factor) in the README and progress log
-- **Status:** pending
+- **Status:** complete
+- **Note:** a primary SMS login is refused with a clear message because the
+  settings window collects no phone number; a gateway whose only method is one
+  starts with a password, CAS or OAuth2. The new panels were rendered headlessly
+  and inspected; the settings picker was not clicked on the real desktop, which
+  Phase 15 covers.
 
 ### Phase 13: Granted resources
 

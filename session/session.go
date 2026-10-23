@@ -84,6 +84,11 @@ type Options struct {
 	// attempt's context ends: a cancelled login must not leave a dialog open.
 	// A gateway without a second factor never calls it.
 	Prompt func(ctx context.Context) Prompter
+	// ChooseAuth asks which offered method to log in with. It is called only
+	// when the gateway offers several and the profile stores none, so a
+	// settings window that pins a method never asks. Nil fails the login with
+	// the list, which is what a headless run should do.
+	ChooseAuth func(ctx context.Context, methods []AuthMethod) (AuthMethod, error)
 	// Logf receives progress lines. Nil discards them.
 	Logf func(format string, args ...any)
 	// OnState is called on every transition, from the goroutine that caused it.
@@ -178,9 +183,27 @@ func (m *Manager) Login(ctx context.Context) error {
 		return fail("read the stored session", err)
 	}
 
-	loginMethod, err := newLoginMethod(profile.Auth)
+	// The gateway decides which pair is valid; a saved pair that it no longer
+	// offers has to be a visible error, not a silent fallback. An empty list
+	// means the gateway has nothing to ask (already logged in), so the client
+	// may restore the stored session instead of logging in.
+	m.set(State{Phase: PhaseConnecting, Detail: "discovering the authentication methods", Since: time.Now()})
+	methods, err := DiscoverAuthMethods(ctx, profile)
 	if err != nil {
-		return fail("configure the login", err)
+		return fail("discover the authentication methods", err)
+	}
+
+	method, err := m.resolveAuthMethod(ctx, methods, profile)
+	if err != nil {
+		return fail("choose the authentication method", err)
+	}
+
+	var loginMethod auth.LoginMethod
+	if method != nil {
+		loginMethod, err = newLoginMethod(profile.Auth, *method)
+		if err != nil {
+			return fail("configure the login", err)
+		}
 	}
 
 	client := atrust.NewClient(atrust.ClientOptions{
@@ -202,6 +225,7 @@ func (m *Manager) Login(ctx context.Context) error {
 		ServerAddress:            profile.ServerAddress(),
 		ServerPort:               profile.Server.Port,
 		LoginMethod:              loginMethod,
+		TOTPSecret:               profile.Auth.TOTPSecret,
 		ClientData:               clientData,
 		ChallengeHandler:         prompt,
 		BestNodesRefreshInterval: 5 * time.Minute,
@@ -399,14 +423,65 @@ func (m *Manager) settings() config.Config {
 	return m.options.Config()
 }
 
+// resolveAuthMethod turns the offered list into the pair to log in with. An
+// empty list means the gateway has nothing to ask, so no login method is built
+// and the client's own restore path decides whether the stored session is
+// enough.
+func (m *Manager) resolveAuthMethod(ctx context.Context, methods []AuthMethod, profile config.Profile) (*AuthMethod, error) {
+	if len(methods) == 0 {
+		m.logf("the gateway offered no authentication method; expecting a stored session")
+		return nil, nil
+	}
+
+	method, err := ResolveAuthMethod(methods, profile.Auth.AuthType, profile.Auth.Domain)
+	if !errors.Is(err, ErrAuthMethodChoice) {
+		if err != nil {
+			return nil, err
+		}
+		m.logf("authentication method: %s", method)
+		return &method, nil
+	}
+
+	if m.options.ChooseAuth == nil {
+		return nil, fmt.Errorf("%w: %s; store auth_type and domain in the settings file",
+			ErrAuthMethodChoice, methodList(methods))
+	}
+
+	chosen, err := m.options.ChooseAuth(ctx, methods)
+	if err != nil {
+		return nil, err
+	}
+	if !offered(methods, chosen) {
+		return nil, fmt.Errorf("the chosen method %s · %s is not offered", chosen.Type, chosen.Domain)
+	}
+	m.logf("authentication method: %s", chosen)
+	return &chosen, nil
+}
+
+// offered reports whether the choice is one of the gateway's methods.
+func offered(methods []AuthMethod, chosen AuthMethod) bool {
+	for _, method := range methods {
+		if method.Type == chosen.Type && method.Domain == chosen.Domain {
+			return true
+		}
+	}
+	return false
+}
+
 // newLoginMethod builds what the client needs to authenticate. A nil result is
 // valid: the client falls back to the stored session material.
-func newLoginMethod(cfg config.AuthConfig) (auth.LoginMethod, error) {
+func newLoginMethod(cfg config.AuthConfig, method AuthMethod) (auth.LoginMethod, error) {
+	switch method.Type {
+	case "auth/psw", "auth/cas", "auth/httpsOauth2":
+	default:
+		return nil, fmt.Errorf("authentication type %s is not supported as the primary method; "+
+			"goTrust logs in with a password, CAS or OAuth2", method.Type)
+	}
 	return auth.NewLoginMethod(auth.LoginMethodOptions{
-		AuthType: cfg.AuthType,
+		AuthType: method.Type,
 		Username: cfg.Username,
 		Password: cfg.Password,
-		Domain:   cfg.Domain,
+		Domain:   method.Domain,
 	})
 }
 

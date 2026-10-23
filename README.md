@@ -95,9 +95,14 @@ port = 443
 
 [profiles.auth]
 username = "alice"
+# Empty means automatic: the only offered method, or a chooser when several
+# are offered. A stored pair must match what the gateway still offers.
+auth_type = ""
 domain = "local"
 store_password = true
 password = "…"
+# Written only when the user opts in from a TOTP challenge.
+# totp_secret = "…"
 
 [profiles.keepalive]
 enabled = true
@@ -127,8 +132,12 @@ page. The groups are:
 * **配置** — choose, create, copy, rename or delete a profile. Saving makes the
   selected profile active; switching while online disconnects first, then
   reconnects when 自动连接 is on.
-* **连接** — gateway, port, username, login domain, password and whether to
-  store it. These take effect on the next login.
+* **连接** — gateway, port, username, authentication method, login domain,
+  password and whether to store it. These take effect on the next login.
+  **获取认证方式** asks the gateway what it offers; the picker then stores the
+  `authType`/`loginDomain` pair. 自动 uses the only offered method, asks when
+  several are offered, and saves the answer. A stored pair the gateway no
+  longer offers fails with the list instead of switching methods silently.
 * **代理** — SOCKS5 and HTTP bind addresses. These take effect on the next
   connect.
 * **保活** — enable, interval (default 90 s) and manual targets, one per line.
@@ -144,17 +153,38 @@ loads the saved settings again.
 
 ## Logging in
 
-Fill in the gateway, port, username, login domain and password in 设置, save,
-then press 连接. The login domain must match what the gateway's `authConfig`
-offers, for example `local` or `Radius`; the upstream client does not guess it.
+Fill in the gateway, port and username in 设置, save, then press 连接. The
+authentication method is discovered before the login: 自动 uses the only method
+the gateway offers, a stored pair is used as long as the gateway still offers
+it, and several offered methods open a chooser whose answer is remembered.
+`login_domain` in the file stays `local` by default; the settings window writes
+the domain that belongs to the chosen method.
+
 If the gateway asks for a click captcha, the window replaces the form with the
 image: click the characters in the order the image asks for, then 提交. 撤销
 removes the last click, 清空 clears them all, and 取消 abandons the login.
 
-One-time codes and external SSO logins are not implemented yet; a gateway that
-requires one fails with a message instead of blocking. Text captchas only occur
-with EasyConnect, which this app does not support. `--no-ui` cannot show a
-captcha and reports that the window is required.
+A one-time code (SMS, TOTP or RADIUS) opens a panel with the gateway's message
+and a code field; 跳过以后的二次认证 is offered only when the gateway allows it.
+A TOTP challenge also offers to store the Base32 secret: once saved (0600, in
+the settings file), goTrust generates the code itself and the panel does not
+appear again.
+
+An external login (CAS or OAuth2) opens the gateway's login page in the system
+browser and asks for the callback URL the browser ends on. The paste is checked
+against the portal's path and its `ticket` (CAS) or `code` (OAuth2) before it is
+sent, so a wrong window fails in the panel with a reason.
+
+Every prompt belongs to the login attempt: 断开, the attempt's five-minute
+deadline or a cancelled login releases it instead of leaving a dialog open.
+`--no-ui` cannot ask any of these questions and reports which one the gateway
+wanted.
+
+**Not tested live:** the verified account has no second factor beyond the click
+captcha and no SSO endpoint, so the SMS, TOTP, RADIUS and CAS/OAuth2 paths are
+covered by unit tests only. The primary method must be password, CAS or OAuth2;
+a gateway whose only method is a primary SMS login is not supported because
+goTrust does not collect a phone number.
 
 ## Tray and startup
 

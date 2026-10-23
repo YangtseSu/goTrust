@@ -100,8 +100,14 @@ type ServerConfig struct {
 // AuthConfig holds what the settings window collects. The password is stored
 // only when the user asks for it; otherwise it is kept in memory for one run.
 type AuthConfig struct {
-	Username  string `toml:"username"`
-	Domain    string `toml:"domain"`
+	Username string `toml:"username"`
+	// Domain is the login domain that belongs to AuthType. aTrust matches the
+	// pair exactly; an empty AuthType means "use the method the gateway
+	// offers" and ignores the domain.
+	Domain string `toml:"domain"`
+	// AuthType is the authType the gateway offers, chosen with 获取认证方式.
+	// Empty selects automatically: the only offered method is used, several
+	// ask the user.
 	AuthType  string `toml:"auth_type"`
 	StorePass bool   `toml:"store_password"`
 	Password  string `toml:"password,omitempty"`
