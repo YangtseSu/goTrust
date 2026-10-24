@@ -527,6 +527,13 @@ policy). Endpoints and the signal are in `findings.md`.
   密码规则, 确定/取消, the "其他终端已在线账号需重新登录" note). The panel was
   rendered through `ui.NewTester` (light) and the forced-flow real-window smoke
   waits on a gateway that demands the change.
+- **Note (live attempt):** the first package (`r47`) reached a gateway
+  that demanded the change and got `75500000 (Parameter error or missing
+  occurred)`. The reset form refreshes `authConfig` before encrypting and
+  sends `<password>_nonce`; every request also carries
+  shared-params. Fork `7f399b5` does both, the pin moved to
+  `v1.3.2-0.20261024143624-7f399b5d1dbf`, and the package was rebuilt (`r48`);
+  the forced-flow completion still needs the operator's retry.
 
 ### Phase 20: Keyring credential storage (second; backend chosen at execution)
 

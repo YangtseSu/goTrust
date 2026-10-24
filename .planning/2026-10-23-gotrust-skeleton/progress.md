@@ -1485,6 +1485,12 @@
     session outlives setup so `ChangePassword` can finish it. Added
     `ResetPassword` (security endpoint), `PasswordStrategy`, `Rules`/
     `Violations`, and `CheckWeakPassword`
+  - live attempt `r47` failed on `change-password` with 75500000: the
+    the change form fetches `authConfig` immediately before encrypting
+    (fresh key + anti-replay nonce) and every request carries
+    `shared-params`; the first build did neither. Fixed in fork
+    `7f399b5` (pin `v1.3.2-0.20261024143624-7f399b5d1dbf`) and the package was
+    rebuilt as `r48`
   - goTrust: `session.Options.ChangePassword`/`OnPasswordChanged`, the forced
     panel in the login flow (message, account, rules, prompt, skip, cancel,
     context release), the voluntary panel in the settings window (offered only
@@ -1506,6 +1512,9 @@
   | Forced panel, rendered | `ui.NewTester` PNG (light), inspected |
   | Forced panel, native | headless mutter + Xwayland, real GTK window, the gateway's message and fields visible |
   | `--no-ui` refusal | real binary + fake gateway: clear message, exit 1 |
+  | Live forced change, first package (`r47`) | failed `75500000 (Parameter error or missing occurred)` |
+  | Root cause / fix | request lacked the shared `shared-params` query and the login-style `<password>_nonce` encryption; fork `7f399b5` refreshes `authConfig` before encrypting and sends the shared query. Pin now `v1.3.2-0.20261024143624-7f399b5d1dbf` |
+  | Live forced change after the fix | operator retry pending (package rebuilt) |
   | Live 90-day expiry | not triggered; operator test pending |
 - Files created/modified:
   - fork: `client/atrust/auth/password_change.go` (new),

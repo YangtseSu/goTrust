@@ -727,9 +727,10 @@ The reset flow uses these request shapes:
   unless `pwdRulePrompt` is present.
 - **Submit**: `POST forced-change`,
   `Content-Type: application/x-www-form-urlencoded`, body
-  `oldPassword=<rsa>&newPassword=<rsa>[&account-field=<name>]`. The page encrypts
-  both with `sa()` (`RSA RSA`, hex, 245-char chunks) and **does not
-  append the anti-replay nonce** the login password uses.
+  `oldPassword=<rsa>&newPassword=<rsa>[&account-field=<name>]`. The form encrypts both: it fetches a fresh `authConfig`
+  first and then RSA-RSA hex over
+  `<password>_nonce`, exactly like the login password. Other
+  fields are not encrypted.
 - **Skip**: same endpoint, body `skip=true`; the answer's
   `data.remainedSkipTimes` feeds "剩余跳过机会 N 次".
 - **Voluntary reset**: `POST reset-path`, JSON
@@ -756,10 +757,16 @@ The reset flow uses these request shapes:
   changeMangerResetPwd:1}`.
 - **Repeated characters**: the rule regex is `(\w|\W)\1{n-1}`, i.e. value
   `3` rejects `"aaa"` (exactly three repeats, not four).
+- **Live failure of the first build (2026-10-24):** the packaged reset sent
+  bare passwords and no shared query parameters, so the gateway answered
+  `75500000 (Parameter error or missing occurred)`. The reset form
+  adds shared-params to every request, and the form refreshes
+  `authConfig` immediately before encrypting. Fork `7f399b5` does both; the
+  unit tests assert the `_<nonce>` suffix and the shared-params query.
 - **GoTrust implementation**: the fork answers the demand in place
   (`auth.LoginOptions.PasswordChangeHandler`), continues the chain with the
   answer's `next-step` (default `auth/auth-check`), and reports the new
   password through `OnPasswordChanged` only after `code == 0`; the chain skips
   `reportEnv` when the portal issued no ticket with the change. The voluntary
-  path is `Client.ChangePassword` / `PasswordStrategy` / `CheckWeakPassword`,
+  path is `Client.ResetPassword` / `PasswordStrategy` / `CheckWeakPassword`,
   gated on the live session.
