@@ -1358,21 +1358,33 @@
     `libayatana-appindicator is deprecated` warning (no GL/GTK error), and
     SIGTERM exits 0. A second run against a stalling gateway, cancelled with
     SIGTERM, logged no `session failed` line
-  - ran the guide's native-window smoke as far as it is safe: the window opened
-    from a temporary config with `--config`, `flameshot full` plus the guide's
-    `1600x1700+1100+250` crop located it, and it rendered `连接中`,
-    `127.0.0.1:<stall>`, `discovering the authentication methods…`, 断开/设置/退出
-    and the spinner
-  - the click on 断开 could not be confirmed: between the screenshot and the
-    click the desktop changed (other applications' windows appeared and rose),
-    the app window was no longer on top, and the process stayed alive with no
-    log change. Blind retries were stopped rather than guessing on a desktop in
-    active use. A later attempt needs an idle desktop; the guide now says so
-  - `ydotoold` runs from a detached shell; `grim` cannot capture (GNOME has no
-    wlr-screencopy). There is no headless compositor or Xvfb (weston, sway,
-    Xvfb absent) to isolate the window. Every process was stopped and all
-    screenshots deleted; two crops had included an unrelated notes window with
-    account text, which was never committed or pasted anywhere
+  - first attempt on the live desktop: the guide's crop located the window and
+    its `连接中` state, but the desktop changed between the screenshot and the
+    click (other applications rose), so the click was unconfirmable and blind
+    retries were stopped
+  - second attempt in a headless session, which is now the documented path:
+    `mutter --headless --no-x11 --wayland-display=wayland-gt
+    --virtual-monitor 1280x1024`, its own `Xwayland :99`, the app with
+    `DISPLAY=:99 GDK_BACKEND=x11`, capture with `import -display :99 -window
+    root`, input through python-xlib XTEST. Nothing appears on the operator's
+    screen and the capture holds only the nested display
+  - the window rendered `连接中` / `127.0.0.1:<stall>` /
+    `discovering the authentication methods…` / 断开·设置·退出 and the spinner.
+    Clicking 断开 returned it to `未连接` with the status `已取消`, the log had no
+    `session failed`, and the process stayed up — the P2 cancellation fix in a
+    real GTK window
+  - 设置 opened beside the main window (no GL error), 新建 added a draft
+    profile, 删除 removed it without a panic, the settings file still held one
+    profile (the delete was a draft edit), 关闭 hid the window, reopening
+    reloaded `默认` with 删除 disabled, and 退出 quit the process with only the
+    expected appindicator warning on stderr
+  - the Xwayland screen starts at 640x480 and clipped the 600x760 settings
+    window; `xrandr --newmode/--addmode/--output XWAYLAND0 --mode 1024x768` on
+    :99 made the pinned footer reachable
+  - all processes (app, `Xwayland :99`, headless mutter, the stalling listener,
+    `ydotoold`) were stopped and `/tmp/gt-nested` deleted, screenshots included.
+    Earlier live-desktop crops had included an unrelated notes window with
+    account text; they were deleted at once and never committed or pasted
   - every process (`goTrust-ui`, the stalling listener, `ydotoold`) was stopped
     and `/tmp/gt-ui` removed
 - Results:
@@ -1432,7 +1444,7 @@
 | Question | Answer |
 |----------|--------|
 | Where am I? | Phase 17 is complete: every P0/P1/P2 item landed with a regression test, and the automated verification (race suite, `reuse lint`, real-binary lifecycle) is green |
-| Where am I going? | The native-window click-through is the only manual item; Phase 8 (dae) stays deferred and Phase 18's double-click waits on mygo. Phase 16 is closed: `gotrust-git` is installed |
+| Where am I going? | The native smoke now runs headlessly; only the expiry→reconnect case needs the real gateway. Phase 8 (dae) stays deferred and Phase 18's double-click waits on mygo. Phase 16 is closed: `gotrust-git` is installed |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |

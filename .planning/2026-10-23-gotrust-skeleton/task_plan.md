@@ -13,9 +13,10 @@ package, and a UI polish pass.
 ## Next Step
 
 Phase 17 is remediated: every P0, P1 and P2 item is fixed with regression tests,
-including P1-17 in the fork and its pin bump. The automated verification pass is
-green (race suite, `reuse lint`, real-binary lifecycle); the native-window
-click-through stays manual because this session cannot drive the desktop safely.
+including P1-17 in the fork and its pin bump. The verification pass is green
+(race suite, `reuse lint`, real-binary lifecycle) and the native-window smoke
+ran in a headless mutter: 断开 during a login, settings delete/close/reopen and
+the quit path all behaved.
 Phase 16 is closed: the package is installed from `pacman -U`. Phase 8 (dae
 export) stays deferred, and Phase 18's double-click waits on mygo.
 
@@ -446,12 +447,17 @@ test except where noted):
       `gofmt -l .`, `reuse lint` (47/47), and a real-binary lifecycle run with a
       temporary config (`goTrust ready`, expected appindicator warning, SIGTERM
       exit 0)
-- [ ] Verification, native-window click-through (manual): 断开 during a login,
-      设置 delete, session expiry then reconnect. The behaviour behind each is
-      covered by handler/view tests; driving the GTK window from this session
-      is not safe (see progress: capture localization, no headless compositor)
-- **Status:** complete for the code; the native-window click-through stays a
-  manual smoke item
+- [x] Verification, native window: a headless mutter plus its own Xwayland
+      (`docs/agent-ui-testing.md`, "Headless session") drove the real GTK
+      window without touching the desktop. 断开 during a login returned the
+      window to `未连接` with `已取消` and no failure in the log; 设置 → 新建 →
+      删除 removed the draft profile with no panic, the file kept its one
+      profile, and reopening reloaded `默认`; 关闭 hid the settings window and
+      the question mark (退出) quit cleanly. `reconnect` after expiry still
+      needs the real gateway and stays manual (Phase 14)
+- **Status:** complete
+- **Note:** the headless recipe is now the preferred native smoke; the real
+  desktop is needed only for tray/panel behaviour
 - **Note:** Phase 16 is closed (the package is installed with `pacman -U`).
   P1-17 needed a fork commit and a pin bump; every other item above is
   goTrust-local.

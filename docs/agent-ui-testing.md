@@ -17,6 +17,43 @@ crash looks like an exit: always capture stderr.
   screenshot and click in the same step, and stop the smoke if the layout
   changed.
 
+## Headless session (preferred)
+
+Most of the native smoke can run without touching the operator's desktop: a
+headless mutter plus its own Xwayland gives an isolated display whose windows,
+screenshots and injected clicks stay inside it. Nothing appears on the real
+screen, and the capture cannot contain the operator's data.
+
+```sh
+root=/tmp/gt-nested
+mkdir -p "$root/runtime" "$root/config" "$root/state"
+chmod 700 "$root/runtime"
+XDG_RUNTIME_DIR="$root/runtime" mutter --headless --no-x11 \
+  --wayland-display=wayland-gt --virtual-monitor 1280x1024 &
+XDG_RUNTIME_DIR="$root/runtime" WAYLAND_DISPLAY=wayland-gt Xwayland :99 &
+sleep 2
+DISPLAY=:99 GDK_BACKEND=x11 XDG_CONFIG_HOME="$root/config" \
+  XDG_STATE_HOME="$root/state" ./goTrust --config "$root/config/config.toml" &
+```
+
+- Capture with `import -display :99 -window root "$root/shot.png"`: only the
+  nested display is in the image. `grim` and `flameshot` are not involved.
+- Click and move with XTEST through python-xlib:
+  `from Xlib.ext import xtest; xtest.fake_input(d, X.ButtonPress, 1)` after a
+  `MotionNotify` warp; coordinates are the ones in the capture.
+- There is no window manager: windows take their requested size, and the
+  Xwayland screen starts at 640x480, which clips a 600x760 settings window.
+  Enlarge it on :99 (the "against an Xwayland server" warning is expected;
+  `--newmode` may report `BadName` yet still work):
+  `xrandr --newmode "1024x768" ...`, `xrandr --addmode XWAYLAND0 1024x768`,
+  `xrandr --output XWAYLAND0 --mode 1024x768`.
+- The same `--config` rules apply. A profile with `auto_connect = true`,
+  `store_password = true`, a password and a listener that accepts but never
+  answers puts the window in `连接中`, which is how 断开 during a login is
+  exercised in a real window.
+- Kill the app, `Xwayland :99` and the headless mutter when done. The real
+  desktop is still needed for tray/panel behaviour (icon, menu, double-click).
+
 ## GNOME hot corner
 
 `(0, 0)` opens the GNOME Activities overview and steals focus. **Never move the
