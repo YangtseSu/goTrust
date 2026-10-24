@@ -1346,6 +1346,42 @@
   断开 during a login, settings delete, session expiry then reconnect, and
   `reuse lint` on the committed tree).
 
+### Phase 17: verification pass
+
+- **Status:** automated part complete; the native-window click-through stays
+  manual
+- Actions taken:
+  - `go test ./...` and `go test -race ./...`: all six packages pass
+  - `go vet ./...`, `gofmt -l .`, `reuse lint`: clean, 47/47 files compliant
+  - real binary with a temporary `XDG_CONFIG_HOME`/`XDG_STATE_HOME`: the log
+    records `goTrust ready`, stderr holds only the expected
+    `libayatana-appindicator is deprecated` warning (no GL/GTK error), and
+    SIGTERM exits 0. A second run against a stalling gateway, cancelled with
+    SIGTERM, logged no `session failed` line
+  - attempted the interactive smoke on the live desktop: `ydotoold` runs from a
+    detached shell and `flameshot full` captures the screen, but `grim` cannot
+    (GNOME has no wlr-screencopy). The diff-based window localization matched
+    an unrelated window whose content is private; the screenshots were deleted
+    immediately and nothing was committed or pasted into the session. Blind
+    `ydotool` input on the operator's live desktop was refused. There is no
+    headless compositor or Xvfb here to isolate the window (weston, sway, Xvfb
+    absent), so the click-through is left to the operator at the desktop
+  - every process (`goTrust-ui`, the stalling listener, `ydotoold`) was stopped
+    and `/tmp/gt-ui` removed
+- Results:
+  | Check | Result |
+  |---|---|
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean / clean / 47/47 |
+  | Real binary: ready, stderr, SIGTERM | `goTrust ready`, appindicator warning only, exit 0 |
+  | Cancelled login against a stalling gateway | no `session failed`, CLI reports the cancellation |
+  | Native window: 断开 during login / 设置 delete / expiry then reconnect | manual; the handlers are covered by `TestACancelledLoginPublishesNoFailure`, `TestAStoppedAttemptReportsCancelled`, the P0-3 settings-delete tests and the ladder tests |
+- Note: the expiry-then-reconnect path needs the real gateway and was already
+  recorded as a manual item in Phase 14.
+- Files created/modified: planning files only
+- Next: Phase 8 stays deferred; Phase 18's double-click waits on a mygo Linux
+  activation backend (draft in `findings.md`).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)

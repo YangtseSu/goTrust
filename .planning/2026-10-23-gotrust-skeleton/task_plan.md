@@ -12,18 +12,18 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: every P0 and P1 item is fixed with regression tests, including P1-17
-in the fork and its pin bump. The queue now holds the itemised P2 batch and
-then the verification pass (race suite, real UI smoke, `reuse lint`). Phase 16
-is closed: the package is installed from `pacman -U`. Phase 8 (dae export)
-stays deferred.
+Phase 17 is remediated: every P0, P1 and P2 item is fixed with regression tests,
+including P1-17 in the fork and its pin bump. The automated verification pass is
+green (race suite, `reuse lint`, real-binary lifecycle); the native-window
+click-through stays manual because this session cannot drive the desktop safely.
+Phase 16 is closed: the package is installed from `pacman -U`. Phase 8 (dae
+export) stays deferred, and Phase 18's double-click waits on mygo.
 
 ## Current Phase
 
-Phase 17 (review remediation; every P0 and P1 item is done, the P2 batch is
-running from the proxy item). Phase 18's tray menu item is done; its
-double-click/upstream
-item is blocked on mygo.
+Phase 17 (review remediation) is complete apart from the manual native-window
+click-through. Phase 18's tray menu item is done; its double-click/upstream item
+is blocked on mygo.
 
 ## Phases
 
@@ -442,9 +442,16 @@ test except where noted):
         `ReconnectState.Reason`; `Attention` is a bool because only its presence
         was ever used; `--print-resources` prints the snapshot metadata;
         the login channel's certificate check is documented at its call site
-- [ ] Verification: `go test -race ./...`, real UI smoke (断开 during login,
-      设置 delete, session expiry then reconnect), `reuse lint`
-- **Status:** pending
+- [x] Verification, automated: `go test -race ./...`, `go vet ./...`,
+      `gofmt -l .`, `reuse lint` (47/47), and a real-binary lifecycle run with a
+      temporary config (`goTrust ready`, expected appindicator warning, SIGTERM
+      exit 0)
+- [ ] Verification, native-window click-through (manual): 断开 during a login,
+      设置 delete, session expiry then reconnect. The behaviour behind each is
+      covered by handler/view tests; driving the GTK window from this session
+      is not safe (see progress: capture localization, no headless compositor)
+- **Status:** complete for the code; the native-window click-through stays a
+  manual smoke item
 - **Note:** Phase 16 is closed (the package is installed with `pacman -U`).
   P1-17 needed a fork commit and a pin bump; every other item above is
   goTrust-local.
