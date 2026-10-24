@@ -1498,7 +1498,10 @@
     keeps the account online and refuses the pending `auth-check` with
     75500006; the fork now signals `auth.ErrReauthRequired` and the manager
     retries the login once with the new credential (proven by the operator's
-    manual re-login in the same log)
+    manual re-login in the same log). The in-app reset then failed at the
+    policy probe, which the portal also encrypts; fork `3477534` sends
+    the nonce-encrypted value, keeps the renewal answer from clearing the
+    CSRF/key/nonce, and logs the three reset-path requests
   - goTrust: `session.Options.ChangePassword`/`OnPasswordChanged`, the forced
     panel in the login flow (message, account, rules, prompt, skip, cancel,
     context release), the voluntary panel in the settings window (offered only
@@ -1525,6 +1528,9 @@
   | Live forced change, third package (`r49`) | change succeeded at 23:03:25 and the credential was saved; the follow-up `auth-check` got `75500006` ("account already logged in") |
   | Fix for the continuation | the change leaves the account online and closes the pending chain; the fork now returns `auth.ErrReauthRequired` and the manager retries the login once with the saved credential (the operator's manual re-login with the new password succeeded at 23:03:49) |
   | Live forced change after the re-login fix | operator retry pending |
+  | In-app 重置密码 (`r50`) | failed before the reset request: `/public/policy-probe` rejected the plaintext password with "Parameter error or missing occurred" |
+  | Fix | fork `3477534`: the weak probe sends `<password>_nonce`; a renewal answer without CSRF/key/nonce no longer clears them; reset/weak/strategy calls log at info. Pin `v1.3.2-0.20261024152456-347753428ab2`, package `r51` |
+  | In-app 重置密码 after the fix | operator retry pending |
   | Live 90-day expiry | not triggered; operator test pending |
 - Files created/modified:
   - fork: `client/atrust/auth/password_change.go` (new),

@@ -541,6 +541,11 @@ policy). Endpoints and the signal are in `findings.md`.
   the new password works (the operator's manual retry in the same log), so the
   fork returns `auth.ErrReauthRequired` and the manager retries once with the
   saved credential.
+- **Note (in-app reset):** the settings dialog failed before its reset request:
+  `portal/public/policy-probe` also expects the RSA
+  `<password>_nonce` value, and the probe sent plaintext. Fork
+  `3477534` fixes the probe, keeps a renewal answer from clearing the session's
+  CSRF/key/nonce, and logs the reset path; the package was rebuilt (`r51`).
 
 ### Phase 20: Keyring credential storage (second; backend chosen at execution)
 
