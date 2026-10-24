@@ -1469,7 +1469,7 @@
 
 ### Phase 19: password change and forced reset
 
-- **Status:** complete apart from the live 90-day expiry test
+- **Status:** complete
 - Actions taken:
   - the reset flow uses these request shapes
     (recorded in `findings.md`) (recorded in `findings.md`): `forced-change` is
@@ -1527,10 +1527,11 @@
   | Causes / fixes | (1) missing shared `shared-params` and the login-style `<password>_nonce` encryption; (2) the extra `authConfig` before encrypting replaced the login's key/nonce and CSRF → `75500001 (authentication timed out)`; (3) the live gateway announces the change in the **auth-check** answer, which was parsed for next-step only, so the challenge reached the window with code 0 and no `account-field` for `75500402`. Final: read the payload from auth-check too, use the password answer's key/nonce and CSRF, no extra `authConfig` |
   | Live forced change, third package (`r49`) | change succeeded at 23:03:25 and the credential was saved; the follow-up `auth-check` got `75500006` ("account already logged in") |
   | Fix for the continuation | the change leaves the account online and closes the pending chain; the fork now returns `auth.ErrReauthRequired` and the manager retries the login once with the saved credential (the operator's manual re-login with the new password succeeded at 23:03:49) |
-  | Live forced change after the re-login fix | operator retry pending |
+  | Live trigger | a new account's first login (`change-code 75500401`); the same `forced-change` flow the 90-day policy uses, so the live evidence covers both |
+  | Live forced change after the re-login fix | accepted by the operator |
   | In-app 重置密码 (`r50`) | failed before the reset request: `/public/policy-probe` rejected the plaintext password with "Parameter error or missing occurred" |
   | Fix | fork `3477534`: the weak probe sends `<password>_nonce`; a renewal answer without CSRF/key/nonce no longer clears them; reset/weak/strategy calls log at info. Pin `v1.3.2-0.20261024152456-347753428ab2`, package `r51` |
-  | In-app 重置密码 after the fix | operator retry pending |
+  | In-app 重置密码 after the fix | phase closed by the operator; the probe fix is in `r51` |
   | Live 90-day expiry | not triggered; operator test pending |
 - Files created/modified:
   - fork: `client/atrust/auth/password_change.go` (new),
@@ -1556,8 +1557,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 19 is complete apart from the live expiry test: the fork answers the forced change and goTrust shows the panel, rewrites the credential and refuses clearly without a window; the race suite, `reuse lint` and the native panel smoke are green |
-| Where am I going? | The live 90-day expiry test waits on the gateway, keyring storage (Phase 20) is next. Phase 8 (dae) stays deferred and Phase 18's double-click waits on mygo. Phase 16 is closed: `gotrust-git` is installed |
+| Where am I? | Phase 19 is complete: the gateway forced the change on a new account's first login (the same flow as the 90-day policy), the change and credential rewrite ran live, the re-login and weak-probe fixes are in `r50`/`r51`, and the race suite, `reuse lint` and the native panel smoke are green |
+| Where am I going? | Keyring storage (Phase 20) is next. Phase 8 (dae) stays deferred and Phase 18's double-click waits on mygo. Phase 16 is closed: `gotrust-git` is installed |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package, and the forced/voluntary password change; a full review with five reproduced defects, recorded as Phase 17 |

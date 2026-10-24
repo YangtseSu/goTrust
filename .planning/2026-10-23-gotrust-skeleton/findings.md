@@ -757,6 +757,11 @@ The reset flow uses these request shapes:
   changeMangerResetPwd:1}`.
 - **Repeated characters**: the rule regex is `(\w|\W)\1{n-1}`, i.e. value
   `3` rejects `"aaa"` (exactly three repeats, not four).
+- **First login vs the 90-day policy (live, 2026-10-24):** the live demand came
+  from a new account's first login (`change-code 75500401`), not from the
+  expiry policy, but both are the same `next-step:"forced-change"` step and
+  the same reset page. Only the account-rename (`75500402`) and skip
+  (`75500404`) flags vary, so the live run also covers the 90-day case.
 - **Live failures and the final shape (2026-10-24):**
   1. The first package sent bare passwords and no shared query parameters; the
      gateway answered `75500000 (Parameter error or missing occurred)`.

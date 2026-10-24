@@ -12,18 +12,23 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 19 (password change, full) landed without live expiry evidence; Phase 19
-backend decided at execution) remain. Research for all three is in
-`findings.md`. Phase 17 is closed apart from the manual expiry→reconnect case;
-a live 断开 exposed a fatal packet-stack panic, fixed in one commit (package
-`r44`).
+Phase 19 (password change, forced and voluntary) is complete: the live gateway
+forced it on a new account's first login, which uses the same `forced-change`
+flow as the 90-day expiry. Phase 20 (keyring, backend decided at
+  execution) is next.
+Research is in `findings.md`. Phase 17 is closed apart from the manual
+expiry→reconnect case; a live 断开 exposed a fatal packet-stack panic, fixed in
+that fix (package `r44`).
 
 ## Current Phase
 
-Phase 19 is complete apart from the live 90-day expiry test. Phase 19 is
-planned, not started. Phase 17 is complete apart from the manual
-expiry→reconnect case, Phase 16 is closed, Phase 8 (dae export) stays deferred,
-and Phase 18's double-click waits on mygo.
+Phase 19 is complete. The live trigger was a new account's first login
+(`forced-change`, code 75500401), the same flow the 90-day policy uses: the
+change, the credential rewrite and the recovery after the portal closed the
+pending chain all ran against the gateway.
+Phase 17 is complete apart from the manual expiry→reconnect case, Phase 16 is
+closed, Phase 8 (dae export) stays deferred, and Phase 18's double-click waits
+on mygo.
 
 ## Phases
 
@@ -514,9 +519,11 @@ policy). Endpoints and the signal are in `findings.md`.
 - [x] Tests: typed signal parsing, form/JSON bodies and encryption, skip,
       rules/violations, panel validation and cancel, stored credential updated,
       headless refusal is clear
-- [ ] Live test with the real 90-day expiry (operator); until then the panel is
-      exercised with the bundle's shapes only
-- **Status:** complete apart from the live expiry check
+- [x] Live test: the gateway forced the change on a new account's first login
+      (same `forced-change` flow as the 90-day expiry); the change succeeded,
+      the credential was rewritten, and the portal closed the pending chain
+      with `75500006`, which the automatic re-login handles
+- **Status:** complete
 - **Note:** the reset form uses these shapes: `forced-change` is form-urlencoded
   with RSA-encrypted
   `oldPassword`/`newPassword` (no anti-replay suffix) and optional
@@ -531,9 +538,10 @@ policy). Endpoints and the signal are in `findings.md`.
   that demanded the change and got `75500000 (Parameter error or missing
   occurred)`. The reset form refreshes `authConfig` before encrypting and
   sends `<password>_nonce`; every request also carries
-  shared-params. Fork `7f399b5` does both, the pin moved to
-  `v1.3.2-0.20261024143624-7f399b5d1dbf`, and the package was rebuilt (`r48`);
-  the forced-flow completion still needs the operator's retry.
+  shared-params. Fork `7f399b5` added both; a later fix
+  removed the authConfig refresh (the second live attempt got `75500001`),
+  because the session's own key/nonce from the password answer are what the
+  portal expects.
 - **Note (live completion and re-login):** the next package changed the password
   successfully and saved it, but the portal then answered the follow-up
   `auth-check` with `75500006 (account already logged in)` because the change
@@ -546,6 +554,11 @@ policy). Endpoints and the signal are in `findings.md`.
   `<password>_nonce` value, and the probe sent plaintext. Fork
   `3477534` fixes the probe, keeps a renewal answer from clearing the session's
   CSRF/key/nonce, and logs the reset path; the package was rebuilt (`r51`).
+- **Note (first login is the same flow):** the live demand came from a new
+  account's first login (`change-code 75500401`), not from the 90-day policy,
+  but the portal routes both through `next-step:"forced-change"` and the
+  same reset page; only the account-rename (`75500402`) and skip (`75500404`)
+  flags vary. The live evidence therefore covers the expiry case as well.
 
 ### Phase 20: Keyring credential storage (second; backend chosen at execution)
 
