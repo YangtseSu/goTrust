@@ -757,12 +757,25 @@ The reset flow uses these request shapes:
   changeMangerResetPwd:1}`.
 - **Repeated characters**: the rule regex is `(\w|\W)\1{n-1}`, i.e. value
   `3` rejects `"aaa"` (exactly three repeats, not four).
-- **Live failure of the first build (2026-10-24):** the packaged reset sent
-  bare passwords and no shared query parameters, so the gateway answered
-  `75500000 (Parameter error or missing occurred)`. The reset form
-  adds shared-params to every request, and the form refreshes
-  `authConfig` immediately before encrypting. Fork `7f399b5` does both; the
-  unit tests assert the `_<nonce>` suffix and the shared-params query.
+- **Live failures and the final shape (2026-10-24):**
+  1. The first package sent bare passwords and no shared query parameters; the
+     gateway answered `75500000 (Parameter error or missing occurred)`.
+  2. The next package added the `password-payload` suffix and the shared
+     query, but also called `authConfig` again right before encrypting, and the
+     gateway answered `75500001` ("The current authentication timed out"): the
+     refresh replaced the login's key/nonce and could clear its CSRF token.
+  3. The app log showed the gateway names the change in the **auth-check**
+     answer (`portal/auth/auth-check` → `next-step:"forced-change"`),
+     not in the password answer. `auth-check` parsed only next-step and the
+     step list, so the window got a code-0 challenge: no message, no policy,
+     and no account field for `75500402`.
+  The final shape parses the challenge payload from both answers (fallbacks:
+  the login's username/domain), uses the session's stored key and nonce from
+  the password answer (the portal's flow reads the same values from the session), adds shared-params, and makes no extra `authConfig`
+  call between the password answer and the change. Tests cover the live order
+  `psw → auth-check(change-password, 75500402) → change-password` with the account name,
+  the `_<psw nonce>` suffix, the original `x-csrf-token` and a single
+  `authConfig` call.
 - **GoTrust implementation**: the fork answers the demand in place
   (`auth.LoginOptions.PasswordChangeHandler`), continues the chain with the
   answer's `next-step` (default `auth/auth-check`), and reports the new

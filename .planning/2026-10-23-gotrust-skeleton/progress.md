@@ -1485,12 +1485,16 @@
     session outlives setup so `ChangePassword` can finish it. Added
     `ResetPassword` (security endpoint), `PasswordStrategy`, `Rules`/
     `Violations`, and `CheckWeakPassword`
-  - live attempt `r47` failed on `change-password` with 75500000: the
-    the change form fetches `authConfig` immediately before encrypting
-    (fresh key + anti-replay nonce) and every request carries
-    `shared-params`; the first build did neither. Fixed in fork
-    `7f399b5` (pin `v1.3.2-0.20261024143624-7f399b5d1dbf`) and the package was
-    rebuilt as `r48`
+  - live attempts: `r47` failed on `change-password` with 75500000 (bare
+    passwords, no shared query); the next package added the
+    `password-payload` suffix, the shared query and an extra `authConfig`
+    refresh, and failed with 75500001 (the refresh replaced the login's
+    key/nonce and CSRF), and finally (3) the live gateway names the change in
+    the auth-check answer, which we parsed for next-step only, losing
+    `change-code`/message/strategy and the account field. Final fix: capture
+    the payload from both answers, use the login answer's key/nonce from the
+    session, no extra `authConfig`; unit tests cover the live
+    psw → auth-check(change-password) → change-password order
   - goTrust: `session.Options.ChangePassword`/`OnPasswordChanged`, the forced
     panel in the login flow (message, account, rules, prompt, skip, cancel,
     context release), the voluntary panel in the settings window (offered only
@@ -1513,8 +1517,8 @@
   | Forced panel, native | headless mutter + Xwayland, real GTK window, the gateway's message and fields visible |
   | `--no-ui` refusal | real binary + fake gateway: clear message, exit 1 |
   | Live forced change, first package (`r47`) | failed `75500000 (Parameter error or missing occurred)` |
-  | Root cause / fix | request lacked the shared `shared-params` query and the login-style `<password>_nonce` encryption; fork `7f399b5` refreshes `authConfig` before encrypting and sends the shared query. Pin now `v1.3.2-0.20261024143624-7f399b5d1dbf` |
-  | Live forced change after the fix | operator retry pending (package rebuilt) |
+  | Causes / fixes | (1) missing shared `shared-params` and the login-style `<password>_nonce` encryption; (2) the extra `authConfig` before encrypting replaced the login's key/nonce and CSRF → `75500001 (authentication timed out)`; (3) the live gateway announces the change in the **auth-check** answer, which was parsed for next-step only, so the challenge reached the window with code 0 and no `account-field` for `75500402`. Final: read the payload from auth-check too, use the password answer's key/nonce and CSRF, no extra `authConfig` |
+  | Live forced change after the final fix | operator retry pending |
   | Live 90-day expiry | not triggered; operator test pending |
 - Files created/modified:
   - fork: `client/atrust/auth/password_change.go` (new),
