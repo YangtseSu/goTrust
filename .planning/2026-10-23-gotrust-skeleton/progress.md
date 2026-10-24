@@ -1064,6 +1064,37 @@
   planning files
 - Next: P1-17 (fork: gVisor `DialTCP` reports tunnel traffic; pin bump).
 
+### Phase 17: packet-stack restore confirmation (P1-17, fork)
+
+- **Status:** done (fork commit pushed, pin bumped); next is the P2 batch
+- Actions taken:
+  - added `trafficObserver` and `reportTunnelTraffic` to the fork's
+    `stack/gvisor`, and `DialTCP` reports a successful `gonet` connection; the
+    TCP-tunnel shortcut keeps reporting its own handshake, and `easyconnect`
+    does not implement the observer
+  - fork tests: the adapter reaches an observer, ignores a client without one,
+    and the compile-time assertion `var _ trafficObserver = (*atrust.Client)(nil)`
+    keeps the aTrust client wired to it; the fork's full suite passes
+  - committed `5e185ef` on `dev`, ran the privacy review (diff and message hold
+    code and comments only), pushed to `origin` after approval
+  - `go.mod` require + replace moved to
+    `v1.3.2-0.20261024055516-5e185ef9fdce`; `go mod tidy` refreshed `go.sum`
+- Results:
+  | Check | Result |
+  |---|---|
+  | Fork `go build ./...`, `go test ./...` | pass |
+  | Fork push | `1d0673b..5e185ef dev -> dev` |
+  | goTrust build, `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .` | clean |
+  | `reuse lint` on the committed tree (clean worktree of HEAD) | 47/47 compliant |
+  | `reuse lint` in the working tree | fails on the new untracked `.agents/skills/mygo-maintenance/SKILL.md` (not ours; left untouched) |
+- Note: the live acceptance (a real restore leaving `正在恢复会话` on its own)
+  needs the gateway and is recorded as a manual smoke item; the packet-stack
+  dial itself is not reachable in a unit test without a gVisor peer.
+- Files created/modified: fork `stack/gvisor/dial.go`, `dial_test.go`;
+  `go.mod`, `go.sum`, planning files
+- Next: the itemised P2 batch.
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)
@@ -1106,8 +1137,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4…P1-15 landed; P1-17 needs a fork commit; Phase 16 `pacman -U` still awaits sudo |
-| Where am I going? | Scheduled queue: P1-17 (fork gVisor `ObserveTunnelTraffic` + pin bump) → itemised P2 batch → verification; Phase 8 (dae) last |
+| Where am I? | Phase 17 recorded (review remediation); every P0/P1 item landed, including the fork fix and pin bump; P2 batch is next |
+| Where am I going? | Itemised P2 batch → verification pass; Phase 8 (dae) last; Phase 16 `pacman -U` awaits sudo |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |

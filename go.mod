@@ -5,9 +5,10 @@ go 1.27.1
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/egoist/mygo v0.6.3
-	github.com/mythologyli/zju-connect v1.3.2-0.20261023225112-1d0673b1c79b
+	github.com/mythologyli/zju-connect v1.3.2-0.20261024055516-5e185ef9fdce
 	github.com/pquerna/otp v1.5.0
 	github.com/things-go/go-socks5 v0.1.1
+	inet.af/netaddr v0.0.0-20230525184311-b8eac61e914a
 )
 
 require (
@@ -48,9 +49,8 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
 	gvisor.dev/gvisor v0.0.0-20260129214308-cb856800aa1c // indirect
-	inet.af/netaddr v0.0.0-20230525184311-b8eac61e914a // indirect
 )
 
 // Upstream main lacks the aTrust session-lifecycle and keep-alive fixes this
 // app depends on; the fork's dev branch carries them and its CI is green.
-replace github.com/mythologyli/zju-connect => github.com/YangtseSu/zju-connect v1.3.2-0.20261023225112-1d0673b1c79b
+replace github.com/mythologyli/zju-connect => github.com/YangtseSu/zju-connect v1.3.2-0.20261024055516-5e185ef9fdce

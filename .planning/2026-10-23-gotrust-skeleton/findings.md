@@ -523,17 +523,16 @@ no code was changed by the review.
 - The TCP-tunnel decision is now `IP()`: `CanUseTCPTunnel()` is unconditional in
   the atrust client, so it cannot select a stack. The gVisor stack is the
   normal path and the TCP tunnel is the TCP-only fallback.
-- **New upstream gap caused by that:** `ObserveTunnelTraffic` is called only by
-  `client/atrust/tcptunnel.go:620` after a tunnel handshake. The gVisor stack
-  has no equivalent, and `restoreFromTicket`/`relogin` deliberately leave
-  `SessionRestoring` until that hook fires. With gVisor, a restored session can
-  therefore keep goTrust in `PhaseReconnecting` after the tunnel is working.
-  Keep-alive probes are real application traffic, but the fork does not report
-  them as such. Candidate fixes: a fork hook in `stack/gvisor` `DialTCP` →
-  `ObserveTunnelTraffic`, or goTrust confirming on a non-fallback keep-alive
-  success. Not in the review list; scheduled as **P1-17** in `task_plan.md`,
-  the last P1 item before the P2 batch, with the fork hook as the primary fix
-  because keep-alive can be off.
+- **New upstream gap caused by that:** `ObserveTunnelTraffic` was called only
+  by `client/atrust/tcptunnel.go:620` after a tunnel handshake. The gVisor
+  stack had no equivalent, and `restoreFromTicket`/`relogin` deliberately leave
+  `SessionRestoring` until that hook fires, so with gVisor a restored session
+  could keep goTrust in `PhaseReconnecting` after the tunnel was working.
+  **Fixed in fork `5e185ef`** (pushed to `origin/dev`, pin
+  `v1.3.2-0.20261024055516-5e185ef9fdce`): the gVisor `DialTCP` reports a
+  successful packet-stack connection through the same optional observer;
+  `easyconnect` does not implement it. Keep-alive confirmation was considered
+  as a fallback and rejected because probes can be off.
 - `Manager.Resolve` reads the resolver per call, so the SOCKS5 listener follows
   an auto-reconnect instead of holding the dead stack's resolver.
 

@@ -12,11 +12,11 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: P0 and every goTrust-local P1 item (P1-4…P1-15) are fixed with
-regression tests. The queue now starts with P1-17, which needs a commit in the
-fork (gVisor `DialTCP` → `ObserveTunnelTraffic`) and a pin bump, followed by the
-itemised P2 batch and the verification pass. Phase 16's `pacman -U` install
-still needs the operator's sudo password; Phase 8 (dae export) stays deferred.
+Phase 17: every P0 and P1 item is fixed with regression tests, including P1-17
+in the fork and its pin bump. The queue now holds the itemised P2 batch and
+then the verification pass (race suite, real UI smoke, `reuse lint`). Phase 16's
+`pacman -U` install still needs the operator's sudo password; Phase 8 (dae
+export) stays deferred.
 
 ## Current Phase
 
@@ -399,15 +399,13 @@ test except where noted):
       The same path hid a panic: the 256-byte truncation floor sliced past a
       shorter line whenever `MaxBytes` was under 512; the floor now applies
       only when the line is longer
-- [ ] P1-17, restore confirmation on the packet stack (found while fixing P1-5,
-      not in the review list): `ObserveTunnelTraffic` is called only by the TCP
-      tunnel (`client/atrust/tcptunnel.go:620`), so a restored session on the
-      gVisor stack never leaves `SessionRestoring` and the window keeps saying
-      `正在恢复会话` over a working tunnel. Fix in the fork's gVisor `DialTCP`
-      (mirroring the TCP tunnel) and bump the pin; keep-alive confirmation is
-      only a partial fallback because probes can be off. Acceptance: after a
-      restore, the first tunnelled connection publishes `online`; the window and
-      tray leave the reconnecting state without help
+- [x] P1-17, restore confirmation on the packet stack: the fork's gVisor
+      `DialTCP` reports a successful packet-stack connection through the same
+      optional observer the TCP tunnel uses (fork `5e185ef`,
+      `v1.3.2-0.20261024055516-5e185ef9fdce`). easyconnect is unaffected, and
+      the TCP tunnel still reports its own handshake. Live acceptance (a real
+      restore leaving `正在恢复会话`) stays a manual smoke item because this
+      account's gateway was not exercised
 - [ ] P2 batch, itemised from `findings.md`:
   - [ ] proxy: track hijacked CONNECT/SOCKS5 connections and close them in
         `Server.Close`; forward no hop-by-hop request headers
