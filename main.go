@@ -47,6 +47,16 @@ func main() {
 		if err != nil {
 			log.Fatalf("resources: %v", err)
 		}
+		// A cached snapshot may be days old and --print-resources runs without
+		// a login, so say whose grant this is before the rows.
+		if !snapshot.SavedAt.IsZero() {
+			fmt.Printf("saved %s by profile %s via %s",
+				snapshot.SavedAt.Format(time.RFC3339), snapshot.Profile, snapshot.Gateway)
+			if snapshot.TunnelIP != "" {
+				fmt.Printf(", tunnel %s", snapshot.TunnelIP)
+			}
+			fmt.Println()
+		}
 		fmt.Println(session.FormatResources(snapshot.Resources))
 		return
 	}
@@ -95,7 +105,7 @@ func main() {
 	}
 	if *headless {
 		sessionOptions.Prompt = func(context.Context) session.Prompter {
-			return cliPrompter{logger: application.logger}
+			return cliPrompter{}
 		}
 	} else {
 		sessionOptions.Prompt = func(ctx context.Context) session.Prompter {
@@ -609,7 +619,7 @@ func (a *app) onSessionState(state session.State) {
 	// ladder's interim failures carry no Attention and keep the listeners: a
 	// retry that succeeds reuses them, and the app does not restart a proxy
 	// from inside the ladder.
-	if state.Phase == session.PhaseFailed && state.Attention != "" && !stopping {
+	if state.Phase == session.PhaseFailed && state.Attention && !stopping {
 		a.releaseProxy()
 	}
 
@@ -620,7 +630,7 @@ func (a *app) onSessionState(state session.State) {
 
 	// A login that fails while the window is hidden must not fail silently, and
 	// neither may a session that expired or a ladder that stopped at a prompt.
-	if (state.Phase == session.PhaseFailed || state.Attention != "") && !stopping {
+	if (state.Phase == session.PhaseFailed || state.Attention) && !stopping {
 		a.showWindow()
 	}
 }

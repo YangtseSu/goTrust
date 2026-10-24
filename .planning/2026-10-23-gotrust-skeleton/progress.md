@@ -1300,6 +1300,52 @@
   `main.go`, `app_test.go`, planning files
 - Next: P2 keep-alive interval bound and dead-code/metadata cleanup.
 
+### Phase 17: keep-alive floor, dead code and snapshot metadata (P2)
+
+- **Status:** done (one commit); the P2 batch is complete, the verification
+  pass remains
+- Actions taken:
+  - wrote the keep-alive checks first and ran them in a throwaway worktree: a
+    hand-edited `1s` interval reached the probe loop, and the settings save
+    accepted `5s`
+  - `config.MinimumKeepAliveInterval` is 10 s. `KeepAliveInterval` clamps a
+    positive value below it instead of reverting to the 90 s default, and the
+    settings save rejects one with a message naming the floor; the view says
+    `至少 10 秒；默认 90 秒`
+  - dead code removed after checking each symbol: `Config.SelectProfile`
+    (the app switches with `ActiveProfile` plus `SaveFile`), `RenameProfile`
+    (the settings draft renames and `Apply` checks duplicates),
+    `ClientDataPath` (callers use `ClientDataPathFor`), `Logger.Writer`,
+    `cliPrompter.logger` (never read) and `ReconnectState.Reason` (the reason
+    is already `Detail`)
+  - `State.Attention` is now a bool: only its presence was used, by the app to
+    release the listeners and reveal the window; `failureState` takes the flag
+    and the explanatory text that was never displayed is gone
+  - the tests that pinned the removed API were deleted or moved to the
+    remaining one (`ClientDataPathFor(cfg.Active())`, a direct
+    `ActiveProfile` assignment in the tray tests)
+  - `--print-resources` starts with `saved <RFC3339> by profile <name> via
+    <gateway>, tunnel <ip>`, so a days-old cache is attributable
+  - the login channel's certificate check is documented at its call site;
+    the tunnel authenticates at the aTrust layer, and the proxy bind stays on
+    loopback
+- Results:
+  | Check | Result |
+  |---|---|
+  | Pre-fix: `1s` interval reaches the loop / settings accept `5s` | both failed |
+  | After: clamp / floor accepted / 30 s kept | 10 s / pass / 30 s |
+  | `--print-resources` with a temp cache | header, then the rows, exit 0 |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
+- Files created/modified: `config/config.go`, `config/config_test.go`,
+  `ui/settings.go`, `ui/settings_test.go`, `session/session.go`,
+  `session/reconnect.go`, `session/reconnect_test.go`, `logging/logging.go`,
+  `prompt.go`, `main.go`, `app_test.go`, `ui/view_test.go`, `README.md`,
+  planning files
+- Next: the Phase 17 verification pass (`go test -race`, the real UI smoke for
+  断开 during a login, settings delete, session expiry then reconnect, and
+  `reuse lint` on the committed tree).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)

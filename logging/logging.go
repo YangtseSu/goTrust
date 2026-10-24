@@ -155,9 +155,6 @@ func (l *Logger) openLocked() error {
 	return nil
 }
 
-// Writer returns the underlying io.Writer. It is the logger itself.
-func (l *Logger) Writer() io.Writer { return l }
-
 // Path is the current log file.
 func (l *Logger) Path() string { return l.path }
 

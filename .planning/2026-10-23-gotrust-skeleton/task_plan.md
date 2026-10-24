@@ -435,12 +435,13 @@ test except where noted):
         A real `--no-ui` run cancelled against a stalling gateway logged no
         `session failed` line; `installProxy` is the extracted guard with a
         test that installs nothing after a release
-  - [ ] keep-alive: lower interval bound in the settings view
-  - [ ] dead code and metadata: drop `Config.SelectProfile/RenameProfile/
-        ClientDataPath`, `Logger.Writer/Verbose`, `cliPrompter.logger`,
-        `ReconnectState.Reason`, redundant `Attention` (whatever the fixes
-        above leave unused); `--print-resources` prints the snapshot metadata;
-        document or remove the inherited `InsecureSkipVerify`
+  - [x] keep-alive: lower interval bound in the settings view (10 s; a
+        hand-edited smaller value is clamped, the settings save rejects it)
+  - [x] dead code and metadata: dropped `Config.SelectProfile/RenameProfile/
+        ClientDataPath`, `Logger.Writer`, `cliPrompter.logger` and
+        `ReconnectState.Reason`; `Attention` is a bool because only its presence
+        was ever used; `--print-resources` prints the snapshot metadata;
+        the login channel's certificate check is documented at its call site
 - [ ] Verification: `go test -race ./...`, real UI smoke (断开 during login,
       设置 delete, session expiry then reconnect), `reuse lint`
 - **Status:** pending

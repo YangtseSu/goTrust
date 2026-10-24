@@ -262,9 +262,7 @@ func TestTrayMenuStatusProfilesAndToggle(t *testing.T) {
 	if _, err := cfg.AddProfile("工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
-	if err := cfg.SelectProfile(config.DefaultProfileName); err != nil {
-		t.Fatalf("select: %v", err)
-	}
+	cfg.ActiveProfile = config.DefaultProfileName
 
 	var login, logout int
 	var selected string

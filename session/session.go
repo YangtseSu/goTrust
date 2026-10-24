@@ -71,9 +71,10 @@ type State struct {
 	KeepAlive KeepAliveState
 	// Reconnect is the ladder position while a lost session is retried.
 	Reconnect ReconnectState
-	// Attention asks the UI to bring itself forward: the login needs a person,
-	// or the session expired and cannot recover on its own.
-	Attention string
+	// Attention marks a terminal failure: the login needs a person, or the
+	// session expired and cannot recover on its own. The UI brings itself
+	// forward and releases the listeners; the detail line says why.
+	Attention bool
 	// Since is when the phase was entered.
 	Since time.Time
 }

@@ -246,26 +246,12 @@ func TestProfileOperations(t *testing.T) {
 		t.Fatalf("active = %q after duplicate", cfg.ActiveProfile)
 	}
 
-	if err := cfg.RenameProfile(2, "备用"); err != nil {
-		t.Fatalf("rename: %v", err)
-	}
-	if cfg.ActiveProfile != "备用" {
-		t.Fatalf("renaming the active profile changed the active name to %q", cfg.ActiveProfile)
-	}
-	if err := cfg.RenameProfile(2, DefaultProfileName); err == nil {
-		t.Fatal("renaming onto an existing name was accepted")
-	}
-
 	if err := cfg.DeleteProfile(2); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if len(cfg.Profiles) != 2 {
 		t.Fatalf("profiles = %v", cfg.ProfileNames())
 	}
-	if err := cfg.SelectProfile("missing"); err == nil {
-		t.Fatal("selecting an unknown profile succeeded")
-	}
-
 	cfg.Profiles = cfg.Profiles[:1]
 	cfg.ActiveProfile = cfg.Profiles[0].Name
 	if err := cfg.DeleteProfile(0); err == nil {
@@ -313,7 +299,7 @@ func TestClientDataPathIsPerProfile(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	cfg := Default()
-	path, err := cfg.ClientDataPath()
+	path, err := cfg.ClientDataPathFor(cfg.Active())
 	if err != nil {
 		t.Fatalf("path: %v", err)
 	}
@@ -366,7 +352,7 @@ func TestClientDataFollowsTheLoadedSettingsFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	first, err := cfg.ClientDataPath()
+	first, err := cfg.ClientDataPathFor(cfg.Active())
 	if err != nil {
 		t.Fatalf("path: %v", err)
 	}
@@ -394,7 +380,7 @@ func TestClientDataFollowsTheLoadedSettingsFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load missing: %v", err)
 	}
-	fresh, err := missing.ClientDataPath()
+	fresh, err := missing.ClientDataPathFor(missing.Active())
 	if err != nil {
 		t.Fatalf("path: %v", err)
 	}
@@ -418,6 +404,17 @@ func TestIntervalFallsBackOnGarbage(t *testing.T) {
 	cfg.Profiles[0].Keep.Interval = "0s"
 	if got := cfg.KeepAliveInterval(); got != 90*time.Second {
 		t.Fatalf("zero interval = %v, want the default", got)
+	}
+
+	// Every probe is a real request, so a hand-edited fast interval is clamped
+	// instead of hammering the gateway.
+	cfg.Profiles[0].Keep.Interval = "1s"
+	if got := cfg.KeepAliveInterval(); got != MinimumKeepAliveInterval {
+		t.Fatalf("1s interval = %v, want %v", got, MinimumKeepAliveInterval)
+	}
+	cfg.Profiles[0].Keep.Interval = "30s"
+	if got := cfg.KeepAliveInterval(); got != 30*time.Second {
+		t.Fatalf("30s interval = %v, want it kept", got)
 	}
 }
 

@@ -74,6 +74,7 @@ func TestSettingsApplyRejectsBadValues(t *testing.T) {
 		{"bad port", func(state *SettingsState) { state.Ports[0] = "70000" }},
 		{"text port", func(state *SettingsState) { state.Ports[0] = "https" }},
 		{"bad interval", func(state *SettingsState) { state.Draft.Profiles[0].Keep.Interval = "soon" }},
+		{"interval below the floor", func(state *SettingsState) { state.Draft.Profiles[0].Keep.Interval = "5s" }},
 		{"no listener", func(state *SettingsState) {
 			state.Draft.Proxy.SOCKS5Bind = ""
 			state.Draft.Proxy.HTTPBind = ""
@@ -114,6 +115,21 @@ func TestSettingsApplyTrimsAndChecksProxyBinds(t *testing.T) {
 	}
 	if socks5, httpBind := cfg.ProxyAddresses(); socks5 != "127.0.0.1:1080" || httpBind != "localhost:1081" {
 		t.Fatalf("proxy = %q %q, want the trimmed binds", socks5, httpBind)
+	}
+}
+
+// The floor is the shortest cadence a probe may have; a value at the floor is
+// accepted, so the error is about the rate and not a fixed list of values.
+func TestSettingsApplyAcceptsTheMinimumKeepAliveInterval(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	state.Draft.Profiles[0].Keep.Interval = "10s"
+
+	cfg, err := state.Apply()
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if got := cfg.KeepAliveInterval(); got != config.MinimumKeepAliveInterval {
+		t.Fatalf("interval = %v, want %v", got, config.MinimumKeepAliveInterval)
 	}
 }
 

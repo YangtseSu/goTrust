@@ -127,9 +127,7 @@ func TestActiveProfileFeedsTheSession(t *testing.T) {
 		t.Fatalf("active server = %q", got)
 	}
 
-	if err := cfg.SelectProfile(config.DefaultProfileName); err != nil {
-		t.Fatalf("select: %v", err)
-	}
+	cfg.ActiveProfile = config.DefaultProfileName
 	application.applyConfig(cfg)
 	if got := application.currentConfig().Active().ServerAddress(); got != "first.example.com" {
 		t.Fatalf("active server after switch = %q", got)
@@ -327,7 +325,7 @@ func TestTerminalSessionFailureReleasesTheProxyListeners(t *testing.T) {
 	application.onSessionState(session.State{
 		Phase:     session.PhaseFailed,
 		Detail:    "会话已过期，需要重新登录",
-		Attention: "会话已过期，需要重新登录",
+		Attention: true,
 	})
 
 	listener, err := net.Listen("tcp", address)

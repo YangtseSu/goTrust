@@ -48,9 +48,6 @@ type ReconnectState struct {
 	Max int
 	// NextAt is when the next attempt starts, zero while one is in flight.
 	NextAt time.Time
-	// Reason is why the ladder started: the session died, or the client asked
-	// for a reauthentication.
-	Reason string
 }
 
 // KeepAliveState is the last application-traffic probe, reported by the
@@ -98,7 +95,7 @@ func (m *Manager) observeSessionState(source *atrust.Client, state atrust.Sessio
 			Detail:    "正在恢复会话",
 			ClientIP:  m.tunnelIP(),
 			Resources: m.resources(),
-			Reconnect: ReconnectState{Max: len(reconnectDelays), Reason: reason},
+			Reconnect: ReconnectState{Max: len(reconnectDelays)},
 		})
 	case atrust.SessionOnline:
 		if phase != PhaseReconnecting || m.reconnectRunning() {
@@ -190,12 +187,11 @@ func (m *Manager) runReconnect(ctx context.Context, reason string) {
 	case reconnectChallenge:
 		// A retry cannot answer a captcha, a one-time code or an SSO callback.
 		// The prompt is on screen; stop and let the person finish.
-		m.set(failureState("自动重连已停止：登录需要你完成验证",
-			"请在窗口中完成登录验证", resources))
+		m.set(failureState("自动重连已停止：登录需要你完成验证", true, resources))
 	case reconnectExhausted:
 		m.set(failureState(
 			fmt.Sprintf("自动重连 %d 次后仍失败: %v", attempts, lastErr),
-			"自动重连失败，请手动连接", resources))
+			true, resources))
 	}
 }
 
@@ -288,7 +284,6 @@ func (m *Manager) setReconnectWait(attempt int, reason string, next time.Time) {
 			Attempt: attempt,
 			Max:     len(reconnectDelays),
 			NextAt:  next,
-			Reason:  reason,
 		},
 	})
 }
@@ -298,12 +293,12 @@ func (m *Manager) setReconnectWait(attempt int, reason string, next time.Time) {
 func (m *Manager) expire(detail string) {
 	resources := m.resources()
 	m.teardown()
-	m.set(failureState(detail, detail, resources))
+	m.set(failureState(detail, true, resources))
 }
 
 // failureState keeps the resources the account was granted visible: they did not
 // change, only the tunnel did.
-func failureState(detail, attention string, resources Resources) State {
+func failureState(detail string, attention bool, resources Resources) State {
 	return State{
 		Phase:     PhaseFailed,
 		Detail:    detail,

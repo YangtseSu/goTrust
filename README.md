@@ -254,7 +254,8 @@ The main window and the tray tooltip show the last keep-alive probe: target,
 HTTP status, transport error, or the DNS fallback. A `https://` target is
 tunnelled with CONNECT and does not count as application traffic, so it does
 not renew the session; use a plain `http://` address inside the VPN. Manual
-targets are probed first, derived candidates after them.
+targets are probed first, derived candidates after them. The interval has a
+10 s floor because every probe is a real request; 90 s is the default.
 
 ## Logs
 
@@ -281,7 +282,8 @@ application.
 
 The last snapshot is cached at `resources.json` beside `config.toml` (0600). It
 holds intranet addresses but no credentials. `--print-resources` prints that
-snapshot and exits without logging in:
+snapshot and exits without logging in, starting with when it was saved, for
+which profile and through which gateway:
 
 ```sh
 goTrust --print-resources

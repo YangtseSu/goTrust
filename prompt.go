@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -540,9 +539,7 @@ func (a *app) openBrowser(url string) error {
 // cliPrompter answers the login prompts a window would show. It is used by
 // --no-ui, where refusing with a clear message beats blocking on a window that
 // will never open.
-type cliPrompter struct {
-	logger *log.Logger
-}
+type cliPrompter struct{}
 
 func (p cliPrompter) HandleCodeChallenge(challenge authchallenge.CodeChallenge) (authchallenge.CodeResponse, error) {
 	return authchallenge.CodeResponse{}, fmt.Errorf(

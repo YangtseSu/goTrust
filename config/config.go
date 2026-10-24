@@ -357,15 +357,6 @@ func (c Config) ProfileNames() []string {
 	return names
 }
 
-// SelectProfile makes name the active profile.
-func (c *Config) SelectProfile(name string) error {
-	if c.ProfileIndex(name) < 0 {
-		return fmt.Errorf("profile %q does not exist", name)
-	}
-	c.ActiveProfile = name
-	return nil
-}
-
 // AddProfile appends a new profile with default settings and makes it active.
 func (c *Config) AddProfile(name string) (int, error) {
 	name = strings.TrimSpace(name)
@@ -404,26 +395,6 @@ func (c *Config) DuplicateProfile(index int, newName string) (int, error) {
 	return len(c.Profiles) - 1, nil
 }
 
-// RenameProfile renames the profile at index, keeping it active if it was.
-func (c *Config) RenameProfile(index int, newName string) error {
-	if index < 0 || index >= len(c.Profiles) {
-		return errors.New("no profile is selected")
-	}
-	newName = strings.TrimSpace(newName)
-	if newName == "" {
-		return errors.New("the profile name is empty")
-	}
-	if existing := c.ProfileIndex(newName); existing >= 0 && existing != index {
-		return fmt.Errorf("profile %q already exists", newName)
-	}
-	wasActive := c.ActiveProfile == c.Profiles[index].Name
-	c.Profiles[index].Name = newName
-	if wasActive {
-		c.ActiveProfile = newName
-	}
-	return nil
-}
-
 // DeleteProfile removes the profile at index. The last profile cannot be
 // deleted: a settings file with no account has no useful state.
 func (c *Config) DeleteProfile(index int) error {
@@ -451,7 +422,14 @@ func (c Config) KeepAliveInterval() time.Duration {
 	return c.Active().KeepAliveInterval()
 }
 
-// KeepAliveInterval is the profile's cadence with the same fallback.
+// MinimumKeepAliveInterval is the shortest cadence the app accepts. Every probe
+// is a real HTTP request over the tunnel, so a hand-edited value below this
+// would hammer the gateway and the account's session.
+const MinimumKeepAliveInterval = 10 * time.Second
+
+// KeepAliveInterval is the profile's cadence with the same fallback. A positive
+// value below the minimum is clamped instead of reverting to the default: the
+// user asked for a fast probe, not for the 90 s default.
 func (p Profile) KeepAliveInterval() time.Duration {
 	if p.Keep.Interval == "" {
 		return defaultKeepAlivePeriod
@@ -459,6 +437,9 @@ func (p Profile) KeepAliveInterval() time.Duration {
 	parsed, err := time.ParseDuration(p.Keep.Interval)
 	if err != nil || parsed <= 0 {
 		return defaultKeepAlivePeriod
+	}
+	if parsed < MinimumKeepAliveInterval {
+		return MinimumKeepAliveInterval
 	}
 	return parsed
 }
@@ -468,13 +449,6 @@ func (c Config) ServerAddress() string { return c.Active().ServerAddress() }
 
 // ServerAddress trims the stored host.
 func (p Profile) ServerAddress() string { return strings.TrimSpace(p.Server.Address) }
-
-// ClientDataPath resolves where the active profile's aTrust client data is
-// stored. The file carries cookies, the sign key and the sid ticket, so it
-// lives beside the settings with owner-only permissions.
-func (c Config) ClientDataPath() (string, error) {
-	return c.ClientDataPathFor(c.Active())
-}
 
 // ClientDataPathFor resolves one profile's client data file. Profiles must not
 // share it: a stored ticket restores whatever account obtained it. The file

@@ -139,10 +139,10 @@ func TestSessionLossWithoutAutoReconnectExpires(t *testing.T) {
 	if state.Phase != PhaseFailed {
 		t.Fatalf("phase = %q, want %q", state.Phase, PhaseFailed)
 	}
-	if state.Attention == "" {
+	if !state.Attention {
 		t.Fatal("an expiring session did not ask for attention")
 	}
-	if len(states) == 0 || states[len(states)-1].Attention == "" {
+	if len(states) == 0 || !states[len(states)-1].Attention {
 		t.Fatalf("observed states = %+v, want a final state with attention", states)
 	}
 
@@ -175,7 +175,7 @@ func TestSessionLossWithoutAPasswordExpires(t *testing.T) {
 	manager.observeSessionState(client, atrust.SessionReloginRequired, "session refresh")
 
 	state := manager.State()
-	if state.Phase != PhaseFailed || state.Attention == "" {
+	if state.Phase != PhaseFailed || !state.Attention {
 		t.Fatalf("state = %+v, want a failed state with attention", state)
 	}
 	if manager.reconnectRunning() {

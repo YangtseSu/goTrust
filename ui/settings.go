@@ -377,8 +377,13 @@ func (s *SettingsState) Apply() (config.Config, error) {
 	if interval == "" {
 		interval = "90s"
 	}
-	if duration, err := time.ParseDuration(interval); err != nil || duration <= 0 {
+	duration, err := time.ParseDuration(interval)
+	if err != nil || duration <= 0 {
 		return cfg, errors.New("保活间隔不是有效时长，例如 90s")
+	}
+	if duration < config.MinimumKeepAliveInterval {
+		return cfg, fmt.Errorf("保活间隔至少 %s：每次探测都是一次真实请求",
+			config.MinimumKeepAliveInterval)
 	}
 
 	profile := &cfg.Profiles[index]
@@ -612,6 +617,7 @@ func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profi
 		})
 		ui.Field(c, "间隔", func() {
 			ui.TextInput(c, &profile.Keep.Interval).Placeholder("90s")
+			caption(c, "至少 10 秒；默认 90 秒。")
 		})
 		ui.Field(c, "手动目标", func() {
 			ui.TextArea(c, &state.Targets[index]).Placeholder("http://192.0.2.10/，每行一个")
