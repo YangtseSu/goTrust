@@ -1424,8 +1424,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 17 recorded (review remediation); every P0/P1 item landed, including the fork fix and pin bump; P2 batch is next |
-| Where am I going? | Itemised P2 batch → verification pass; Phase 8 (dae) last. Phase 16 is closed: `gotrust-git` is installed |
+| Where am I? | Phase 17 is complete: every P0/P1/P2 item landed with a regression test, and the automated verification (race suite, `reuse lint`, real-binary lifecycle) is green |
+| Where am I going? | The native-window click-through is the only manual item; Phase 8 (dae) stays deferred and Phase 18's double-click waits on mygo. Phase 16 is closed: `gotrust-git` is installed |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |
