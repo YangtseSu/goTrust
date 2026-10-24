@@ -964,6 +964,43 @@
   files
 - Next: P1-12/P1-16 (stale auth methods across a gateway edit, the hide epoch).
 
+### Phase 17: stale auth methods and the settings hide epoch (P1-12, P1-16)
+
+- **Status:** done (one commit); P1-13/P1-14 next
+- Actions taken:
+  - reproduced P1-12 at HEAD in a throwaway worktree: after editing the port,
+    a rendered frame kept the list discovered for the old gateway, so the
+    picker could pin a pair the new gateway never offered
+  - `SettingsView` drops a discovered list at the top of every frame when the
+    draft no longer names the gateway it came from; `SelectAuth` drops it again
+    before reading the index, because the same frame may have edited the
+    address
+  - `targetKey` canonicalises the port numerically to match `main.keyForTarget`,
+    so ` 0443 ` still names the same gateway instead of dropping a valid list
+  - two existing picker tests seeded a list under a key that did not match
+    their state; they now set the address and use `state.targetKey()`, which is
+    the contract: a list belongs to the gateway the draft names
+  - P1-16: the epoch check moved into the main-thread callback that hides the
+    window (`claimSettingsHide`), with `clearSettingsDraftAfterHide` for the
+    draft; `openSettings` and `hideSettings` share `bumpSettingsEpoch`. A
+    reopen also runs on the main thread, so it either invalidates the queued
+    hide or happens after it
+- Results:
+  | Check | Result |
+  |---|---|
+  | HEAD: port edited, frame rendered | list kept with `old.example.com\|443`; repro failed |
+  | After: edited / unchanged / padded port | dropped / kept / kept |
+  | Epoch claim: current vs reopened | claimed and cleared / stale, new draft kept |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
+- Note: P1-16 cannot be reproduced headlessly (it needs the native window and
+  its event loop). The regression pins the claim and clear invariants; the
+  ordering argument is in the function comment and rests on `openSettings`
+  running only through `mygo.RunOnMain`.
+- Files created/modified: `ui/settings.go`, `ui/settings_test.go`, `main.go`,
+  `app_test.go`, planning files
+- Next: P1-13/P1-14 (whole-value redaction, pipelined CONNECT bytes).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)
@@ -1006,8 +1043,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4…P1-10 landed; Phase 16 `pacman -U` still awaits sudo |
-| Where am I going? | Scheduled queue: P1-12/P1-16 → P1-13/P1-14 → P1-15 → P1-17 (packet-stack restore confirmation, fork + pin) → itemised P2 batch → verification; Phase 8 (dae) last |
+| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4…P1-12/P1-16 landed; Phase 16 `pacman -U` still awaits sudo |
+| Where am I going? | Scheduled queue: P1-13/P1-14 → P1-15 → P1-17 (packet-stack restore confirmation, fork + pin) → itemised P2 batch → verification; Phase 8 (dae) last |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |

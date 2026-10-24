@@ -188,6 +188,49 @@ func TestSettingsCannotDeleteTheLastProfile(t *testing.T) {
 	}
 }
 
+// A discovered list belongs to the gateway in the draft. Editing the address or
+// the port has to drop it before the picker can pin the old gateway's method.
+func TestEditingTheGatewayDropsTheDiscoveredMethods(t *testing.T) {
+	cfg := config.Default()
+	cfg.Profiles[0].Server.Address = "old.example.com"
+	cfg.Profiles[0].Server.Port = 443
+	state := NewSettingsState(cfg, "/tmp/logs")
+
+	methods := []session.AuthMethod{
+		{Type: "auth/psw", Domain: "local"},
+		{Type: "auth/cas", Domain: "cas"},
+	}
+	state.SetMethods(methods, state.targetKey(), "已获取 2 种认证方式", false)
+
+	tester := ui.NewTester(SettingsView(state, SettingsActions{}), 560, 1600)
+	tester.Frame()
+	if len(state.Methods) != 2 {
+		t.Fatalf("methods = %v, want the discovered list", state.Methods)
+	}
+
+	// The same gateway keeps the list across frames.
+	tester.Frame()
+	if len(state.Methods) != 2 {
+		t.Fatalf("methods = %v, want the list to survive an unchanged frame", state.Methods)
+	}
+
+	// Another port is another gateway.
+	state.Ports[0] = "8443"
+	tester.Frame()
+	if len(state.Methods) != 0 || state.MethodsFrom != "" {
+		t.Fatalf("methods = %v from %q, want them dropped", state.Methods, state.MethodsFrom)
+	}
+
+	// The picker itself refuses a stale entry, even when a frame has not run
+	// since the edit: the chosen method must belong to the current gateway.
+	state.SetMethods(methods, state.targetKey(), "已获取 2 种认证方式", false)
+	state.Ports[0] = "9443"
+	state.SelectAuth(1)
+	if got := state.Draft.Profiles[0].Auth.AuthType; got != "" {
+		t.Fatalf("auth type = %q, want the stale choice refused", got)
+	}
+}
+
 func TestSettingsViewRendersAndCallsActions(t *testing.T) {
 	var saved, closed, created, autostart, verbose int
 	state := NewSettingsState(config.Default(), "/var/log/goTrust")
@@ -300,12 +343,13 @@ func TestSettingsReloadDiscardsEdits(t *testing.T) {
 // choosing 自动 clears it again.
 func TestSettingsSelectAuthStoresThePair(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
+	state.Draft.Profiles[0].Server.Address = "vpn.example.com"
 	methods := []session.AuthMethod{
 		{Name: "密码登录", Type: "auth/psw", Domain: "local"},
 		{Name: "统一认证", Type: "auth/cas", Domain: "Radius"},
 	}
 
-	state.SetMethods(methods, "vpn.example.com|443", "已获取 2 种认证方式", false)
+	state.SetMethods(methods, state.targetKey(), "已获取 2 种认证方式", false)
 	if state.Discovering {
 		t.Fatal("the state is still marked as discovering")
 	}
@@ -378,11 +422,12 @@ func TestSettingsTargetReadsTheDraft(t *testing.T) {
 // The settings window shows the picker, the discover button and the hint.
 func TestSettingsViewShowsTheAuthPicker(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
+	state.Draft.Profiles[0].Server.Address = "vpn.example.com"
 	methods := []session.AuthMethod{
 		{Name: "密码登录", Type: "auth/psw", Domain: "local"},
 		{Name: "统一认证", Type: "auth/cas", Domain: "local"},
 	}
-	state.SetMethods(methods, "vpn.example.com|443", "已获取 2 种认证方式", false)
+	state.SetMethods(methods, state.targetKey(), "已获取 2 种认证方式", false)
 	state.SelectAuth(2)
 
 	discovered := 0
@@ -555,4 +600,12 @@ func threeProfileState(t *testing.T) *SettingsState {
 	cfg.Profiles[c].Server.Port = 9443
 	cfg.Profiles[c].Keep.Targets = []string{"http://192.0.2.31/"}
 	return NewSettingsState(cfg, "/tmp/logs")
+}
+
+// The frame checks and the discovery record have to agree on what "the same
+// gateway" means, or a padded port drops a list that belongs to it.
+func TestTargetKeyNormalisesThePort(t *testing.T) {
+	if got, want := targetKey(" vpn.example.com ", " 0443 "), targetKey("vpn.example.com", "443"); got != want {
+		t.Fatalf("key = %q, want %q", got, want)
+	}
 }

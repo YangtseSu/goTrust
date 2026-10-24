@@ -220,9 +220,15 @@ func (s *SettingsState) targetKey() string {
 }
 
 // targetKey is the key discovery records and the draft checks: the address
-// without surrounding spaces and the port as typed.
+// without surrounding spaces and the port as a number, so " 0443 " names the
+// same gateway as "443". main.keyForTarget writes the same form.
 func targetKey(address, port string) string {
-	return strings.TrimSpace(address) + "|" + strings.TrimSpace(port)
+	address = strings.TrimSpace(address)
+	port = strings.TrimSpace(port)
+	if number, err := strconv.Atoi(port); err == nil {
+		port = strconv.Itoa(number)
+	}
+	return address + "|" + port
 }
 
 // SelectAuth stores the method at index in the draft: 0 is automatic and the
@@ -230,6 +236,9 @@ func targetKey(address, port string) string {
 // offered" entry changes nothing.
 func (s *SettingsState) SelectAuth(index int) {
 	s.refresh()
+	// The caller renders the picker from the list, but an address typed earlier
+	// in the same frame can already belong to another gateway.
+	s.dropStaleMethods()
 	profile := &s.Draft.Profiles[s.Selected]
 	if index == 0 {
 		profile.Auth.AuthType = ""
@@ -424,6 +433,11 @@ func splitTargets(text string) []string {
 func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Context) {
 	return func(c *ui.Context) {
 		state.refresh()
+		// A discovered list belongs to the gateway it was read from, and the
+		// gateway is edited in this window. Drop it as soon as the address or
+		// the port names something else, before the picker can store another
+		// gateway's method.
+		state.dropStaleMethods()
 		index, profile := state.selection()
 		if profile == nil {
 			ui.Text(c, "没有可用的配置").FontSize(13)

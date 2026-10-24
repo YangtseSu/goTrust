@@ -12,10 +12,10 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: P0 and P1-4…P1-10 are fixed with regression tests. The remaining
-queue, in order: P1-12/P1-16, P1-13/P1-14, P1-15, P1-17 (packet-stack restore
+Phase 17: P0 and P1-4…P1-12/P1-16 are fixed with regression tests. The
+remaining queue, in order: P1-13/P1-14, P1-15, P1-17 (packet-stack restore
 confirmation, needs a fork commit and pin bump), the itemised P2 batch, then the
-verification pass. Next commit is P1-12/P1-16. Phase 16's `pacman -U` install
+verification pass. Next commit is P1-13/P1-14. Phase 16's `pacman -U` install
 still needs the operator's sudo password; Phase 8 (dae export) stays deferred.
 
 ## Current Phase
@@ -384,9 +384,12 @@ test except where noted):
       config untouched when `SaveFile` fails. `mutableConfig` is the one copy
       the handlers edit; `persistFlag` and `selectProfile` only write scalar
       fields on their value copy, so they need no clone
-- [ ] P1-12/P1-16, settings freshness: drop stale auth methods per frame; make
-      the hide epoch one check-and-act. Acceptance: an edited gateway invalidates
-      the picker before save; a queued hide cannot swallow a reopened window
+- [x] P1-12/P1-16, settings freshness: a frame drops a discovered method list
+      whose gateway no longer matches the draft, and the picker refuses it
+      before storing; the port is canonicalised so a padded value keeps its
+      list. The hide epoch is claimed on the main thread in the same step as
+      the hide, and `openSettings` bumps it there, so a reopen cannot be
+      swallowed by a queued hide
 - [ ] P1-13/P1-14, logging and CONNECT: redact whole cookie and `map[…]` values;
       drain pipelined CONNECT bytes with `CopyN`. Acceptance: `SESSION123` never
       appears in a redacted line; CONNECT+payload in one write is echoed

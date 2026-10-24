@@ -511,3 +511,38 @@ func TestSavingProfileChangesMovesItsClientData(t *testing.T) {
 		t.Fatalf("the deleted profile's client data remains (%v)", err)
 	}
 }
+
+// A hide queued before a reopen must take neither the reopened window nor its
+// fresh draft. The epoch and the draft are claimed on the main thread in one
+// step, so a reopen either invalidates the queued hide or happens after it.
+func TestAReopenInvalidatesAQueuedSettingsHide(t *testing.T) {
+	application := &app{}
+	application.settings = gotrustui.NewSettingsState(config.Default(), "")
+
+	hideEpoch := application.bumpSettingsEpoch()
+	if !application.claimSettingsHide(hideEpoch) {
+		t.Fatal("a hide of the current window was dropped")
+	}
+
+	// A reopen bumps the epoch and installs a new draft before showing.
+	reopenEpoch := application.bumpSettingsEpoch()
+	application.settings = gotrustui.NewSettingsState(config.Default(), "")
+	reopenDraft := application.settings
+
+	if application.claimSettingsHide(hideEpoch) {
+		t.Fatal("a stale hide claimed the reopened window")
+	}
+	application.clearSettingsDraftAfterHide(hideEpoch)
+	if application.settings != reopenDraft {
+		t.Fatal("a stale hide cleared the reopened draft")
+	}
+
+	// The reopen's own hide still works.
+	if !application.claimSettingsHide(reopenEpoch) {
+		t.Fatal("the current hide was dropped")
+	}
+	application.clearSettingsDraftAfterHide(reopenEpoch)
+	if application.settings != nil {
+		t.Fatal("a current hide left its draft behind")
+	}
+}

@@ -303,9 +303,7 @@ func (a *app) showWindow() {
 // Each opening starts from the saved settings, so closing without 保存 really
 // discards the edits.
 func (a *app) openSettings() {
-	a.mu.Lock()
-	a.settingsEpoch++
-	a.mu.Unlock()
+	a.bumpSettingsEpoch()
 
 	if window := a.settingsWindow.Load(); window != nil {
 		// The window is hidden, not destroyed, so a close cannot tear down a
@@ -482,28 +480,52 @@ func (a *app) closeSettings() {
 
 // hideSettings hides the settings window after the current frame. Hiding it
 // from the button action itself runs surface callbacks while the frame still
-// builds, which crashed GTK's GL teardown. The epoch stops a hide queued
-// before a reopen from taking the new window away.
+// builds, which crashed GTK's GL teardown.
+//
+// The epoch check belongs on the main thread with the hide, because openSettings
+// bumps the epoch there: a reopen either runs before the claim (and the queued
+// hide is stale) or after the hide (and shows the window again). Checking in
+// this goroutine and hiding afterwards was a gap where a reopened window
+// disappeared under the queued hide.
 func (a *app) hideSettings(window *mygo.Window) {
-	a.mu.Lock()
-	a.settingsEpoch++
-	epoch := a.settingsEpoch
-	a.mu.Unlock()
+	epoch := a.bumpSettingsEpoch()
 
 	go func() {
-		a.mu.Lock()
-		stale := a.settingsEpoch != epoch
-		a.mu.Unlock()
-		if stale {
-			return
-		}
-		window.Hide()
-		a.mu.Lock()
-		if a.settingsEpoch == epoch {
-			a.settings = nil
-		}
-		a.mu.Unlock()
+		mygo.RunOnMain(func() {
+			if !a.claimSettingsHide(epoch) {
+				return
+			}
+			window.Hide()
+			a.clearSettingsDraftAfterHide(epoch)
+		})
 	}()
+}
+
+// bumpSettingsEpoch invalidates every settings hide queued before now and
+// returns the new epoch. It is called on the main thread, which is what makes
+// the claim below one step with the reopen.
+func (a *app) bumpSettingsEpoch() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.settingsEpoch++
+	return a.settingsEpoch
+}
+
+// claimSettingsHide reports whether a queued hide still owns the window.
+func (a *app) claimSettingsHide(epoch int) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.settingsEpoch == epoch
+}
+
+// clearSettingsDraftAfterHide discards the draft of the window that was hidden,
+// unless a reopen already replaced it with a new one.
+func (a *app) clearSettingsDraftAfterHide(epoch int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.settingsEpoch == epoch {
+		a.settings = nil
+	}
 }
 
 // async runs work off the UI thread and reports the outcome in the status line.
