@@ -1037,6 +1037,33 @@
   `proxy/server.go`, `proxy/server_test.go`, planning files
 - Next: P1-15 (reopen the log after a failed rotation).
 
+### Phase 17: rotation recovery and the truncation panic (P1-15)
+
+- **Status:** done (one commit); the queue now starts with P1-17 (fork)
+- Actions taken:
+  - reproduced P1-15 at HEAD in a throwaway worktree: after a rotation whose
+    rename and reopen failed, the next lines went nowhere and the file never
+    came back
+  - `emitLocked` retries `openLocked` whenever the file is nil, before the
+    size check; the rotation path puts a failed reopen there instead of
+    silently keeping `size = 0`, which its own guard then never retried
+  - writing the test with a small `MaxBytes` exposed a latent panic:
+    `redacted[:256]` on a shorter line whenever `MaxBytes` is under 512. The
+    256-byte floor is now a minimum length for the cut, not a fixed slice
+    index, and a line shorter than the floor is left whole. Recorded here
+    rather than scheduled because it is fixed in this commit
+- Results:
+  | Check | Result |
+  |---|---|
+  | HEAD: rotation fails, directory restored, next line | file never recreated; repro failed |
+  | HEAD: `MaxBytes` 64 with a 75-byte line | `slice bounds out of range [:256]` |
+  | After: recovery / truncation cases | line written; long cut, short intact |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
+- Files created/modified: `logging/logging.go`, `logging/logging_test.go`,
+  planning files
+- Next: P1-17 (fork: gVisor `DialTCP` reports tunnel traffic; pin bump).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)
@@ -1079,8 +1106,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4…P1-14 landed; Phase 16 `pacman -U` still awaits sudo |
-| Where am I going? | Scheduled queue: P1-15 → P1-17 (packet-stack restore confirmation, fork + pin) → itemised P2 batch → verification; Phase 8 (dae) last |
+| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4…P1-15 landed; P1-17 needs a fork commit; Phase 16 `pacman -U` still awaits sudo |
+| Where am I going? | Scheduled queue: P1-17 (fork gVisor `ObserveTunnelTraffic` + pin bump) → itemised P2 batch → verification; Phase 8 (dae) last |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |

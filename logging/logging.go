@@ -205,16 +205,27 @@ func (l *Logger) Write(p []byte) (int, error) {
 
 func (l *Logger) emitLocked(line []byte) {
 	redacted := Redact(string(line))
-	if int64(len(redacted)) > l.max/2 {
-		limit := l.max / 2
-		if limit < 256 {
-			limit = 256
-		}
+	// A single huge line (a dump without newlines) must not fill the file. The
+	// floor keeps a small MaxBytes from cutting every line, and it must stay
+	// within the line: the old code sliced at 256 regardless and panicked on a
+	// line shorter than that.
+	limit := l.max / 2
+	if limit < 256 {
+		limit = 256
+	}
+	if int64(len(redacted)) > limit {
 		redacted = redacted[:limit] + "… [truncated]\n"
 	}
 	raw := []byte(redacted)
 
-	if l.size > 0 && l.size+int64(len(raw)) > l.max {
+	// A rotation that could not reopen the file (the directory was removed, the
+	// rename failed, permissions changed) leaves file nil. Trying again here is
+	// what keeps one failure from disabling file logging for the rest of the
+	// process; the rotation check below no longer sees size 0 and skips it.
+	if l.file == nil {
+		_ = l.openLocked()
+	}
+	if l.file != nil && l.size > 0 && l.size+int64(len(raw)) > l.max {
 		l.rotateLocked()
 	}
 	if l.file != nil {
@@ -239,8 +250,9 @@ func (l *Logger) rotateLocked() {
 	}
 	_ = os.Rename(l.path, l.path+".1")
 	if err := l.openLocked(); err != nil {
-		// Keep logging to the mirror rather than losing the line; the next
-		// line tries again.
+		// Keep logging to the mirror rather than losing the line. emitLocked
+		// retries the open on the next line, so a transient failure does not
+		// silence the file for the rest of the process.
 		l.file = nil
 		l.size = 0
 	}

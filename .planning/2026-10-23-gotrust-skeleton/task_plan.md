@@ -12,11 +12,11 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: P0 and P1-4…P1-14 are fixed with regression tests. The remaining
-queue, in order: P1-15, P1-17 (packet-stack restore confirmation, needs a fork
-commit and pin bump), the itemised P2 batch, then the verification pass. Next
-commit is P1-15. Phase 16's `pacman -U` install still needs the operator's sudo
-password; Phase 8 (dae export) stays deferred.
+Phase 17: P0 and every goTrust-local P1 item (P1-4…P1-15) are fixed with
+regression tests. The queue now starts with P1-17, which needs a commit in the
+fork (gVisor `DialTCP` → `ObserveTunnelTraffic`) and a pin bump, followed by the
+itemised P2 batch and the verification pass. Phase 16's `pacman -U` install
+still needs the operator's sudo password; Phase 8 (dae export) stays deferred.
 
 ## Current Phase
 
@@ -394,9 +394,11 @@ test except where noted):
       credential-bearing header is masked (cookie families, bearer/basic values
       and `map[…]` wrappers included), and pipelined CONNECT bytes are drained
       from the hijacked buffer instead of read until EOF
-- [ ] P1-15, log rotation: reopen after a failed rotation instead of losing the
-      file for the rest of the process. Acceptance: a rotation failure recovers
-      on the next write
+- [x] P1-15, log rotation: a line whose file is nil retries `openLocked`, so a
+      failed rotation no longer silences the file for the rest of the process.
+      The same path hid a panic: the 256-byte truncation floor sliced past a
+      shorter line whenever `MaxBytes` was under 512; the floor now applies
+      only when the line is longer
 - [ ] P1-17, restore confirmation on the packet stack (found while fixing P1-5,
       not in the review list): `ObserveTunnelTraffic` is called only by the TCP
       tunnel (`client/atrust/tcptunnel.go:620`), so a restored session on the

@@ -211,3 +211,78 @@ func TestCloseFlushesPartialLine(t *testing.T) {
 		t.Fatalf("partial line lost: %q", raw)
 	}
 }
+
+// One failed rotation must not silence the file for the rest of the process.
+// The reopen fails here because the directory is gone; once it is back, the
+// next line has to create the file again.
+func TestRotationRecoversAfterAFailedReopen(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "logs")
+	path := filepath.Join(dir, "goTrust.log")
+	logger, err := New(Options{Path: path, MaxBytes: 1024, Backups: 1})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	defer func() { _ = logger.Close() }()
+
+	logger.Printf("%s", strings.Repeat("x", 600))
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatalf("remove the log directory: %v", err)
+	}
+
+	// Fills the file past max, so the rotation runs, fails to rename and fails
+	// to reopen.
+	logger.Printf("%s", strings.Repeat("y", 600))
+
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("restore the log directory: %v", err)
+	}
+	logger.Printf("after recovery")
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("the log file never came back: %v", err)
+	}
+	if !strings.Contains(string(raw), "after recovery") {
+		t.Fatalf("recovered file = %q", raw)
+	}
+}
+
+// A line longer than half the max is cut, and the floor of 256 bytes must not
+// slice past a short line: MaxBytes 64 with a 75-byte line used to panic.
+func TestLongLinesAreTruncatedWithoutPanicking(t *testing.T) {
+	cases := []struct {
+		name      string
+		max       int64
+		line      int
+		truncated bool
+	}{
+		{name: "short line under the floor", max: 64, line: 75},
+		{name: "line over the limit", max: 512, line: 600, truncated: true},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "goTrust.log")
+			logger, err := New(Options{Path: path, MaxBytes: testCase.max})
+			if err != nil {
+				t.Fatalf("new: %v", err)
+			}
+			body := strings.Repeat("x", testCase.line)
+			if _, err := logger.Write([]byte(body + "\n")); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			if err := logger.Close(); err != nil {
+				t.Fatalf("close: %v", err)
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read: %v", err)
+			}
+			if got := strings.Contains(string(raw), "[truncated]"); got != testCase.truncated {
+				t.Fatalf("truncated = %v, want %v:\n%s", got, testCase.truncated, raw)
+			}
+			if !testCase.truncated && !strings.Contains(string(raw), body) {
+				t.Fatalf("a short line was changed:\n%s", raw)
+			}
+		})
+	}
+}
