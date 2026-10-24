@@ -1401,6 +1401,41 @@
 - Next: Phase 8 stays deferred; Phase 18's double-click waits on a mygo Linux
   activation backend (draft in `findings.md`).
 
+### 2026-10-24: research and the 断开 panic
+
+- **Status:** complete (research); one fix shipped
+- Actions taken:
+  - **断开 exited the app.** The journal of the installed run shows
+    `panic: EOF` in `stack/gvisor.(*Stack).Run` (`stack.go:244`), goroutine
+    created by `loginSession` (`session/session.go:354`), at the second the
+    proxy closed. The fork's read loop panics unless an `internal/hook_func`
+    terminal flag is set, which an external module cannot reach. Fixed locally:
+    `runPacketStack` recovers, logs `the packet stack stopped: …` and lets the
+    keep-alive observe the dead tunnel; regression
+    `TestAPacketStackPanicDoesNotKillTheApp`; rebuilt as `r44`.
+    Follow-up for the fork: return instead of panic, and surface a read error
+    while online.
+  - **Keyring.** The branch is EZ4Connect's local-only
+    `feat/credential-keychain`, not in the fork and not on GitHub.
+    It is app-side: libsecret `secret-tool` with `service`/`scope`/`key`
+    attributes on Linux, Keychain/CredMan elsewhere, settings file as fallback,
+    migration on load, scope = profile id or `--config` path, keys `Password`,
+    `TOTPSecret`, `CertPassword`. Even there the Go core receives the secret on
+    argv/env. goTrust's choke points: `cfgForDisk`, the login snapshot, the
+    profile move/erase hooks.
+  - **Password change.** Endpoints verified:
+    `POST forced-change` (form-urlencoded, `skip:true`),
+    `POST reset-path` (`{oldPassword,newPassword[,
+    account-field]}`), `POST portal/public/resetPsw` (forgot flow),
+    `GET portal/user/policy-object`, `POST portal/public/policy-probe`.
+    The forced signal is `code 0` + `next-step:"forced-change"` with
+    `change-code` 75500402/75500404 and the `policy-object` rule object; the
+    fork fails with "unsupported next authentication service". EZ4Connect and
+    atrust-quadlet implement nothing here (the latter hands over to VNC).
+- Files created/modified: `session/session.go`, `session/session_test.go`
+  (that fix); `findings.md`, `task_plan.md`, this log
+- Next: the operator picks a phase; the open phases are itemised in `task_plan.md`.
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)

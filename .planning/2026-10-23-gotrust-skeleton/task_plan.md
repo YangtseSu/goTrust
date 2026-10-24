@@ -16,7 +16,9 @@ Phase 17 is remediated: every P0, P1 and P2 item is fixed with regression tests,
 including P1-17 in the fork and its pin bump. The verification pass is green
 (race suite, `reuse lint`, real-binary lifecycle) and the native-window smoke
 ran in a headless mutter: 断开 during a login, settings delete/close/reopen and
-the quit path all behaved.
+the quit path all behaved. A live 断开 then exposed a fatal packet-stack panic,
+fixed in one commit (package `r44`). Research for the next three features
+proposed as phases 19-21.
 Phase 16 is closed: the package is installed from `pacman -U`. Phase 8 (dae
 export) stays deferred, and Phase 18's double-click waits on mygo.
 
@@ -481,6 +483,59 @@ test except where noted):
 - **Note:** the `libayatana-appindicator-WARNING` line comes from the legacy
   backend. The `.so` is not a drop-in: GMenu vs GtkMenu, and no
   `app_indicator_set_icon_full`. Do not swap the package dependency alone.
+
+### Phase 19: Keyring credential storage (proposed)
+
+The branch the operator remembered is `feat/credential-keychain`,
+local-only) in `~/projects/atrust-dev/EZ4Connect`, not in the zju-connect fork.
+It is app-side only and uses libsecret's `secret-tool` (attributes
+`service`, `scope`, `key`), with macOS Keychain and the Windows Credential
+Manager, and leaves the settings file as the fallback when no store is
+available. Details and the goTrust choke points are in `findings.md`.
+
+- [ ] Decide the backend: `go-keyring` (D-Bus Secret Service, no CGO) or
+      `secret-tool` (mirrors EZ4Connect, adds a `libsecret` runtime dependency)
+- [ ] Stable scope per profile: a new id, or the client-data move/erase hooks
+      reused; the `--config` path must be in the scope
+- [ ] Read at the login snapshot; write/erase through `cfgForDisk` and the
+      profile actions; erase on `store_password=false`, delete and reset
+- [ ] Migrate an existing plaintext `password`/`totp_secret` into the store and
+      drop it from the file, only after a successful write
+- [ ] Headless contract: what `--no-ui` does without a session bus or prompt
+      agent, and what the UI says for a locked collection
+- [ ] Tests with a fake store: migration, fallback, locked/absent, rename and
+      delete
+
+
+The portal sees a per-client-data 32-hex `deviceId` (`x-sdp-env`, `reportEnv`,
+tunnel auth) and a hardcoded `aTrustTray/2.4.10.50` UA; no hostname, OS or
+which is why 终端管理 names the host and the kernel. See `findings.md`.
+
+- [ ] Pin one `device_id` per install (or per profile) with an explicit config
+      key; the fork only seeds an empty client-data file
+- [ ] Show the current device id read-only; keep profile rename carrying it
+- [ ] Device trust/untrust actions over the fork's `SetTrusted`
+- [ ] Decide whether to keep the browser-profile `reportEnv` or request a
+      richer one (and a version field) from the fork
+
+### Phase 20: Password change and forced reset (proposed)
+
+The gateway signals the 90-day change as `code 0` +
+`next-step:"forced-change"`; the fork fails with "unsupported next
+authentication service: forced-change". Endpoints and the rule object are in
+`findings.md`.
+
+- [ ] Fork: a typed forced-change error/`Prompt` hook, `Session.ChangePassword`
+      and a skip call (`forced-change`), plus `PasswordStrategy`; the session's
+      csrf/pubKey/antiReplayRand are unexported today
+- [ ] One live measurement on an expired or expiring account: request body and
+      encoding, success answer, whether the current session survives
+- [ ] Panel: old, new, confirm, rules from `policy-object`, skip when
+      `change-code == 75500404`; wire it like the code prompt
+- [ ] Rewrite the stored credential after a successful change, or every
+      reconnect fails
+- [ ] Immediate safe step: report the forced-change signal as
+      "网关要求修改密码" instead of a generic failure
 
 ## Key Questions
 

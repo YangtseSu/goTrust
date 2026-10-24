@@ -583,3 +583,127 @@ Title: Linux tray: expose activation events and add a
   the platform interface unchanged.
 - goTrust use case: a tray menu whose first action opens the main window, and a
   double-click/activation that does the same without opening the menu.
+
+## Research 2026-10-24: keyring, password reset, disconnect exit
+
+Asked by the operator. Every claim below is from a local tree, the pinned module
+cache, the portal's responses, or the journal. Live gateway behaviour
+that would need a call is marked [[INFERENCE]] or "missing".
+
+### 1. Keychain storage for credentials
+
+- **The branch is in EZ4Connect, not in the zju-connect fork.** Local-only
+  `feat/credential-keychain` in a local
+  EZ4Connect worktree ("feat: 凭据改由系统密钥环保存，
+  配置文件只留账号名"). It is not on GitHub (`YangtseSu/EZ4Connect` has 8 heads,
+  none of them keychain/secret; a commit search finds nothing). The zju-connect
+  fork has no such branch locally or on GitHub, and the pinned module cache has
+  no keyring code.
+- **The branch is app-side only.** `application/secretstore.h` (one secret per
+  `(scope, key)`), `application/credentialstore.{h,cpp}` (migration, fallback,
+  per-profile copies) and `infrastructure/secrets/platformsecretstore.cpp`.
+  Linux uses libsecret's **`secret-tool` CLI** with the secret on **stdin** and
+  the attributes `service=EZ4Connect`, `scope`, `key`; macOS uses
+  `SecKeychain*`, Windows the Credential Manager. `scope` is `default`, a
+  profile id, or the absolute `--config-path`; `key` is `Password`,
+  `TOTPSecret` or `CertPassword`. `available()` is just "secret-tool exists" on
+  Linux. A missing/unavailable store keeps the old value in the settings file
+  as the documented fallback; locked-collection behaviour was never tested.
+  Even on that branch the Go core still receives the secret as `-password` /
+  `ZJU_CONNECT_PASSWORD` argv/env, so the keyring only protects storage at rest.
+- **goTrust today** keeps `password` and `totp_secret` in `config.toml` (0600),
+  the cookies/sign key/sid ticket in `client_data*.json` (0600, temp+fsync+
+  rename) and redacts every log line. `cfgForDisk` (`main.go:1158-1170`) is the
+  single choke point every save goes through; `AuthConfig` already has
+  `omitempty` on both secrets (`config/config.go:113-129`); `store_password`
+  gates both (`prompt.go:325-330`, `main.go:1165-1168`).
+- **A Go integration** has three shapes: `github.com/zalando/go-keyring`
+  (D-Bus Secret Service on Linux, Keychain/CredMan elsewhere, no CGO, no new
+  runtime package; a prompt for a locked collection blocks on a prompt agent),
+  the `secret-tool` CLI (mirrors EZ4Connect, adds a `libsecret` runtime
+  dependency), or a direct `godbus` Secret Service client (already in the
+  module cache). Whatever the backend, goTrust has **no stable profile id**:
+  profiles are keyed by a mutable name and files use `profileSlug(name)`
+  (`config/config.go:608-648`), with the rename move already implemented
+  (`main.go:948-975`). The keyring item therefore needs either a new stable id
+  or the same move/erase hooks as the client-data file, and the `--config`
+  override must be in the scope or a throwaway config reads the real account's
+  secret.
+- **Open decisions:** stable profile id; headless (`--no-ui`) contract when no
+  session bus/prompt agent exists; locked keyring fallback; erase on
+  `store_password=false`, on reset, and on profile delete; one item per profile
+  or one per `(scope,key)`.
+
+### 2. Password reset and the 90-day forced change
+
+- **The signal is already in the login response and the fork throws it away.**
+  The portal answers the password call with `code 0` and
+  `data.next-step:"forced-change"` plus `change-code`,
+  `change message`, `policy-object`, `username`, `domain` and `pwdRulePrompt`.
+  `change-code 75500402` shows the account field,
+  `75500404` allows skipping (the skip answer carries
+  `data.remainedSkipTimes`). The fork's dispatcher has no case for it and fails
+  with `unsupported next authentication service: forced-change`
+  (`auth/auth.go:353-354`); no expiry code exists in its `codes.go`.
+- **Endpoints the reset flow uses:**
+  `POST forced-change` (forced change; **form-urlencoded**;
+  `skip:true` supported), `POST reset-path` (logged-in
+  个人信息 → 密码安全 → 重置密码; `{oldPassword,newPassword[,account-field]}`),
+  `POST portal/public/resetPsw` (forgot-password reset after the SMS
+  verification), `GET portal/user/policy-object` (rules) and
+  `POST portal/public/policy-probe` (policy database). The dialog's
+  client-side fields are `oldPassword`, `newPwd`, `confirmPwd`; both passwords
+  are RSA-encrypted before sending, with the same RSA
+  scheme the login uses (`psw.go:57-62`). The rule object carries
+  `enablePswLength`, `enablePswCombination`, `enablePswNotContainName`,
+  `enablePswNotEqualHistory`, `notBelongToWeakDb`, `effectiveTime` and
+  `enablePswExpire` — the 90-day policy is `effectiveTime`+`enablePswExpire`.
+- **Comparable clients:** EZ4Connect has no reset dialog and cannot have one (the
+  Go core has no such call); atrust-quadlet deliberately hands a forced change
+  to a VNC session. Neither implements it.
+- **Feasibility:** yes, with one fork addition and one measurement. The fork
+  must expose the change call and the forced-change signal (the session's
+  `csrfToken`, `pubKey`, `antiReplayRand` and `request` are unexported), e.g.
+  `Session.ChangePassword(ctx, old, new)` plus a typed
+  `ErrPasswordChangeRequired{Code, Message, Strategy, Username, Domain, Prompt}`
+  and a skip call. goTrust then needs a panel (old, new, confirm, rules from
+  `policy-object`, skip when allowed), wired like the existing code/captcha
+  prompts, and it must rewrite the stored credential afterwards or every
+  reconnect fails. Missing evidence: one round-trip on an expired
+  account (the exact body/encoding of `forced-change`, whether a ticket is
+  already issued, what success returns, whether other sessions are cut).
+- **Safe immediate step, no guessing:** recognise the
+  `forced-change` next-service error and report "网关要求修改密码" instead of a
+  generic login failure.
+
+### 3. 断开 exited the process
+
+- **Root cause, from the journal of the 14:41 run**
+  (`journalctl --user`, app started from the desktop):
+  `panic: EOF` in `stack/gvisor.(*Stack).Run` at `stack.go:244`, goroutine
+  created by `session.(*Manager).loginSession` at `session/session.go:354`, at
+  the same second the proxy logged its close. 断开 cancels the session, the
+  client closes the L3 connection, the read loop gets EOF, and the fork panics
+  because its "shutdown is terminal" flag lives in an `internal/hook_func`
+  package an external module cannot reach (`stack/gvisor/stack.go:238-249`).
+  A panic in that goroutine ends the whole tray app.
+- **Fixed in one commit** (package `r44`): the stack runs
+  through `Manager.runPacketStack`, which recovers, logs
+  `the packet stack stopped: …` and lets the keep-alive/session state observe
+  the dead tunnel. Regression test `TestAPacketStackPanicDoesNotKillTheApp`.
+- **Follow-up for the fork:** `Run` should return (or expose a stop/terminal
+  hook) on `net.ErrClosed`/EOF instead of panicking; a read error while *online*
+  is currently silent to the session state, so the keep-alive failure is the
+  only signal. The existing `fix/core-exit-cleanup` branch already replaced
+  panics with `hook_func.Fatalf` in the service listeners but not in this read
+  loop.
+
+### Proposed phases
+
+1. **Keyring** — secret storage with `go-keyring` (D-Bus) or `secret-tool`,
+   a stable profile scope, migration of existing plaintext, erase on
+   `store_password=false`/delete/reset, headless fallback, tests with a fake
+   store.
+2. **Password change** — first the fork API and the typed forced-change
+   signal, then the panel and the credential rewrite; blocked on one live
+   measurement.
