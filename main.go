@@ -641,12 +641,9 @@ func (a *app) startProxy(ctx context.Context, cancel context.CancelFunc) error {
 	socks5, httpBind := a.currentConfig().ProxyAddresses()
 
 	// The resolver resolves names inside the tunnel: a SOCKS5 client sends the
-	// hostname, and the system resolver knows nothing about intranet names.
-	var resolver gotrustproxy.NameResolver
-	if tunnel := a.manager.Resolver(); tunnel != nil {
-		resolver = tunnel
-	}
-
+	// hostname, and the system resolver knows nothing about intranet names. The
+	// manager reads its resolver per request: an auto-reconnect replaces it
+	// while these listeners stay open.
 	a.mu.RLock()
 	epoch := a.proxyEpoch
 	a.mu.RUnlock()
@@ -655,7 +652,7 @@ func (a *app) startProxy(ctx context.Context, cancel context.CancelFunc) error {
 		SOCKS5Bind: socks5,
 		HTTPBind:   httpBind,
 		Dial:       a.manager.Dial,
-		Resolver:   resolver,
+		Resolver:   a.manager,
 		Logf:       a.logf,
 	})
 	if err != nil {

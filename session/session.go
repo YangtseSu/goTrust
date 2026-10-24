@@ -47,8 +47,9 @@ const (
 	// PhaseOnline means the tunnel is usable and the proxies may serve.
 	PhaseOnline Phase = "online"
 	// PhaseReconnecting means a lost session is being retried with a fresh
-	// login, or the client is renewing its own live session. Dial refuses
-	// until it is online.
+	// login, or the client is renewing or restoring its own live session. Dial
+	// keeps serving while the client still holds a data path (a restore is
+	// confirmed by traffic), and refuses once the ladder has torn it down.
 	PhaseReconnecting Phase = "reconnecting"
 	// PhaseFailed means the last attempt stopped with Detail as the reason.
 	PhaseFailed Phase = "failed"
@@ -113,6 +114,13 @@ type Options struct {
 	OnState func(State)
 }
 
+// tunnelDialer opens one connection through the session's live data path. It
+// is an interface only so tests can hold a tunnel open; the real value is the
+// upstream dialer.
+type tunnelDialer interface {
+	Dial(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
 // Manager holds the live session and serialises login, logout and dialling.
 type Manager struct {
 	options Options
@@ -121,7 +129,7 @@ type Manager struct {
 	mu       sync.RWMutex
 	state    State
 	client   *atrust.Client
-	dialer   *dial.Dialer
+	dialer   tunnelDialer
 	resolver *resolve.Resolver
 	underlay *underlay.Dialer
 	cancel   context.CancelFunc
@@ -405,17 +413,30 @@ func (m *Manager) Dial(ctx context.Context, network, addr string) (net.Conn, err
 	phase := m.state.Phase
 	m.mu.RUnlock()
 
-	if phase != PhaseOnline || dialer == nil {
+	// A reconnecting session has two shapes. While the client renews or
+	// restores its own session the data path is still there, and a restored
+	// session stays "restoring" until real traffic confirms it: refusing here
+	// would keep the proxy from ever supplying that traffic. Once the ladder
+	// starts a fresh login it has torn the tunnel down, and the nil dialer is
+	// what refuses.
+	if dialer == nil || (phase != PhaseOnline && phase != PhaseReconnecting) {
 		return nil, ErrNotOnline
 	}
 	return dialer.Dial(ctx, network, addr)
 }
 
-// Resolver exposes the tunnel resolver. It is nil while no session exists.
-func (m *Manager) Resolver() *resolve.Resolver {
+// Resolve resolves a name through the live session. It is read per call, not
+// captured: an auto-reconnect replaces the resolver together with the stack it
+// was built on, while the SOCKS5 listener outlives both.
+func (m *Manager) Resolve(ctx context.Context, name string) (context.Context, net.IP, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.resolver
+	resolver := m.resolver
+	m.mu.RUnlock()
+
+	if resolver == nil {
+		return ctx, nil, ErrNotOnline
+	}
+	return resolver.Resolve(ctx, name)
 }
 
 // newStack picks the data path the gateway supports. The packet stack is the

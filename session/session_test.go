@@ -16,6 +16,7 @@ import (
 	"inet.af/netaddr"
 
 	clientpkg "github.com/mythologyli/zju-connect/client"
+	"github.com/mythologyli/zju-connect/resolve"
 	"github.com/mythologyli/zju-connect/stack/gvisor"
 	"github.com/mythologyli/zju-connect/stack/tcptunnel"
 
@@ -299,5 +300,87 @@ func TestTunnelDNSLeavesTheSecondaryToTheSystem(t *testing.T) {
 	})
 	if !useRemote || remote != "192.0.2.53" || secondary != "" {
 		t.Fatalf("remote = %q, secondary = %q, useRemote = %v, want the gateway server only", remote, secondary, useRemote)
+	}
+}
+
+// stubTunnelDialer stands in for the upstream dialer: Dial must reach it only
+// while the session still owns a data path.
+type stubTunnelDialer struct {
+	calls int
+}
+
+func (d *stubTunnelDialer) Dial(ctx context.Context, network, addr string) (net.Conn, error) {
+	d.calls++
+	client, server := net.Pipe()
+	_ = server.Close()
+	return client, nil
+}
+
+// A restored session stays "restoring" until real traffic confirms it. Refusing
+// to dial there would stop the only traffic that can confirm it, so a
+// reconnecting session that still holds a dialer has to serve.
+func TestDialServesAReconnectingSessionThatStillHasATunnel(t *testing.T) {
+	manager := New(Options{})
+	dialer := &stubTunnelDialer{}
+	manager.dialer = dialer
+	manager.set(State{Phase: PhaseReconnecting, Detail: "正在恢复会话", Since: time.Now()})
+
+	conn, err := manager.Dial(context.Background(), "tcp", "192.0.2.10:443")
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	_ = conn.Close()
+	if dialer.calls != 1 {
+		t.Fatalf("dialer calls = %d, want 1", dialer.calls)
+	}
+}
+
+// The reconnect ladder tears the dead tunnel down before its first attempt.
+// That state is also PhaseReconnecting, and it must still refuse.
+func TestDialRefusesReconnectingWithoutATunnel(t *testing.T) {
+	manager := New(Options{})
+	manager.set(State{Phase: PhaseReconnecting, Detail: "重连中", Since: time.Now()})
+
+	if _, err := manager.Dial(context.Background(), "tcp", "192.0.2.10:443"); !errors.Is(err, ErrNotOnline) {
+		t.Fatalf("err = %v, want ErrNotOnline", err)
+	}
+}
+
+// resolverFor builds a tunnel resolver that answers one name from the gateway's
+// DNS resource list, so a lookup needs no stack or network.
+func resolverFor(host string, ip net.IP) *resolve.Resolver {
+	return resolve.NewResolver(
+		nil, "192.0.2.53", "", 3600,
+		nil,
+		map[string][]net.IP{host: {ip}},
+		true,
+	)
+}
+
+// The proxy outlives an auto-reconnect, and the reconnect replaces the resolver
+// together with the stack it was built on. A manager that resolved through the
+// resolver it held at login would answer from the dead stack after every retry.
+func TestResolveFollowsTheReconnectedSession(t *testing.T) {
+	manager := New(Options{})
+	manager.resolver = resolverFor("intranet.example.com", net.ParseIP("192.0.2.7"))
+
+	_, ip, err := manager.Resolve(context.Background(), "intranet.example.com")
+	if err != nil || !ip.Equal(net.ParseIP("192.0.2.7")) {
+		t.Fatalf("ip = %v, err = %v, want the first session's answer", ip, err)
+	}
+
+	manager.resolver = resolverFor("intranet.example.com", net.ParseIP("192.0.2.8"))
+
+	_, ip, err = manager.Resolve(context.Background(), "intranet.example.com")
+	if err != nil || !ip.Equal(net.ParseIP("192.0.2.8")) {
+		t.Fatalf("ip = %v, err = %v, want the reconnected session's answer", ip, err)
+	}
+}
+
+func TestResolveRefusesWithoutASession(t *testing.T) {
+	manager := New(Options{})
+
+	if _, _, err := manager.Resolve(context.Background(), "intranet.example.com"); !errors.Is(err, ErrNotOnline) {
+		t.Fatalf("err = %v, want ErrNotOnline", err)
 	}
 }

@@ -503,8 +503,10 @@ no code was changed by the review.
 
 ### Test gaps
 
-- No app-level test for `disconnect`, proxy rebind after failure, or proxy
-  behaviour after a reconnect; P0-1/P0-2, P1-6/P1-7 are invisible to the suite.
+- No app-level test for `disconnect` or proxy rebind after failure; P0-1/P0-2
+  are invisible to the suite. P1-6/P1-7 now have unit tests (`Manager.Resolve`
+  follows a swapped resolver; `Dial` serves a restoring session that still has
+  a dialer and refuses once the ladder has none).
 - Settings tests count callbacks and call state methods directly; none drives
   新建/删除 through `SettingsView` with the real state, so P0-3/P1-11 pass.
 - Proxy tests read the 200 before sending the payload, missing P1-14; no
@@ -513,6 +515,23 @@ no code was changed by the review.
   truncation, or concurrent writers.
 - `TestClientDataPathIsPerProfile` (`config/config_test.go:312`) encodes the
   default-directory behaviour of P1-8 instead of catching it.
+
+### After the P1-4/P1-5 fix (2026-10-24)
+
+- The TCP-tunnel decision is now `IP()`: `CanUseTCPTunnel()` is unconditional in
+  the atrust client, so it cannot select a stack. The gVisor stack is the
+  normal path and the TCP tunnel is the TCP-only fallback.
+- **New upstream gap caused by that:** `ObserveTunnelTraffic` is called only by
+  `client/atrust/tcptunnel.go:620` after a tunnel handshake. The gVisor stack
+  has no equivalent, and `restoreFromTicket`/`relogin` deliberately leave
+  `SessionRestoring` until that hook fires. With gVisor, a restored session can
+  therefore keep goTrust in `PhaseReconnecting` after the tunnel is working.
+  Keep-alive probes are real application traffic, but the fork does not report
+  them as such. Candidate fixes: a fork hook in `stack/gvisor` `DialTCP` →
+  `ObserveTunnelTraffic`, or goTrust confirming on a non-fallback keep-alive
+  success. Neither was in the review list; recorded for the next batch.
+- `Manager.Resolve` reads the resolver per call, so the SOCKS5 listener follows
+  an auto-reconnect instead of holding the dead stack's resolver.
 
 ## Tray interaction and the appindicator backend (2026-10-24)
 

@@ -12,14 +12,15 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: the three P0 defects and the P1-4/P1-5 tunnel DNS and stack batch are
-fixed with regression tests; next is P1-6/P1-7 (proxy resolver handoff, `Dial`
-while the client restores a session). Phase 16's `pacman -U` install still needs
-the operator's sudo password; Phase 8 (dae export) stays deferred.
+Phase 17: the three P0 defects and the P1-4…P1-7 batches are fixed with
+regression tests; next is P1-8/P1-9 (the client-data path must follow
+`--config`, and a profile delete or rename must take its file with it). Phase
+16's `pacman -U` install still needs the operator's sudo password; Phase 8 (dae
+export) stays deferred.
 
 ## Current Phase
 
-Phase 17 (review remediation; P0 and P1-4/P1-5 are done, the rest of the P1
+Phase 17 (review remediation; P0 and P1-4…P1-7 are done, the rest of the P1
 batches are next). Phase 18's tray menu item is done; its double-click/upstream
 item is blocked on mygo.
 
@@ -366,8 +367,14 @@ test that reproduces the defect.
       `client.DNSServer()`/`DNSServers()`, choose gVisor when an IP exists.
       The packet stack carries UDP, so a TCP-only gateway still falls back to
       the TCP tunnel and remote DNS is off when the gateway names no server
-- [ ] P1-6/P1-7, reconnect: hand the proxy a live resolver, allow `Dial` while
-      the client is restoring a session
+- [x] P1-6/P1-7, reconnect: hand the proxy a live resolver, allow `Dial` while
+      the client is restoring a session. `Manager.Resolve` reads the resolver
+      per request; `Dial` refuses only when the ladder has torn the tunnel down
+- [ ] Follow-up found while fixing P1-5: `ObserveTunnelTraffic` is called only
+      by the TCP tunnel (`client/atrust/tcptunnel.go:620`), so a restored
+      session on the gVisor stack never leaves `SessionRestoring` on its own.
+      Candidate fixes: a fork hook in the gVisor `DialTCP`, or goTrust
+      confirming on a successful non-fallback keep-alive probe
 - [ ] P1-8/P1-9, client data: bind the path to the settings file, delete or
       rename the file with the profile
 - [ ] P1-10, config race: `Clone()` before mutating in prompt handlers

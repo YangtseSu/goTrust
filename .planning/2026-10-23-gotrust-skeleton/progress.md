@@ -847,6 +847,41 @@
 - Next: P1-6/P1-7 (hand the proxy a live resolver, allow `Dial` while the
   client is restoring a session).
 
+### Phase 17: reconnect resolver handoff and dialling while restoring (P1-6, P1-7)
+
+- **Status:** done (one commit); P1-8/P1-9 next
+- Actions taken:
+  - reproduced P1-7 on HEAD in a throwaway worktree: with `PhaseReconnecting`
+    and a live dialer, `Dial` returned `the session is not online`, so the
+    repro test failed
+  - `Dial` now refuses only without a dialer or outside online/reconnecting. A
+    client-owned renewal or restore keeps the data path, and a restored session
+    is confirmed by traffic, so refusing there stopped the only confirmation.
+    The ladder tears the client down before its first attempt, so its
+    `PhaseReconnecting` has no dialer and still refuses
+  - `Manager.Resolve` resolves through the resolver read per call and replaces
+    `Resolver()`; `startProxy` hands `a.manager` to the SOCKS5 listener, so an
+    auto-reconnect no longer leaves it on the dead stack's resolver
+  - `Manager.dialer` is the `tunnelDialer` interface (the same `Dial` shape the
+    keep-alive already takes), which makes the refusal and the restore case
+    testable
+- Results:
+  | Check | Result |
+  |---|---|
+  | HEAD: `Dial` in `PhaseReconnecting` with a dialer | `the session is not online`; repro failed |
+  | After: restoring with a dialer / ladder without one | serves / `ErrNotOnline` |
+  | Resolver swapped after a reconnect | the second session's answer |
+  | `go test ./...`, `go test -race ./session ./proxy` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
+- Note: no live gateway. `ObserveTunnelTraffic` is called only by the TCP
+  tunnel, so with the gVisor stack the phase can stay `正在恢复会话` after the
+  tunnel works; recorded in `findings.md` as the next follow-up (a fork hook or
+  confirming on a successful keep-alive probe).
+- Files created/modified: `session/session.go`, `session/session_test.go`,
+  `main.go`, planning files
+- Next: P1-8/P1-9 (`--config` must move the client data, a profile delete or
+  rename must take its file with it).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)
@@ -889,8 +924,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 17 recorded (review remediation); P0 fixes and P1-4/P1-5 landed; Phase 16 `pacman -U` still awaits sudo |
-| Where am I going? | Remaining P1 batches: proxy resolver handoff and `Dial` while restoring, client-data path/rename, config race, settings freshness, redaction and CONNECT, rotation; then the P2 batch; Phase 8 (dae) last |
+| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4/P1-5/P1-6/P1-7 landed; Phase 16 `pacman -U` still awaits sudo |
+| Where am I going? | Remaining P1 batches: client-data path/rename, config race, settings freshness, redaction and CONNECT, rotation; then the P2 batch; Phase 8 (dae) last |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |
