@@ -156,6 +156,12 @@ type app struct {
 	// browser opens a URL; nil uses the desktop's default browser. Tests
 	// replace it because opening a browser is a visible side effect.
 	browser func(string) error
+	// logout joins the session; nil calls Manager.Logout. Tests replace it to
+	// observe that a UI-thread disconnect never waits for the join.
+	logout func()
+	// logoutPending is the channel of the join running off the UI thread, nil
+	// when none is pending. A login waits for it before Manager.Login.
+	logoutPending chan struct{}
 	// stopping suppresses the failure reveal while 断开 cancels a login: the
 	// user asked for it, so the window must not pop up with "cancelled".
 	stopping bool
@@ -191,7 +197,7 @@ func (a *app) runHeadless(ctx context.Context) {
 	}
 	fmt.Println(session.FormatResources(a.manager.State().Resources))
 	<-ctx.Done()
-	a.disconnect()
+	a.disconnectNow()
 }
 
 func (a *app) runUI(ctx context.Context) {
@@ -240,7 +246,7 @@ func (a *app) runUI(ctx context.Context) {
 	if err := mygo.App.Run(); err != nil {
 		a.logger.Fatalf("ui: %v", err)
 	}
-	a.disconnect()
+	a.disconnectNow()
 }
 
 // reconcileAutostart makes the desktop's entry match the settings file. The
@@ -534,6 +540,11 @@ func (a *app) async(fn func(context.Context) error) {
 }
 
 func (a *app) connect(ctx context.Context) error {
+	// 断开 joins the session on another goroutine. Building a new session
+	// before that join finishes would let the old Logout tear it down.
+	if err := a.waitForLogout(ctx); err != nil {
+		return err
+	}
 	if err := a.manager.Login(ctx); err != nil {
 		return err
 	}
@@ -593,6 +604,16 @@ func (a *app) restartProxy() error {
 		return err
 	}
 	return nil
+}
+
+// logoutSession joins the session. Tests replace a.logout to hold the join
+// open, which is how the deadlock regression test observes the caller.
+func (a *app) logoutSession() {
+	if a.logout != nil {
+		a.logout()
+		return
+	}
+	a.manager.Logout()
 }
 
 // releaseProxy closes the listeners the window still names and forgets them.
@@ -664,7 +685,35 @@ func (a *app) startProxy(ctx context.Context, cancel context.CancelFunc) error {
 	return nil
 }
 
+// disconnect stops the session for the UI: 断开, a profile switch and quit all
+// call it from a frame or a tray callback on the main thread. It releases the
+// prompts, the login attempt and the listeners synchronously, then joins
+// Manager.Logout on another goroutine. Logout waits for the login that the
+// cancellation just woke, and that login publishes through onSessionState →
+// onMain, which needs the main thread this frame holds: joining it here
+// deadlocks the process.
 func (a *app) disconnect() {
+	a.stopSession()
+	_ = a.beginLogout()
+}
+
+// disconnectNow is the final teardown, run when no frame waits on the main
+// loop: --no-ui, or after App.Run returned. onMain drops its callbacks then, so
+// joining the session here cannot deadlock.
+func (a *app) disconnectNow() {
+	a.stopSession()
+	a.logoutSession()
+
+	a.mu.Lock()
+	a.stopping = false
+	a.mu.Unlock()
+
+	a.invalidate()
+	a.refreshTray()
+}
+
+// stopSession releases the user-facing state without joining the login.
+func (a *app) stopSession() {
 	// Mark the stop first: releasing a prompt wakes the login goroutine, and a
 	// failure it reports to a user who asked to disconnect must not grab the
 	// window.
@@ -682,14 +731,56 @@ func (a *app) disconnect() {
 		attempt.cancel()
 	}
 	a.releaseProxy()
-	a.manager.Logout()
-
-	a.mu.Lock()
-	a.stopping = false
-	a.mu.Unlock()
-
 	a.invalidate()
 	a.refreshTray()
+}
+
+// beginLogout joins the session on another goroutine and returns the channel
+// that closes when it finished. A join already running is shared: it tears down
+// whatever session exists when it gets the login lock. A login that starts
+// meanwhile waits for the channel, so that Logout cannot kill the session the
+// login just built.
+func (a *app) beginLogout() <-chan struct{} {
+	a.mu.Lock()
+	if pending := a.logoutPending; pending != nil {
+		a.mu.Unlock()
+		return pending
+	}
+	pending := make(chan struct{})
+	a.logoutPending = pending
+	a.stopping = true
+	a.mu.Unlock()
+
+	go func() {
+		a.logoutSession()
+
+		a.mu.Lock()
+		a.logoutPending = nil
+		a.stopping = false
+		a.mu.Unlock()
+
+		close(pending)
+		a.invalidate()
+		a.refreshTray()
+	}()
+	return pending
+}
+
+// waitForLogout blocks until a join started by disconnect finished. The caller
+// runs off the UI thread, so waiting here cannot block onMain.
+func (a *app) waitForLogout(ctx context.Context) error {
+	a.mu.RLock()
+	pending := a.logoutPending
+	a.mu.RUnlock()
+	if pending == nil {
+		return nil
+	}
+	select {
+	case <-pending:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // saveSettings persists the settings draft. Proxy binds and keep-alive take

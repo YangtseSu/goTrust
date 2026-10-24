@@ -12,14 +12,15 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: P0-3 + P1-11 and P0-2 are fixed with regression tests; next is P0-1
-(UI deadlock), then the P1 batches. Phase 16's `pacman -U` install still needs
+Phase 17: all three P0 defects are fixed with regression tests; next is the
+P1-4/P1-5 tunnel DNS and stack batch. Phase 16's `pacman -U` install still needs
 the operator's sudo password; Phase 8 (dae export) stays deferred.
 
 ## Current Phase
 
-Phase 17 (review remediation; three P0 defects block release). Phase 18's tray
-menu item is done; its double-click/upstream item is blocked on mygo.
+Phase 17 (review remediation; the three P0 defects are fixed, the P1 batches
+are next). Phase 18's tray menu item is done; its double-click/upstream item is
+blocked on mygo.
 
 ## Phases
 
@@ -353,8 +354,13 @@ test that reproduces the defect.
       `restartProxy` releases first, terminal failures (`PhaseFailed` with
       `Attention`) release the listeners, and a server that finishes binding
       after a release closes itself
-- [ ] P0-1, UI deadlock: never join `Manager.Logout` from the UI thread while
-      the login goroutine may still need the main loop
+- [x] P0-1, UI deadlock: never join `Manager.Logout` from the UI thread while
+      the login goroutine may still need the main loop. `disconnect` releases
+      prompts, the attempt and the listeners synchronously, then joins the
+      session on another goroutine; a shared pending join keeps a second 断开
+      from racing it; `connect` waits for the join before a new login;
+      `disconnectNow` joins synchronously only in `--no-ui` and after
+      `App.Run`
 - [ ] P1-4/P1-5, tunnel DNS and stack: resolve `auto` through
       `client.DNSServer()`/`DNSServers()`, choose gVisor when an IP exists
 - [ ] P1-6/P1-7, reconnect: hand the proxy a live resolver, allow `Dial` while

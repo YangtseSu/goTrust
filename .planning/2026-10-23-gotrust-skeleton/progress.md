@@ -778,6 +778,39 @@
 - Next: P0-1 (never join `Manager.Logout` on the UI thread while a login may
   need the main loop).
 
+### Phase 17: disconnect never joins the login on the UI thread (P0-1)
+
+- **Status:** done (one commit); the P1 batches remain
+- Actions taken:
+  - wrote the failing test first: `disconnect` called the session join
+    synchronously, so it did not return while the join was held open; the
+    frame would be waiting on `Manager.Logout` while the cancelled login
+    publishes through `onSessionState → onMain`
+  - `disconnect` now releases the prompts, the login attempt and the proxy
+    listeners synchronously, then runs `Manager.Logout` on another goroutine;
+    the UI thread returns before the join
+  - `beginLogout` shares one pending join between concurrent stops, so two
+    `Logout` calls cannot race over the session's login lock; its channel
+    closes when the join finished
+  - `connect` waits for the pending join before `Manager.Login`; otherwise the
+    old `Logout` would tear down the session the new login just built
+    (`selectProfile`/`reconcileProfileSwitch` disconnect and connect in
+    sequence)
+  - `disconnectNow` joins synchronously in `--no-ui` and after `App.Run`,
+    where `onMain` drops its callbacks and nothing can deadlock
+  - `logout` is a test seam next to `browser`, so the regression test can hold
+    the join open
+- Results:
+  | Check | Result |
+  |---|---|
+  | `disconnect` with the join held open, before the fix | returned only after the join; test failed |
+  | Same test after the fix | returns immediately |
+  | Pending join shared, login waits, cancel path | pass |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .` | clean |
+- Files created/modified: `main.go`, `app_test.go`, planning files
+- Next: P1-4/P1-5 (tunnel DNS `auto`, gVisor when the gateway assigns an IP).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)

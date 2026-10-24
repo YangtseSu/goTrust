@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -358,5 +359,86 @@ func TestInterimFailureKeepsTheProxyForTheLadder(t *testing.T) {
 	application.mu.RUnlock()
 	if server != old {
 		t.Fatal("an interim ladder failure released the proxy")
+	}
+}
+
+// 断开 runs inside a frame on the UI thread. Manager.Logout waits for the login
+// it just cancelled, and that login publishes through onSessionState → onMain,
+// which needs the frame to finish. Joining the logout on the caller deadlocks
+// the process; it has to return first.
+func TestDisconnectDoesNotJoinTheSessionOnTheCaller(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	exited := make(chan struct{})
+	application := &app{cfg: config.Default()}
+	application.logout = func() {
+		close(entered)
+		<-release
+		close(exited)
+	}
+
+	returned := make(chan struct{})
+	go func() {
+		application.disconnect()
+		close(returned)
+	}()
+
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("disconnect did not start the session join")
+	}
+	select {
+	case <-returned:
+	case <-time.After(100 * time.Millisecond):
+		close(release)
+		<-exited
+		t.Fatal("disconnect joined Manager.Logout on its caller")
+	}
+	close(release)
+	<-exited
+}
+
+// A second disconnect while a join is pending shares it, so two Logout calls
+// cannot race over the login lock. A login started meanwhile waits for the join
+// before Manager.Login, or the old Logout would tear down the new session.
+func TestPendingLogoutIsSharedAndAwaited(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	exited := make(chan struct{})
+	application := &app{cfg: config.Default()}
+	application.logout = func() {
+		close(entered)
+		<-release
+		close(exited)
+	}
+
+	first := application.beginLogout()
+	<-entered
+	if second := application.beginLogout(); second != first {
+		t.Fatal("a second stop started another session join")
+	}
+
+	waited := make(chan error, 1)
+	go func() { waited <- application.waitForLogout(context.Background()) }()
+	select {
+	case err := <-waited:
+		t.Fatalf("waitForLogout returned %v before the join finished", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := application.waitForLogout(cancelled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled wait returned %v", err)
+	}
+
+	close(release)
+	if err := <-waited; err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	<-exited
+	if err := application.waitForLogout(context.Background()); err != nil {
+		t.Fatalf("wait after the join: %v", err)
 	}
 }
