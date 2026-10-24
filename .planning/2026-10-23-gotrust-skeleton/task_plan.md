@@ -12,21 +12,18 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17 is remediated: every P0, P1 and P2 item is fixed with regression tests,
-including P1-17 in the fork and its pin bump. The verification pass is green
-(race suite, `reuse lint`, real-binary lifecycle) and the native-window smoke
-ran in a headless mutter: 断开 during a login, settings delete/close/reopen and
-the quit path all behaved. A live 断开 then exposed a fatal packet-stack panic,
-fixed in one commit (package `r44`). Research for the next three features
-proposed as phases 19-21.
-Phase 16 is closed: the package is installed from `pacman -U`. Phase 8 (dae
-export) stays deferred, and Phase 18's double-click waits on mygo.
+Phase 19 (password change, full) and Phase 20 (keyring, backend decided at
+execution). Research for all three is in `findings.md`. Phase 17 is closed
+apart from the manual expiry→reconnect case; a live 断开 exposed a fatal
+packet-stack panic, fixed in one commit (package `r44`).
 
 ## Current Phase
 
-Phase 17 (review remediation) is complete apart from the manual native-window
-click-through. Phase 18's tray menu item is done; its double-click/upstream item
-is blocked on mygo.
+Phase 19 is planned, not started: the `[identity]` config section, the
+per-install device id, and the fork's endpoint environment are itemised below.
+Phase 17 is complete apart from the manual expiry→reconnect case, Phase 16 is
+closed, Phase 8 (dae export) stays deferred, and Phase 18's double-click waits
+on mygo.
 
 ## Phases
 
@@ -484,58 +481,52 @@ test except where noted):
   backend. The `.so` is not a drop-in: GMenu vs GtkMenu, and no
   `app_indicator_set_icon_full`. Do not swap the package dependency alone.
 
-### Phase 19: Keyring credential storage (proposed)
+### Phase 19: Password change and forced reset (full)
 
-The branch the operator remembered is `feat/credential-keychain`,
-local-only) in `~/projects/atrust-dev/EZ4Connect`, not in the zju-connect fork.
-It is app-side only and uses libsecret's `secret-tool` (attributes
-`service`, `scope`, `key`), with macOS Keychain and the Windows Credential
-Manager, and leaves the settings file as the fallback when no store is
-available. Details and the goTrust choke points are in `findings.md`.
+Done completely, live-tested when the gateway first forces it (the 90-day
+policy). Endpoints and the signal are in `findings.md`.
 
-- [ ] Decide the backend: `go-keyring` (D-Bus Secret Service, no CGO) or
-      `secret-tool` (mirrors EZ4Connect, adds a `libsecret` runtime dependency)
-- [ ] Stable scope per profile: a new id, or the client-data move/erase hooks
-      reused; the `--config` path must be in the scope
+- [ ] Fork: typed signal for `next-step:"forced-change"`
+      (`change-code`, `change message`, `policy-object`, `username`,
+      `domain`, `pwdRulePrompt`), `Session.ChangePassword(ctx, old, new)` over
+      `POST forced-change` (form-urlencoded),
+      `Session.SkipPasswordChange(ctx)` (`skip:true`, `remainedSkipTimes`), and
+      `Session.PasswordStrategy(ctx)` over `portal/user/policy-object`
+- [ ] Panel in the login flow: old password, new password twice, rules rendered
+      from `policy-object`, the account field for `75500402`, 跳过 when
+      `75500404`, `pwdRulePrompt` text; wired like the code/captcha prompts and
+      released by 断开/cancel
+- [ ] Voluntary reset while online: `POST reset-path`
+      (`{oldPassword,newPassword}`) from the settings window, policy
+      check via `portal/public/policy-probe`
+- [ ] After success: rewrite the stored credential (config today, keyring after
+      Phase 20) and continue or re-login; the portal is expected to end other
+      terminals' sessions
+- [ ] Tests: typed signal parsing, panel validation and cancel, skip, stored
+      credential updated, headless refusal is clear
+- [ ] Live test with the real 90-day expiry (operator); until then the panel is
+      exercised with the bundle's shapes only
+
+### Phase 20: Keyring credential storage (second; backend chosen at execution)
+
+The reference branch is EZ4Connect's local-only `feat/credential-keychain`
+(libsecret `secret-tool`, attributes `service`/`scope`/`key`; macOS
+Keychain and Windows Credential Manager; settings file as the fallback). The
+zju-connect fork has no keyring branch. Details and the goTrust choke points are
+in `findings.md`.
+
+- [ ] Choose the backend then: `go-keyring` (D-Bus Secret Service, no CGO) or
+      `secret-tool` (mirrors EZ4Connect, adds `libsecret` to depends)
+- [ ] Stable scope per profile (a new id, or the client-data move/erase hooks);
+      the `--config` path must be part of the scope
 - [ ] Read at the login snapshot; write/erase through `cfgForDisk` and the
       profile actions; erase on `store_password=false`, delete and reset
-- [ ] Migrate an existing plaintext `password`/`totp_secret` into the store and
-      drop it from the file, only after a successful write
-- [ ] Headless contract: what `--no-ui` does without a session bus or prompt
-      agent, and what the UI says for a locked collection
+- [ ] Migrate an existing plaintext `password`/`totp_secret` into the store,
+      dropping the file copy only after a successful write
+- [ ] Headless contract without a session bus or prompt agent; locked-collection
+      behaviour and its UI message
 - [ ] Tests with a fake store: migration, fallback, locked/absent, rename and
       delete
-
-
-The portal sees a per-client-data 32-hex `deviceId` (`x-sdp-env`, `reportEnv`,
-tunnel auth) and a hardcoded `aTrustTray/2.4.10.50` UA; no hostname, OS or
-which is why 终端管理 names the host and the kernel. See `findings.md`.
-
-- [ ] Pin one `device_id` per install (or per profile) with an explicit config
-      key; the fork only seeds an empty client-data file
-- [ ] Show the current device id read-only; keep profile rename carrying it
-- [ ] Device trust/untrust actions over the fork's `SetTrusted`
-- [ ] Decide whether to keep the browser-profile `reportEnv` or request a
-      richer one (and a version field) from the fork
-
-### Phase 20: Password change and forced reset (proposed)
-
-The gateway signals the 90-day change as `code 0` +
-`next-step:"forced-change"`; the fork fails with "unsupported next
-authentication service: forced-change". Endpoints and the rule object are in
-`findings.md`.
-
-- [ ] Fork: a typed forced-change error/`Prompt` hook, `Session.ChangePassword`
-      and a skip call (`forced-change`), plus `PasswordStrategy`; the session's
-      csrf/pubKey/antiReplayRand are unexported today
-- [ ] One live measurement on an expired or expiring account: request body and
-      encoding, success answer, whether the current session survives
-- [ ] Panel: old, new, confirm, rules from `policy-object`, skip when
-      `change-code == 75500404`; wire it like the code prompt
-- [ ] Rewrite the stored credential after a successful change, or every
-      reconnect fails
-- [ ] Immediate safe step: report the forced-change signal as
-      "网关要求修改密码" instead of a generic failure
 
 ## Key Questions
 

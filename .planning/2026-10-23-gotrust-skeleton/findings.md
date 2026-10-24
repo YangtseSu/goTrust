@@ -707,3 +707,12 @@ that would need a call is marked [[INFERENCE]] or "missing".
 2. **Password change** — first the fork API and the typed forced-change
    signal, then the panel and the credential rewrite; blocked on one live
    measurement.
+
+### Operator decisions on the two phases (2026-10-24)
+
+- **Order:** password change (full, live-tested when the gateway first
+  forces it), then keyring with the backend chosen at execution.
+- **Password change:** implement the forced `forced-change` flow, the skip
+  path, the rule rendering, and the voluntary `reset-path` reset; the
+  live 90-day test waits until the gateway triggers it.
+
