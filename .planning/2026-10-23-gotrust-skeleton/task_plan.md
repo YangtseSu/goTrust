@@ -12,8 +12,8 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: P0-3 + P1-11 are fixed with regression tests; next is P0-2 (proxy
-lifetime), then P0-1 (UI deadlock). Phase 16's `pacman -U` install still needs
+Phase 17: P0-3 + P1-11 and P0-2 are fixed with regression tests; next is P0-1
+(UI deadlock), then the P1 batches. Phase 16's `pacman -U` install still needs
 the operator's sudo password; Phase 8 (dae export) stays deferred.
 
 ## Current Phase
@@ -348,8 +348,11 @@ test that reproduces the defect.
       mid-frame, and deleting a middle profile shifts Ports/Targets onto the
       next account. The frame re-reads the selection after the profile buttons,
       and the positional buffers are spliced on delete and carried into a copy
-- [ ] P0-2, proxy lifetime: close the old listeners before binding; a failed
-      session must not leave ports held so manual reconnect can never work
+- [x] P0-2, proxy lifetime: close the old listeners before binding; a failed
+      session must not leave ports held so manual reconnect can never work.
+      `restartProxy` releases first, terminal failures (`PhaseFailed` with
+      `Attention`) release the listeners, and a server that finishes binding
+      after a release closes itself
 - [ ] P0-1, UI deadlock: never join `Manager.Logout` from the UI thread while
       the login goroutine may still need the main loop
 - [ ] P1-4/P1-5, tunnel DNS and stack: resolve `auto` through

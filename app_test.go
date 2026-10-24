@@ -4,6 +4,8 @@
 package main
 
 import (
+	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"github.com/YangtseSu/goTrust/config"
+	gotrustproxy "github.com/YangtseSu/goTrust/proxy"
 	"github.com/YangtseSu/goTrust/session"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
 )
@@ -251,5 +254,109 @@ func TestSaveSettingsRejectsBadValues(t *testing.T) {
 	}
 	if application.currentConfig().Active().Server.Port != 443 {
 		t.Fatal("a rejected save changed the live settings")
+	}
+}
+
+// testProxyApp installs a proxy server bound to an ephemeral loopback port and
+// points the settings at that same port, so a restart has to rebind it.
+func testProxyApp(t *testing.T) (*app, *gotrustproxy.Server) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	server, err := gotrustproxy.New(gotrustproxy.Options{
+		SOCKS5Bind: "127.0.0.1:0",
+		Dial: func(context.Context, string, string) (net.Conn, error) {
+			return nil, session.ErrNotOnline
+		},
+	})
+	if err != nil {
+		cancel()
+		t.Fatalf("new proxy: %v", err)
+	}
+	if err := server.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("start proxy: %v", err)
+	}
+
+	cfg := config.Default()
+	cfg.Proxy.SOCKS5Bind = server.Addresses()[0]
+	cfg.Proxy.HTTPBind = ""
+
+	application := &app{
+		cfg:     cfg,
+		manager: session.New(session.Options{Config: func() config.Config { return cfg }}),
+		proxy:   server,
+		view:    gotrustui.State{Addresses: server.Addresses()},
+	}
+	application.proxyCancel = cancel
+	t.Cleanup(application.releaseProxy)
+	return application, server
+}
+
+// A connect after a lost session has to rebind the configured ports. The old
+// listeners were still open, so the new bind failed with "address already in
+// use" on every retry until the process exited.
+func TestRestartProxyClosesTheOldListenersBeforeBinding(t *testing.T) {
+	application, old := testProxyApp(t)
+	address := old.Addresses()[0]
+
+	if err := application.restartProxy(); err != nil {
+		t.Fatalf("restart the proxy on %s: %v", address, err)
+	}
+
+	application.mu.RLock()
+	server := application.proxy
+	addresses := application.view.Addresses
+	application.mu.RUnlock()
+	if server == nil || server == old {
+		t.Fatal("the proxy was not replaced")
+	}
+	if len(addresses) != 1 || addresses[0] != address {
+		t.Fatalf("addresses = %v, want [%s]", addresses, address)
+	}
+}
+
+// expire publishes a terminal failure with Attention: the listeners belong to
+// the dead session and must be released, or 连接 can never bind them again.
+func TestTerminalSessionFailureReleasesTheProxyListeners(t *testing.T) {
+	application, old := testProxyApp(t)
+	address := old.Addresses()[0]
+
+	application.onSessionState(session.State{
+		Phase:     session.PhaseFailed,
+		Detail:    "会话已过期，需要重新登录",
+		Attention: "会话已过期，需要重新登录",
+	})
+
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("the listener still holds %s: %v", address, err)
+	}
+	_ = listener.Close()
+
+	application.mu.RLock()
+	server := application.proxy
+	addresses := application.view.Addresses
+	application.mu.RUnlock()
+	if server != nil || addresses != nil {
+		t.Fatalf("proxy = %v addresses = %v", server, addresses)
+	}
+}
+
+// The ladder's interim login failures carry no Attention and must keep the
+// listeners: the app does not restart a proxy when a retry succeeds, so closing
+// them here would leave a live session with no proxy at all.
+func TestInterimFailureKeepsTheProxyForTheLadder(t *testing.T) {
+	application, old := testProxyApp(t)
+
+	application.onSessionState(session.State{
+		Phase:  session.PhaseFailed,
+		Detail: "auto-reconnect attempt 1 failed",
+	})
+
+	application.mu.RLock()
+	server := application.proxy
+	application.mu.RUnlock()
+	if server != old {
+		t.Fatal("an interim ladder failure released the proxy")
 	}
 }

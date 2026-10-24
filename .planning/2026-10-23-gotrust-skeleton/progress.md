@@ -744,6 +744,40 @@
   files
 - Next: P0-2 (release proxy listeners on session failure), then P0-1.
 
+### Phase 17: proxy lifetime on failure and reconnect (P0-2)
+
+- **Status:** done (one commit); P0-1 remains
+- Actions taken:
+  - wrote the failing tests first against the real sockets: a restart on the
+    server's own port failed with `bind: address already in use`, and a
+    terminal `PhaseFailed` (`Attention` set, as `expire` and the exhausted
+    ladder publish) left the port bound
+  - extracted `restartProxy` (used by `connect`) so the replacement is one
+    path: it calls `releaseProxy` before `startProxy`, closing the old
+    listeners instead of binding under them
+  - `releaseProxy` takes the server and cancel under the lock, clears
+    `view.Addresses`, then cancels and closes; `disconnect` uses it instead of
+    its own copy
+  - `onSessionState` releases on a terminal failure only. Interim ladder
+    failures carry no `Attention` and keep the listeners, because a retry that
+    succeeds reuses them and the app never restarts the proxy from inside the
+    ladder
+  - `proxyEpoch` makes a server that finishes binding after a release close
+    itself rather than install its ports for a session that is gone
+  - `startProxy` now installs the server and its cancel atomically with the
+    epoch check
+- Results:
+  | Check | Result |
+  |---|---|
+  | Restart on the same port, before the fix | `bind: address already in use` |
+  | Terminal failure, before the fix | port still bound |
+  | Restart, terminal failure, interim failure after the fix | pass |
+  | `go test ./...`, `go test -race .` | pass |
+  | `go vet ./...`, `gofmt -l .` | clean |
+- Files created/modified: `main.go`, `app_test.go`, planning files
+- Next: P0-1 (never join `Manager.Logout` on the UI thread while a login may
+  need the main loop).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)

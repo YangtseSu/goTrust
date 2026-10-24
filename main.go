@@ -139,6 +139,10 @@ type app struct {
 	// proxyCancel ends the listeners of the live session. It is separate from
 	// the login attempt's context, which the async helper cancels on return.
 	proxyCancel context.CancelFunc
+	// proxyEpoch counts listener releases. A server that finishes binding after
+	// a release belongs to a session that is gone, so it closes itself instead
+	// of holding the ports the next connect needs.
+	proxyEpoch uint64
 	// attempt is the login or action in flight, so 断开 can cancel a login
 	// that is waiting on the network or on the user.
 	attempt *attemptCancel
@@ -540,19 +544,9 @@ func (a *app) connect(ctx context.Context) error {
 
 	// ctx is the attempt's deadline, which async cancels as soon as this
 	// returns. The listeners must live until the session ends.
-	proxyCtx, cancel := context.WithCancel(context.Background())
-	if err := a.startProxy(proxyCtx); err != nil {
-		cancel()
+	if err := a.restartProxy(); err != nil {
 		a.manager.Logout()
 		return err
-	}
-
-	a.mu.Lock()
-	previous := a.proxyCancel
-	a.proxyCancel = cancel
-	a.mu.Unlock()
-	if previous != nil {
-		previous()
 	}
 	return nil
 }
@@ -564,6 +558,16 @@ func (a *app) onSessionState(state session.State) {
 	a.view.Session = state
 	stopping := a.stopping
 	a.mu.Unlock()
+
+	// A terminal failure means the session will not come back on its own: the
+	// client is torn down and 连接 is the user's next step. Its listeners would
+	// keep the configured ports, so that next connect could not bind them. The
+	// ladder's interim failures carry no Attention and keep the listeners: a
+	// retry that succeeds reuses them, and the app does not restart a proxy
+	// from inside the ladder.
+	if state.Phase == session.PhaseFailed && state.Attention != "" && !stopping {
+		a.releaseProxy()
+	}
 
 	if window := a.window.Load(); window != nil {
 		window.Invalidate()
@@ -577,7 +581,42 @@ func (a *app) onSessionState(state session.State) {
 	}
 }
 
-func (a *app) startProxy(ctx context.Context) error {
+// restartProxy starts the listeners for the login that just succeeded. The
+// previous session's server is closed first: its ports are the ones the new
+// bind needs, and a bind that fails here leaves every retry failing with
+// "address already in use".
+func (a *app) restartProxy() error {
+	a.releaseProxy()
+	proxyCtx, cancel := context.WithCancel(context.Background())
+	if err := a.startProxy(proxyCtx, cancel); err != nil {
+		cancel()
+		return err
+	}
+	return nil
+}
+
+// releaseProxy closes the listeners the window still names and forgets them.
+// It is safe to call with no session: releasing again only bumps the epoch, and
+// a server that was still binding sees the change and closes itself.
+func (a *app) releaseProxy() {
+	a.mu.Lock()
+	a.proxyEpoch++
+	server := a.proxy
+	cancel := a.proxyCancel
+	a.proxy = nil
+	a.proxyCancel = nil
+	a.view.Addresses = nil
+	a.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if server != nil {
+		_ = server.Close()
+	}
+}
+
+func (a *app) startProxy(ctx context.Context, cancel context.CancelFunc) error {
 	socks5, httpBind := a.currentConfig().ProxyAddresses()
 
 	// The resolver resolves names inside the tunnel: a SOCKS5 client sends the
@@ -586,6 +625,10 @@ func (a *app) startProxy(ctx context.Context) error {
 	if tunnel := a.manager.Resolver(); tunnel != nil {
 		resolver = tunnel
 	}
+
+	a.mu.RLock()
+	epoch := a.proxyEpoch
+	a.mu.RUnlock()
 
 	server, err := gotrustproxy.New(gotrustproxy.Options{
 		SOCKS5Bind: socks5,
@@ -602,7 +645,17 @@ func (a *app) startProxy(ctx context.Context) error {
 	}
 
 	a.mu.Lock()
+	if a.proxyEpoch != epoch {
+		a.mu.Unlock()
+		// A terminal failure or a disconnect closed the listeners while this
+		// server was binding. Installing it would hold the ports for a session
+		// that no longer exists.
+		cancel()
+		_ = server.Close()
+		return nil
+	}
 	a.proxy = server
+	a.proxyCancel = cancel
 	a.view.Addresses = server.Addresses()
 	a.mu.Unlock()
 
@@ -623,22 +676,12 @@ func (a *app) disconnect() {
 	a.mu.Lock()
 	attempt := a.attempt
 	a.attempt = nil
-	server := a.proxy
-	a.proxy = nil
-	cancel := a.proxyCancel
-	a.proxyCancel = nil
-	a.view.Addresses = nil
 	a.mu.Unlock()
 
 	if attempt != nil {
 		attempt.cancel()
 	}
-	if cancel != nil {
-		cancel()
-	}
-	if server != nil {
-		_ = server.Close()
-	}
+	a.releaseProxy()
 	a.manager.Logout()
 
 	a.mu.Lock()
