@@ -1358,14 +1358,21 @@
     `libayatana-appindicator is deprecated` warning (no GL/GTK error), and
     SIGTERM exits 0. A second run against a stalling gateway, cancelled with
     SIGTERM, logged no `session failed` line
-  - attempted the interactive smoke on the live desktop: `ydotoold` runs from a
-    detached shell and `flameshot full` captures the screen, but `grim` cannot
-    (GNOME has no wlr-screencopy). The diff-based window localization matched
-    an unrelated window whose content is private; the screenshots were deleted
-    immediately and nothing was committed or pasted into the session. Blind
-    `ydotool` input on the operator's live desktop was refused. There is no
-    headless compositor or Xvfb here to isolate the window (weston, sway, Xvfb
-    absent), so the click-through is left to the operator at the desktop
+  - ran the guide's native-window smoke as far as it is safe: the window opened
+    from a temporary config with `--config`, `flameshot full` plus the guide's
+    `1600x1700+1100+250` crop located it, and it rendered `连接中`,
+    `127.0.0.1:<stall>`, `discovering the authentication methods…`, 断开/设置/退出
+    and the spinner
+  - the click on 断开 could not be confirmed: between the screenshot and the
+    click the desktop changed (other applications' windows appeared and rose),
+    the app window was no longer on top, and the process stayed alive with no
+    log change. Blind retries were stopped rather than guessing on a desktop in
+    active use. A later attempt needs an idle desktop; the guide now says so
+  - `ydotoold` runs from a detached shell; `grim` cannot capture (GNOME has no
+    wlr-screencopy). There is no headless compositor or Xvfb (weston, sway,
+    Xvfb absent) to isolate the window. Every process was stopped and all
+    screenshots deleted; two crops had included an unrelated notes window with
+    account text, which was never committed or pasted anywhere
   - every process (`goTrust-ui`, the stalling listener, `ydotoold`) was stopped
     and `/tmp/gt-ui` removed
 - Results:

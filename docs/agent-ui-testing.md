@@ -11,6 +11,11 @@ crash looks like an exit: always capture stderr.
 - Screenshots of the desktop may contain private data. Keep them in `/tmp`,
   crop to the app, and delete them when done. Never commit or paste one.
 - Do not leave the app, `ydotoold`, or injected input running after the test.
+- Confirm the desktop is idle before injecting input. The operator may keep
+  using the machine: a window can open or rise between the screenshot and the
+  click, and a stale coordinate then hits the wrong application. Take the
+  screenshot and click in the same step, and stop the smoke if the layout
+  changed.
 
 ## GNOME hot corner
 
@@ -52,7 +57,14 @@ ydotool click 1
 
 Find the window first: `flameshot full -p /tmp/shot.png`, crop with ImageMagick
 or locate the light window rectangle with PIL. A window can be at a different
-position on each launch; do not reuse coordinates blindly.
+position on each launch; do not reuse coordinates blindly. `grim` cannot capture
+this GNOME session (no wlr-screencopy); `flameshot full` works.
+
+The main window is 540x640 logical, about 900x1067 physical at scale 1.6667
+plus its title bar, and it opens centred; the 1600x1700+1100+250 crop above
+contains it on this display. Crop coordinates map to absolute physical pixels
+by adding the crop offset; the displayed image may be scaled, so multiply by
+`1600/displayed_width` first.
 
 ## flameshot
 
