@@ -444,3 +444,63 @@ func TestContextCancellationClosesBothListeners(t *testing.T) {
 		}
 	}
 }
+
+// A client may pipeline the CONNECT request and its first payload in one write.
+// Those bytes are already buffered when the connection is hijacked; copying
+// them with io.Copy(target, buffered) ran the reader's WriteTo, which reads the
+// client until EOF and never lets the target's answer through.
+func TestHTTPConnectForwardsPipelinedBytes(t *testing.T) {
+	echo := echoServer(t)
+	bind := freePort(t)
+
+	server, err := New(Options{HTTPBind: bind, Dial: directDial})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = server.Close() }()
+
+	conn, err := net.Dial("tcp", bind)
+	if err != nil {
+		t.Fatalf("dial the proxy: %v", err)
+	}
+	defer conn.Close()
+	// A stall must fail the test instead of hanging it.
+	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+
+	payload := "pipelined-payload"
+	request := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n%s", echo.Addr(), echo.Addr(), payload)
+	if _, err := io.WriteString(conn, request); err != nil {
+		t.Fatalf("write CONNECT and payload: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+	status, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read status line: %v", err)
+	}
+	if !strings.Contains(status, "200") {
+		t.Fatalf("status = %q, want 200", status)
+	}
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read headers: %v", err)
+		}
+		if line == "\r\n" {
+			break
+		}
+	}
+
+	echoed := make([]byte, len(payload))
+	if _, err := io.ReadFull(reader, echoed); err != nil {
+		t.Fatalf("read the pipelined echo: %v", err)
+	}
+	if string(echoed) != payload {
+		t.Fatalf("echoed %q, want %q", echoed, payload)
+	}
+}

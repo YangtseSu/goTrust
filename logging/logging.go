@@ -268,8 +268,16 @@ func (l *Logger) Close() error {
 }
 
 var (
-	// authHeader masks a bearer token or any other credential in a header.
-	authHeader = regexp.MustCompile(`(?i)(authorization\s*:\s*)(?:bearer\s+|basic\s+)?\S+`)
+	// credentialHeader masks the value of a credential-bearing header whole.
+	// A cookie is a semicolon-separated family and an authorization value can
+	// carry a scheme or a map/JSON wrapper, so masking one word left the rest
+	// of the secret behind: "Cookie: theme=dark; session=…" kept the session,
+	// and "map[Authorization:[Bearer …]]" kept the token. A bracketed or quoted
+	// value is masked up to its close so the rest of the line survives; any
+	// other value runs to the end of the line.
+	credentialHeader = regexp.MustCompile(
+		`(?i)("?\b(?:(?:proxy-)?authorization|set-cookie|cookie)\b"?\s*[:=]\s*)` +
+			`(?:(?:bearer|basic)\s+)?(?:\[[^\]]*\]|"[^"]*"|'[^']*'|[^\r\n]+)`)
 
 	// captchaData masks a click captcha payload on one line. The logged value
 	// is the coordinates the user picked, which are login material.
@@ -277,8 +285,9 @@ var (
 
 	// secretField masks key/value pairs in JSON, query strings and log lines.
 	// The alternation lists the longest names first so "sid" cannot hide
-	// "sidTicket".
-	secretField = regexp.MustCompile(`(?i)("?\b(?:set-cookie|sid-legacy\.sig|sid-legacy|sidTicket|straceid\.sig|straceid|sign_key|signKey|access_token|refresh_token|csrfToken|csrf_token|password|passwd|captcha|ticket|cookie|token|pwd|sid)\b"?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&}]+)`)
+	// "sidTicket". Headers with a value list (Cookie, Authorization) are
+	// handled by credentialHeader above.
+	secretField = regexp.MustCompile(`(?i)("?\b(?:sid-legacy\.sig|sid-legacy|sidTicket|straceid\.sig|straceid|sign_key|signKey|access_token|refresh_token|csrfToken|csrf_token|password|passwd|captcha|ticket|token|pwd|sid)\b"?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&}]+)`)
 
 	// querySecret catches credentials that follow a query separator.
 	querySecret = regexp.MustCompile(`(?i)([?&](?:password|passwd|pwd|token|ticket|sid|code|sign_key|signKey)=)[^&\s]+`)
@@ -288,7 +297,7 @@ var (
 // line. It is a text filter, not a parser: a field it misses is a leaked
 // credential, so the patterns are deliberately broad.
 func Redact(line string) string {
-	line = authHeader.ReplaceAllString(line, `$1***`)
+	line = credentialHeader.ReplaceAllString(line, `$1***`)
 	line = captchaData.ReplaceAllString(line, `$1"***"`)
 	line = secretField.ReplaceAllString(line, `$1"***"`)
 	line = querySecret.ReplaceAllString(line, `$1***`)

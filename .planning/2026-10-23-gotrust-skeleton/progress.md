@@ -1001,6 +1001,42 @@
   `app_test.go`, planning files
 - Next: P1-13/P1-14 (whole-value redaction, pipelined CONNECT bytes).
 
+### Phase 17: whole-header redaction and pipelined CONNECT (P1-13, P1-14)
+
+- **Status:** done (one commit); P1-15 next
+- Actions taken:
+  - reproduced both defects at HEAD in a throwaway worktree: `Redact` turned
+    `Cookie: theme=dark; session=SECRET123` into `Cookie: "***"; session=SECRET123`
+    and left `tok123` in `map[Authorization:[Bearer tok123] …]`; a CONNECT with
+    its payload in one write received 200 and then nothing until the deadline
+  - `credentialHeader` replaces the header-level patterns and masks the whole
+    value: a bracketed or quoted value is masked to its close, anything else to
+    the end of the line. It covers `Cookie`, `Set-Cookie`,
+    `Authorization`/`Proxy-Authorization`, optional quotes around the key, and a
+    leading `bearer`/`basic` scheme
+  - `secretField` no longer lists the cookie keys (one pass, no double mask) and
+    keeps the field-level JSON/TOML/query rules; the existing cookie test now
+    expects the whole value masked
+  - `tunnel` drains the hijacked `bufio.Reader` with `ReadFull` and writes those
+    bytes to the target before the raw copies, instead of `io.Copy(target,
+    buffered)`, whose `WriteTo` read the client until EOF and starved the
+    return direction
+- Results:
+  | Check | Result |
+  |---|---|
+  | HEAD: cookie family / map authorization | `SECRET123` and `tok123` leaked; repro failed |
+  | HEAD: CONNECT+payload in one write | 200, then no echoed bytes until the deadline |
+  | After: redaction cases | whole header masked; ordinary lines unchanged |
+  | After: pipelined CONNECT | the payload is echoed |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
+- Note: masking runs to the end of the line for an unwrapped value, so a line
+  that puts another field after a cookie loses that field too. That is the
+  deliberate trade: a missed credential is worse than a lost diagnostic.
+- Files created/modified: `logging/logging.go`, `logging/logging_test.go`,
+  `proxy/server.go`, `proxy/server_test.go`, planning files
+- Next: P1-15 (reopen the log after a failed rotation).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)
@@ -1043,8 +1079,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4…P1-12/P1-16 landed; Phase 16 `pacman -U` still awaits sudo |
-| Where am I going? | Scheduled queue: P1-13/P1-14 → P1-15 → P1-17 (packet-stack restore confirmation, fork + pin) → itemised P2 batch → verification; Phase 8 (dae) last |
+| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4…P1-14 landed; Phase 16 `pacman -U` still awaits sudo |
+| Where am I going? | Scheduled queue: P1-15 → P1-17 (packet-stack restore confirmation, fork + pin) → itemised P2 batch → verification; Phase 8 (dae) last |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |

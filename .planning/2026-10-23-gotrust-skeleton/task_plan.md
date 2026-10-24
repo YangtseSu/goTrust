@@ -12,11 +12,11 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: P0 and P1-4…P1-12/P1-16 are fixed with regression tests. The
-remaining queue, in order: P1-13/P1-14, P1-15, P1-17 (packet-stack restore
-confirmation, needs a fork commit and pin bump), the itemised P2 batch, then the
-verification pass. Next commit is P1-13/P1-14. Phase 16's `pacman -U` install
-still needs the operator's sudo password; Phase 8 (dae export) stays deferred.
+Phase 17: P0 and P1-4…P1-14 are fixed with regression tests. The remaining
+queue, in order: P1-15, P1-17 (packet-stack restore confirmation, needs a fork
+commit and pin bump), the itemised P2 batch, then the verification pass. Next
+commit is P1-15. Phase 16's `pacman -U` install still needs the operator's sudo
+password; Phase 8 (dae export) stays deferred.
 
 ## Current Phase
 
@@ -390,9 +390,10 @@ test except where noted):
       list. The hide epoch is claimed on the main thread in the same step as
       the hide, and `openSettings` bumps it there, so a reopen cannot be
       swallowed by a queued hide
-- [ ] P1-13/P1-14, logging and CONNECT: redact whole cookie and `map[…]` values;
-      drain pipelined CONNECT bytes with `CopyN`. Acceptance: `SESSION123` never
-      appears in a redacted line; CONNECT+payload in one write is echoed
+- [x] P1-13/P1-14, logging and CONNECT: the whole value of a
+      credential-bearing header is masked (cookie families, bearer/basic values
+      and `map[…]` wrappers included), and pipelined CONNECT bytes are drained
+      from the hijacked buffer instead of read until EOF
 - [ ] P1-15, log rotation: reopen after a failed rotation instead of losing the
       file for the rest of the process. Acceptance: a rotation failure recovers
       on the next write

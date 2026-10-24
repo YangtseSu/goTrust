@@ -254,9 +254,16 @@ func (s *Server) tunnel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The hijacked connection may already hold bytes the client sent; they
-	// belong to the tunnel and must be forwarded before the raw copy.
-	if buffered.Reader.Buffered() > 0 {
-		if _, err := io.Copy(target, buffered); err != nil {
+	// belong to the tunnel and must be forwarded before the raw copy. Copying
+	// from the buffered readwriter would run its WriteTo, which reads the
+	// client until EOF and blocks the other direction: a CONNECT with a
+	// pipelined first payload then hung. Drain the buffer instead.
+	if n := buffered.Reader.Buffered(); n > 0 {
+		pending := make([]byte, n)
+		if _, err := io.ReadFull(buffered.Reader, pending); err != nil {
+			return
+		}
+		if _, err := target.Write(pending); err != nil {
 			return
 		}
 	}

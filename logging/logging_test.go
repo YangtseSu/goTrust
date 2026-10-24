@@ -32,7 +32,25 @@ func TestRedactRemovesCredentials(t *testing.T) {
 		{
 			name: "cookies and tokens",
 			in:   `Set-Cookie: sid=xyz; token=abc; csrfToken=def`,
-			want: `Set-Cookie: "***"`,
+			want: `Set-Cookie: ***`,
+			leak: "xyz",
+		},
+		{
+			name: "cookie family",
+			in:   `Cookie: theme=dark; session=SECRET123`,
+			want: `Cookie: ***`,
+			leak: "SECRET123",
+		},
+		{
+			name: "authorization inside a map",
+			in:   `map[Authorization:[Bearer tok123] User-Agent:[curl/8]]`,
+			want: `Authorization:***`,
+			leak: "tok123",
+		},
+		{
+			name: "json cookie field",
+			in:   `{"cookie":"sid=xyz; token=abc","user":"alice"}`,
+			want: `"cookie":***,"user":"alice"`,
 			leak: "xyz",
 		},
 		{
