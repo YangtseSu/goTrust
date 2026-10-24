@@ -14,14 +14,15 @@ package, and a UI polish pass.
 
 Phase 17: every P0 and P1 item is fixed with regression tests, including P1-17
 in the fork and its pin bump. The queue now holds the itemised P2 batch and
-then the verification pass (race suite, real UI smoke, `reuse lint`). Phase 16's
-`pacman -U` install still needs the operator's sudo password; Phase 8 (dae
-export) stays deferred.
+then the verification pass (race suite, real UI smoke, `reuse lint`). Phase 16
+is closed: the package is installed from `pacman -U`. Phase 8 (dae export)
+stays deferred.
 
 ## Current Phase
 
-Phase 17 (review remediation; P0 and P1-4…P1-7 are done, the rest of the P1
-batches are next). Phase 18's tray menu item is done; its double-click/upstream
+Phase 17 (review remediation; every P0 and P1 item is done, the P2 batch is
+running from the proxy item). Phase 18's tray menu item is done; its
+double-click/upstream
 item is blocked on mygo.
 
 ## Phases
@@ -334,9 +335,9 @@ the repository is public. Then a self-use VCS package; it does not go to AUR.
       intentional purego/dlopen and libresolv warnings; the extracted binary
       starts, writes `goTrust ready`, and exits 0 on SIGTERM; the installed
       desktop entry passes `desktop-file-validate` (one category hint)
-- [ ] Install with `pacman -U` after the operator supplies the sudo password;
-      the package is built and tested from its extracted tree
-- **Status:** in_progress
+- [x] Install with `pacman -U`; the installed package is `gotrust-git
+      r32`
+- **Status:** complete
 
 ### Phase 17: Code review remediation (2026-10-24)
 
@@ -407,10 +408,12 @@ test except where noted):
       restore leaving `正在恢复会话`) stays a manual smoke item because this
       account's gateway was not exercised
 - [ ] P2 batch, itemised from `findings.md`:
-  - [ ] proxy: track hijacked CONNECT/SOCKS5 connections and close them in
+  - [x] proxy: track hijacked CONNECT/SOCKS5 connections and close them in
         `Server.Close`; forward no hop-by-hop request headers
         (`Proxy-Authorization` included); half-close both directions; flush
-        streamed responses; cache the `forward` Transport
+        streamed responses; cache the `forward` Transport. Every new test was
+        run against the pre-fix tree first (six failures: four behavioural, two
+        deadline timeouts)
   - [ ] proxy/config input: reject or warn on a non-loopback bind, syntax-check
         binds in the settings window, allowlist `openResource` schemes
         (`http`/`https` only)
@@ -433,9 +436,9 @@ test except where noted):
 - [ ] Verification: `go test -race ./...`, real UI smoke (断开 during login,
       设置 delete, session expiry then reconnect), `reuse lint`
 - **Status:** pending
-- **Note:** Phase 16's `pacman -U` install stays open on the operator's sudo
-  password; it does not block Phase 17. P1-17 needs a fork commit and a pin
-  bump; every other item above is goTrust-local.
+- **Note:** Phase 16 is closed (the package is installed with `pacman -U`).
+  P1-17 needed a fork commit and a pin bump; every other item above is
+  goTrust-local.
 
 ### Phase 18: Tray interaction and the appindicator backend (2026-10-24)
 

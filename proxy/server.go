@@ -54,12 +54,18 @@ type Options struct {
 type Server struct {
 	options Options
 	logf    func(format string, args ...any)
+	// transport serves plain-HTTP proxy requests. One per server, because a
+	// per-request Transport never reuses a connection and leaks its idle pool.
+	transport *http.Transport
 
 	mu        sync.Mutex
 	listeners []net.Listener
 	servers   []*http.Server
-	socks     *socks5.Server
-	closed    bool
+	// conns holds every proxied connection that outlives its handler: hijacked
+	// CONNECT tunnels and accepted SOCKS5 connections. http.Server.Shutdown
+	// ignores hijacked connections, so Close has to drop them itself.
+	conns  map[net.Conn]struct{}
+	closed bool
 }
 
 // ErrNoListener reports that both binds were empty.
@@ -77,7 +83,17 @@ func New(options Options) (*Server, error) {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
-	return &Server{options: options, logf: logf}, nil
+	return &Server{
+		options: options,
+		logf:    logf,
+		transport: &http.Transport{
+			DialContext:           options.Dial,
+			MaxIdleConns:          16,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: time.Second,
+		},
+	}, nil
 }
 
 // Start binds every configured listener and serves in the background. A bind
@@ -111,7 +127,8 @@ func (s *Server) Addresses() []string {
 	return addresses
 }
 
-// Close stops every listener. It is safe to call twice.
+// Close stops every listener and drops every open tunnel. It is safe to call
+// twice.
 func (s *Server) Close() error {
 	s.mu.Lock()
 	if s.closed {
@@ -121,11 +138,29 @@ func (s *Server) Close() error {
 	s.closed = true
 	listeners := s.listeners
 	servers := s.servers
+	conns := make([]net.Conn, 0, len(s.conns))
+	for conn := range s.conns {
+		conns = append(conns, conn)
+	}
 	s.listeners = nil
 	s.servers = nil
+	s.conns = nil
 	s.mu.Unlock()
 
 	var failures []error
+	for _, listener := range listeners {
+		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			failures = append(failures, err)
+		}
+	}
+	// A hijacked tunnel is invisible to Shutdown; closing it here is what
+	// releases the session's data path when the proxy goes away.
+	for _, conn := range conns {
+		if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			failures = append(failures, err)
+		}
+	}
+	s.transport.CloseIdleConnections()
 	for _, server := range servers {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		if err := server.Shutdown(shutdownCtx); err != nil {
@@ -133,15 +168,76 @@ func (s *Server) Close() error {
 		}
 		cancel()
 	}
-	for _, listener := range listeners {
-		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			failures = append(failures, err)
-		}
-	}
 	if len(failures) > 0 {
 		return errors.Join(failures...)
 	}
 	return nil
+}
+
+// track registers a proxied connection. It reports false once the server is
+// closed, so a connection that surfaces after Close is dropped instead of
+// outliving its session.
+func (s *Server) track(conn net.Conn) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return false
+	}
+	if s.conns == nil {
+		s.conns = make(map[net.Conn]struct{})
+	}
+	s.conns[conn] = struct{}{}
+	return true
+}
+
+func (s *Server) untrack(conn net.Conn) {
+	s.mu.Lock()
+	delete(s.conns, conn)
+	s.mu.Unlock()
+}
+
+// trackedConn untracks itself when its handler closes it.
+type trackedConn struct {
+	net.Conn
+	server *Server
+	once   sync.Once
+}
+
+func (c *trackedConn) Close() error {
+	var err error
+	c.once.Do(func() {
+		c.server.untrack(c.Conn)
+		err = c.Conn.Close()
+	})
+	return err
+}
+
+// CloseWrite keeps the half-close usable through the wrapper: the SOCKS5
+// server asserts it when it ends a direction.
+func (c *trackedConn) CloseWrite() error {
+	if closer, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return closer.CloseWrite()
+	}
+	return nil
+}
+
+// trackedListener registers every accepted connection with the server, so a
+// SOCKS5 tunnel is dropped by Close like a hijacked CONNECT.
+type trackedListener struct {
+	net.Listener
+	server *Server
+}
+
+func (l *trackedListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	if !l.server.track(conn) {
+		_ = conn.Close()
+		return nil, net.ErrClosed
+	}
+	return &trackedConn{Conn: conn, server: l.server}, nil
 }
 
 func (s *Server) startSOCKS5(ctx context.Context, bind string) error {
@@ -158,15 +254,15 @@ func (s *Server) startSOCKS5(ctx context.Context, bind string) error {
 		options = append(options, socks5.WithResolver(s.options.Resolver))
 	}
 	server := socks5.NewServer(options...)
+	tracked := &trackedListener{Listener: listener, server: s}
 
 	s.mu.Lock()
 	s.listeners = append(s.listeners, listener)
-	s.socks = server
 	s.mu.Unlock()
 
 	s.logf("SOCKS5 listening on %s", listener.Addr())
 	go func() {
-		err := server.Serve(listener)
+		err := server.Serve(tracked)
 		if err != nil && !errors.Is(err, net.ErrClosed) {
 			s.logf("SOCKS5 listener stopped: %v", err)
 		}
@@ -241,11 +337,17 @@ func (s *Server) tunnel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "hijacking is unavailable", http.StatusInternalServerError)
 		return
 	}
-	client, buffered, err := hijacker.Hijack()
+	rawClient, buffered, err := hijacker.Hijack()
 	if err != nil {
 		_ = target.Close()
 		return
 	}
+	if !s.track(rawClient) {
+		_ = rawClient.Close()
+		_ = target.Close()
+		return
+	}
+	client := &trackedConn{Conn: rawClient, server: s}
 	defer client.Close()
 	defer target.Close()
 
@@ -268,10 +370,23 @@ func (s *Server) tunnel(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Each direction ends with a half-close, and the handler waits for both.
+	// Returning after the first one truncated whatever the other direction
+	// still had to deliver, which broke a client that half-closes after its
+	// request and then reads the response.
 	done := make(chan struct{}, 2)
-	go func() { _, _ = io.Copy(target, client); done <- struct{}{} }()
-	go func() { _, _ = io.Copy(client, target); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(target, client); closeWrite(target); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(client, target); closeWrite(client); done <- struct{}{} }()
 	<-done
+	<-done
+}
+
+// closeWrite half-closes a connection that supports it, so its peer sees EOF
+// while the opposite direction keeps draining.
+func closeWrite(conn net.Conn) {
+	if closer, ok := conn.(interface{ CloseWrite() error }); ok {
+		_ = closer.CloseWrite()
+	}
 }
 
 // forward serves a plain-HTTP proxy request: absolute URI in, same URI out over
@@ -279,18 +394,9 @@ func (s *Server) tunnel(w http.ResponseWriter, r *http.Request) {
 func (s *Server) forward(w http.ResponseWriter, r *http.Request) {
 	outbound := r.Clone(r.Context())
 	outbound.RequestURI = ""
+	stripHopByHop(outbound.Header)
 
-	transport := &http.Transport{
-		DialContext:           s.options.Dial,
-		DisableKeepAlives:     false,
-		MaxIdleConns:          16,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: time.Second,
-	}
-	defer transport.CloseIdleConnections()
-
-	response, err := transport.RoundTrip(outbound)
+	response, err := s.transport.RoundTrip(outbound)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -307,7 +413,45 @@ func (s *Server) forward(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(response.StatusCode)
-	_, _ = io.Copy(w, response.Body)
+	stream(w, response.Body)
+}
+
+// stream copies a response body and flushes every chunk. Without a flush a
+// streamed response (event stream, chunked download, long poll) sits in the
+// proxy's buffer until the origin closes, so a live stream looks dead.
+func stream(w http.ResponseWriter, body io.Reader) {
+	controller := http.NewResponseController(w)
+	buffer := make([]byte, 32*1024)
+	for {
+		n, err := body.Read(buffer)
+		if n > 0 {
+			if _, writeErr := w.Write(buffer[:n]); writeErr != nil {
+				return
+			}
+			_ = controller.Flush()
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+// stripHopByHop removes the headers that describe one hop only, including the
+// names a Connection header lists. A proxied request must not carry the
+// client's proxy credentials or connection token to the origin.
+func stripHopByHop(header http.Header) {
+	for _, value := range header.Values("Connection") {
+		for _, token := range strings.Split(value, ",") {
+			if name := strings.TrimSpace(token); name != "" {
+				header.Del(name)
+			}
+		}
+	}
+	for name := range header {
+		if isHopByHop(name) {
+			header.Del(name)
+		}
+	}
 }
 
 func isHopByHop(name string) bool {

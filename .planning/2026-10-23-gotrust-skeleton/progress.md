@@ -209,8 +209,8 @@
   - built `gotrust-git r7` from the local `main`; `namcap` only
     reports the intentional dlopen/external-linker warnings; extracted the
     package and launched the binary (ready line, SIGTERM exit 0)
-  - installed nothing: the host has no passwordless sudo; `pacman -U` is left
-    for the operator
+  - the operator installed it with `pacman -U`; the installed package is
+    `gotrust-git r32`
 - Privacy review before the push:
   - rewrote the three local commits so the intermediate history no longer
     contains the live tunnel/intranet addresses; the outgoing diff, tree and
@@ -1095,6 +1095,48 @@
   `go.mod`, `go.sum`, planning files
 - Next: the itemised P2 batch.
 
+### Phase 17: proxy connection lifetime and the HTTP proxy contract (P2)
+
+- **Status:** done (one commit); the rest of the P2 batch remains
+- Actions taken:
+  - wrote the six regression tests first and ran them in a throwaway worktree at
+    HEAD: the two `Close` tests waited out the read deadline instead of seeing
+    a dropped connection, the origin still saw `Proxy-Authorization` and the
+    `Connection`-listed header, the streamed response never left the proxy, the
+    half-closed CONNECT answered nothing (`EOF`), and two forward requests
+    dialled the upstream twice
+  - `Server` tracks every proxied connection: `trackedListener` registers each
+    accepted SOCKS5 connection and `tunnel` registers the hijacked CONNECT
+    connection; `trackedConn` untracks on its own close. `Close` stops the
+    listeners, then closes the tracked connections, then shuts the HTTP server
+    down, because `http.Server.Shutdown` ignores hijacked connections
+  - a connection that surfaces after `Close` is refused by `track` and closed
+    at once, so nothing installs itself into a dead server
+  - `forward` strips hop-by-hop request headers, including every name listed in
+    `Connection`, so neither the client's proxy credentials nor a hop token
+    reach the origin (`stripHopByHop`)
+  - both tunnel directions end with `CloseWrite` and the handler waits for both,
+    so a client that half-closes after its request still receives the answer
+  - `stream` writes and flushes each body chunk, so an event stream or a long
+    poll arrives while the origin keeps it open
+  - one `http.Transport` per server for plain-HTTP forwarding, with
+    `CloseIdleConnections` on `Close`; a per-request Transport dialled the
+    upstream again for every request
+- Results:
+  | Check | Result |
+  |---|---|
+  | Six new tests at HEAD (throwaway worktree) | all six failed as reviewed |
+  | Same tests after the fix | pass |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean (47/47 compliant) |
+- Note: the handler now waits for both tunnel directions; a peer that never
+  closes keeps its handler alive until `Close`, which now really drops it.
+  Half-close is best-effort: a connection without `CloseWrite` is left alone.
+- Files created/modified: `proxy/server.go`, `proxy/server_test.go`, planning
+  files
+- Next: P2 input validation (non-loopback bind, settings bind syntax,
+  `openResource` scheme allowlist).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)
@@ -1138,7 +1180,7 @@
 | Question | Answer |
 |----------|--------|
 | Where am I? | Phase 17 recorded (review remediation); every P0/P1 item landed, including the fork fix and pin bump; P2 batch is next |
-| Where am I going? | Itemised P2 batch → verification pass; Phase 8 (dae) last; Phase 16 `pacman -U` awaits sudo |
+| Where am I going? | Itemised P2 batch → verification pass; Phase 8 (dae) last. Phase 16 is closed: `gotrust-git` is installed |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |
