@@ -351,7 +351,7 @@ func (m *Manager) loginSession(ctx context.Context) error {
 	resolver := resolve.NewResolver(vpnStack, remoteDNSServer, secondaryDNSServer, 3600, domainResources, dnsResource, useRemoteDNS)
 	vpnStack.SetupResolve(service.NewDnsServer(resolver, []string{remoteDNSServer, secondaryDNSServer}))
 	vpnStack.SetupIPPool(resolver.IPPool)
-	go vpnStack.Run()
+	go m.runPacketStack(vpnStack.Run)
 
 	tunnelIP := ""
 	if ip, ipErr := client.IP(); ipErr == nil && ip != nil {
@@ -373,6 +373,22 @@ func (m *Manager) loginSession(ctx context.Context) error {
 
 	go m.runKeepAlive(sessionCtx, profile, ipResources)
 	return nil
+}
+
+// runPacketStack runs the upstream packet loop in the background. The loop
+// panics on a read error unless the upstream module has been told the shutdown
+// is terminal, and that hook lives in an internal package this module cannot
+// import: on 断开 the L3 connection closes, the loop reads EOF, and the
+// unrecovered panic ended the whole tray app. The stack cannot be restarted, so
+// recover it, log why it stopped, and let the session's keep-alive and state
+// machine observe the dead tunnel.
+func (m *Manager) runPacketStack(run func()) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			m.logf("the packet stack stopped: %v", recovered)
+		}
+	}()
+	run()
 }
 
 // cacheResources stores the last grant beside the settings, so

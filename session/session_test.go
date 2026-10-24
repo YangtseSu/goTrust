@@ -6,6 +6,7 @@ package session
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -603,5 +604,39 @@ func TestPublicationsAreOrdered(t *testing.T) {
 	<-second
 	if first, next := <-events, <-events; first != "first" || next != "second" {
 		t.Fatalf("events = %q, %q", first, next)
+	}
+}
+
+// 断开 closes the L3 connection while the upstream packet loop is reading it.
+// That loop panics on a read error unless the internal upstream hook says the
+// shutdown is terminal, and that hook is unreachable from this module: the
+// panic used to end the whole tray app (journal: `panic: EOF` in
+// stack/gvisor.(*Stack).Run). The wrapper must keep the process alive and log
+// why the stack stopped.
+func TestAPacketStackPanicDoesNotKillTheApp(t *testing.T) {
+	var logged []string
+	manager := New(Options{Logf: func(format string, args ...any) {
+		logged = append(logged, fmt.Sprintf(format, args...))
+	}})
+
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		manager.runPacketStack(func() { panic(io.EOF) })
+	}()
+	select {
+	case <-returned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the recovering wrapper never returned")
+	}
+	if len(logged) != 1 || !strings.Contains(logged[0], "packet stack stopped") {
+		t.Fatalf("log = %v, want one line naming the stopped stack", logged)
+	}
+
+	// A normal return is not an error and logs nothing.
+	logged = nil
+	manager.runPacketStack(func() {})
+	if len(logged) != 0 {
+		t.Fatalf("log = %v, want none for a normal return", logged)
 	}
 }
