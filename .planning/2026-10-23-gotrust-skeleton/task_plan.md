@@ -414,9 +414,11 @@ test except where noted):
         streamed responses; cache the `forward` Transport. Every new test was
         run against the pre-fix tree first (six failures: four behavioural, two
         deadline timeouts)
-  - [ ] proxy/config input: reject or warn on a non-loopback bind, syntax-check
+  - [x] proxy/config input: reject or warn on a non-loopback bind, syntax-check
         binds in the settings window, allowlist `openResource` schemes
-        (`http`/`https` only)
+        (`http`/`https` only). The bind rule is one exported
+        `config.ValidateBind`, run by `Config.Validate` before a login and by
+        the settings save; the real binary refuses an exposed bind and exits 1
   - [ ] TOTP: clear the stored secret with 保存密码 and offer a removal action
   - [ ] persistence: atomic temp+rename `writeClientData`, `Sync` config and
         resource caches, reject unknown TOML keys, make `profileSlug`

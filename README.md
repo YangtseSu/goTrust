@@ -69,6 +69,11 @@ listeners and logging; each `[[profiles]]` entry owns one account's gateway,
 credentials, keep-alive and client-data path. Proxy ports stay global so that
 switching accounts does not move the addresses other applications use.
 
+Both listeners bind to the loopback interface only: `127.0.0.1`, `::1` or
+`localhost`, with a port between 1 and 65535.
+A wider bind such as `0.0.0.0:1080` is refused before a login, and the settings
+window reports the same rule while saving.
+
 ```toml
 version = 2
 active_profile = "默认"
@@ -263,7 +268,9 @@ applications come first, with the group and launch method the portal reports and
 an 打开 button when it gives a launch address; then domain rules, IPv4 addresses
 and ranges with their protocols and ports, and DNS name→IP mappings. A single
 host that allows TCP 443 (or 80) gets an `https://` (`http://`) link, and 复制
-puts the URL or the address on the clipboard.
+puts the URL or the address on the clipboard. Only `http` and `https` links are
+opened, so a portal-supplied `file:` or custom scheme cannot launch a local
+application.
 
 The last snapshot is cached at `resources.json` beside `config.toml` (0600). It
 holds intranet addresses but no credentials. `--print-resources` prints that

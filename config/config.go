@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -499,6 +500,46 @@ func (c Config) Validate() error {
 	socks5, http := c.ProxyAddresses()
 	if socks5 == "" && http == "" {
 		return errors.New("both proxy listeners are disabled")
+	}
+	for _, listener := range []struct{ name, bind string }{
+		{"SOCKS5", socks5},
+		{"HTTP", http},
+	} {
+		if listener.bind == "" {
+			continue
+		}
+		if err := ValidateBind(listener.bind); err != nil {
+			return fmt.Errorf("%s proxy bind: %w", listener.name, err)
+		}
+	}
+	return nil
+}
+
+// ValidateBind checks one proxy listener address. Both listeners stay on the
+// loopback interface: a wider bind would let the machine's network use the
+// tunnel, and a host name would be resolved by the system resolver the app
+// deliberately avoids.
+func ValidateBind(bind string) error {
+	host, port, err := net.SplitHostPort(bind)
+	if err != nil {
+		return fmt.Errorf("%q is not host:port", bind)
+	}
+	number, err := strconv.Atoi(port)
+	if err != nil || number < 1 || number > 65535 {
+		return fmt.Errorf("port %q is out of range 1-65535", port)
+	}
+	if host == "" {
+		return errors.New("the host is empty, which listens on every interface")
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return fmt.Errorf("host %q is not an IP address", host)
+	}
+	if !ip.IsLoopback() {
+		return fmt.Errorf("host %q is not a loopback address", host)
 	}
 	return nil
 }

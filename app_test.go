@@ -546,3 +546,33 @@ func TestAReopenInvalidatesAQueuedSettingsHide(t *testing.T) {
 		t.Fatal("a current hide left its draft behind")
 	}
 }
+
+// The portal supplies the URL, so openResource is the boundary that keeps a
+// file: or custom scheme away from the desktop's URL handler.
+func TestOpenResourceAllowsOnlyHTTP(t *testing.T) {
+	var opened []string
+	application := &app{
+		cfg:  config.Default(),
+		logf: func(string, ...any) {},
+		browser: func(url string) error {
+			opened = append(opened, url)
+			return nil
+		},
+	}
+
+	for _, refused := range []string{"file:///etc/passwd", "smb://192.0.2.10/share", "javascript:alert(1)", "http://", "not a url"} {
+		application.openResource(refused)
+		if len(opened) != 0 {
+			t.Fatalf("openResource(%q) reached the browser with %v", refused, opened)
+		}
+		if !application.view.StatusError {
+			t.Fatalf("openResource(%q) did not report the refusal", refused)
+		}
+		application.view.StatusError = false
+	}
+
+	application.openResource("http://192.0.2.10/")
+	if len(opened) != 1 || opened[0] != "http://192.0.2.10/" {
+		t.Fatalf("opened = %v, want the http URL", opened)
+	}
+}

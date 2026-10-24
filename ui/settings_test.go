@@ -78,6 +78,12 @@ func TestSettingsApplyRejectsBadValues(t *testing.T) {
 			state.Draft.Proxy.SOCKS5Bind = ""
 			state.Draft.Proxy.HTTPBind = ""
 		}},
+		{"non-loopback bind", func(state *SettingsState) {
+			state.Draft.Proxy.HTTPBind = "0.0.0.0:1081"
+		}},
+		{"malformed bind", func(state *SettingsState) {
+			state.Draft.Proxy.SOCKS5Bind = "127.0.0.1"
+		}},
 		{"duplicate name", func(state *SettingsState) {
 			state.AddProfile()
 			state.NameText = config.DefaultProfileName
@@ -92,6 +98,22 @@ func TestSettingsApplyRejectsBadValues(t *testing.T) {
 				t.Fatal("bad settings were accepted")
 			}
 		})
+	}
+}
+
+// The binds are typed by hand now, so the window checks them before saving; the
+// same rule runs again before a login.
+func TestSettingsApplyTrimsAndChecksProxyBinds(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	state.Draft.Proxy.SOCKS5Bind = " 127.0.0.1:1080 "
+	state.Draft.Proxy.HTTPBind = " localhost:1081 "
+
+	cfg, err := state.Apply()
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if socks5, httpBind := cfg.ProxyAddresses(); socks5 != "127.0.0.1:1080" || httpBind != "localhost:1081" {
+		t.Fatalf("proxy = %q %q, want the trimmed binds", socks5, httpBind)
 	}
 }
 

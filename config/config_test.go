@@ -464,3 +464,47 @@ func TestCloneDoesNotShareState(t *testing.T) {
 		t.Fatal("clone shares state with the original")
 	}
 }
+
+// A bind outside the loopback interface would hand the tunnel to the
+// machine's network.
+func TestValidateBindKeepsTheProxyOnLoopback(t *testing.T) {
+	for _, bind := range []string{"127.0.0.1:1080", "localhost:1080", "[::1]:1080", "127.0.0.2:65535"} {
+		if err := ValidateBind(bind); err != nil {
+			t.Errorf("ValidateBind(%q) = %v, want nil", bind, err)
+		}
+	}
+	for _, bind := range []string{
+		"0.0.0.0:1080",
+		":1080",
+		"192.0.2.10:1080",
+		"[::]:1080",
+		"vpn.example.com:1080",
+		"127.0.0.1",
+		"127.0.0.1:0",
+		"127.0.0.1:65536",
+		"127.0.0.1:socks",
+	} {
+		if err := ValidateBind(bind); err == nil {
+			t.Errorf("ValidateBind(%q) accepted a non-loopback or malformed bind", bind)
+		}
+	}
+
+	valid := Default()
+	valid.Profiles[0].Server.Address = "vpn.example.com"
+	valid.Profiles[0].Auth.Username = "alice"
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("the default binds were rejected: %v", err)
+	}
+
+	exposed := valid.Clone()
+	exposed.Proxy.HTTPBind = "0.0.0.0:1081"
+	if err := exposed.Validate(); err == nil {
+		t.Fatal("a non-loopback HTTP bind passed validation")
+	}
+
+	malformed := valid.Clone()
+	malformed.Proxy.SOCKS5Bind = "127.0.0.1"
+	if err := malformed.Validate(); err == nil {
+		t.Fatal("a malformed SOCKS5 bind passed validation")
+	}
+}

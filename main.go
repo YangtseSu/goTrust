@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	neturl "net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -412,11 +413,19 @@ func (a *app) actions() gotrustui.Actions {
 }
 
 // openResource opens a granted application or address in the browser. A
-// failure is reported in the window; the URL is still visible there.
-func (a *app) openResource(url string) {
-	if err := a.openBrowser(url); err != nil {
+// failure is reported in the window; the URL is still visible there. Only http
+// and https reach the desktop's URL handler: a portal-supplied file:, smb: or
+// custom scheme must not launch a local application.
+func (a *app) openResource(rawURL string) {
+	parsed, err := neturl.Parse(rawURL)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		a.setStatusError("打开失败: 只支持 http 和 https 链接")
+		a.logf("refuse to open resource %q: only http and https URLs are allowed", rawURL)
+		return
+	}
+	if err := a.openBrowser(rawURL); err != nil {
 		a.setStatusError("打开失败: " + err.Error())
-		a.logf("open resource %s: %v", url, err)
+		a.logf("open resource %s: %v", rawURL, err)
 	}
 }
 

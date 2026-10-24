@@ -392,8 +392,21 @@ func (s *SettingsState) Apply() (config.Config, error) {
 	profile.Keep.Interval = interval
 	profile.Keep.Targets = splitTargets(s.Targets[index])
 
-	if socks5, httpBind := cfg.ProxyAddresses(); socks5 == "" && httpBind == "" {
+	cfg.Proxy.SOCKS5Bind = strings.TrimSpace(cfg.Proxy.SOCKS5Bind)
+	cfg.Proxy.HTTPBind = strings.TrimSpace(cfg.Proxy.HTTPBind)
+	socks5, httpBind := cfg.ProxyAddresses()
+	if socks5 == "" && httpBind == "" {
 		return cfg, errors.New("SOCKS5 和 HTTP 监听至少启用一个")
+	}
+	// Check the binds here as well: the same rule runs before a login, but a
+	// typo should not wait for a successful connection to show up.
+	for _, bind := range []string{socks5, httpBind} {
+		if bind == "" {
+			continue
+		}
+		if err := config.ValidateBind(bind); err != nil {
+			return cfg, fmt.Errorf("监听地址 %q 无效：%v", bind, err)
+		}
 	}
 
 	cfg.ActiveProfile = name

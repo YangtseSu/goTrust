@@ -1137,6 +1137,42 @@
 - Next: P2 input validation (non-loopback bind, settings bind syntax,
   `openResource` scheme allowlist).
 
+### Phase 17: proxy binds and browser links are validated (P2)
+
+- **Status:** done (one commit); the rest of the P2 batch remains
+- Actions taken:
+  - wrote the checks first and ran them in a throwaway worktree at HEAD: the
+    pre-fix `Config.Validate` accepted `0.0.0.0:1081` and `127.0.0.1`, the
+    settings save accepted `0.0.0.0:1081` and a bind with no port, and
+    `openResource("file:///etc/passwd")` reached the browser
+  - `config.ValidateBind` is the one rule: host:port, port 1-65535, and a host
+    that is `localhost`, an IPv4/IPv6 loopback address; empty host (every
+    interface), a name and a non-loopback address are refused with a reason.
+    A wider bind would hand the tunnel to the machine's network
+  - `Config.Validate` applies it to each enabled listener after the
+    both-disabled check, so a hand-edited file fails before a login
+  - `SettingsState.Apply` trims the binds and runs the same rule, so the
+    failure appears while saving instead of after a successful connection
+  - `app.openResource` parses the URL first and only forwards `http`/`https`
+    with a host to the desktop handler; a portal-supplied `file:`, `smb:` or
+    custom scheme is reported in the status line and logged, not opened
+  - README: the loopback rule under Configuration, the link rule under Granted
+    resources
+- Results:
+  | Check | Result |
+  |---|---|
+  | Pre-fix: `Config.Validate`, settings save, `openResource(file:)` | all three accepted; tests failed |
+  | After: loopback forms (127.0.0.1, 127.0.0.2, [::1], localhost) | accepted |
+  | After: 0.0.0.0, :1080, [::], 192.0.2.10, a name, a bad port | refused with a reason |
+  | Real binary, `--no-ui`, `socks5_bind = "0.0.0.0:1080"` | `SOCKS5 proxy bind: host "0.0.0.0" is not a loopback address`, exit 1, no dial |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean (47/47 compliant) |
+- Files created/modified: `config/config.go`, `config/config_test.go`,
+  `ui/settings.go`, `ui/settings_test.go`, `main.go`, `app_test.go`,
+  `README.md`, planning files
+- Next: P2 TOTP (a stored secret is not cleared with 保存密码 and has no removal
+  action).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)
