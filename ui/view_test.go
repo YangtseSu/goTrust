@@ -343,6 +343,61 @@ func TestTrayMenuOffersConnectWhenIdle(t *testing.T) {
 	}
 }
 
+// 打开默认应用 opens the URL the gateway returned for the first granted
+// application, through the same action as the resource row (the desktop's
+// default browser).
+func TestTrayMenuOpensTheDefaultApp(t *testing.T) {
+	state := State{
+		Session: session.State{Phase: session.PhaseOnline, Resources: session.Resources{
+			Entries: []session.ResourceEntry{
+				{Kind: session.ResourceDomain, Title: "wiki.example.com", URL: "https://wiki.example.com"},
+				{Kind: session.ResourceApp, Title: "Wiki", URL: "https://portal.example.com/wiki"},
+			},
+		}},
+		Config: config.Default(),
+	}
+	var opened string
+	menu := TrayMenu(&state, Actions{OpenResource: func(url string) { opened = url }})
+
+	var item *mygo.MenuItem
+	for _, candidate := range menu.Items() {
+		if candidate.ID == "open-app" {
+			item = candidate
+		}
+	}
+	if item == nil {
+		t.Fatalf("no default-app item in %v", labels(menu.Items()))
+	}
+	if item.Disabled {
+		t.Fatal("the default-app item is disabled although the grant has an app URL")
+	}
+	item.Click(item, nil)
+	if opened != "https://portal.example.com/wiki" {
+		t.Fatalf("opened %q, want the portal app URL", opened)
+	}
+}
+
+func TestTrayMenuDefaultAppIsDisabledWithoutAURL(t *testing.T) {
+	state := State{
+		Session: session.State{Phase: session.PhaseIdle},
+		Config:  config.Default(),
+	}
+	menu := TrayMenu(&state, Actions{})
+	var found bool
+	for _, item := range menu.Items() {
+		if item.ID != "open-app" {
+			continue
+		}
+		found = true
+		if !item.Disabled {
+			t.Fatal("the default-app item is clickable with no grant")
+		}
+	}
+	if !found {
+		t.Fatalf("no default-app item in %v", labels(menu.Items()))
+	}
+}
+
 func labels(items []*mygo.MenuItem) []string {
 	out := make([]string, 0, len(items))
 	for _, item := range items {

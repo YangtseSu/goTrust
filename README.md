@@ -189,8 +189,10 @@ goTrust does not collect a phone number.
 ## Tray and startup
 
 The tray menu shows a disabled status line (`已连接 203.0.113.4`, `连接中`,
-`失败: …`), the connect/disconnect toggle, a profile submenu, 显示窗口, 设置…
-and 退出. Its tooltip repeats the status and the last keep-alive result.
+`失败: …`), the connect/disconnect toggle, a profile submenu, 显示窗口,
+打开默认应用 (the first granted application's URL, opened in the default
+browser), 设置… and 退出. Its tooltip repeats the status and the last
+keep-alive result.
 
 登录系统时启动 writes the desktop's start-at-login entry
 (`App.SetOpenAtLogin`, an XDG autostart file on Linux) and the app reconciles it

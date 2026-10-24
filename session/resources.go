@@ -430,6 +430,25 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+// DefaultAppURL is the launch address of the first portal application that
+// has one, in the order the window lists them. A grant with no application
+// metadata falls back to the first host rule that has a browser link, so a
+// gateway that lists only address rules still gives the tray something to
+// open. An empty string means nothing on this grant is a browser destination.
+func (r Resources) DefaultAppURL() string {
+	for _, entry := range r.Entries {
+		if entry.Kind == ResourceApp && entry.URL != "" {
+			return entry.URL
+		}
+	}
+	for _, entry := range r.Entries {
+		if entry.URL != "" {
+			return entry.URL
+		}
+	}
+	return ""
+}
+
 // FormatResources renders the snapshot for a terminal: one line per entry, in
 // the same order the window shows them.
 func FormatResources(resources Resources) string {

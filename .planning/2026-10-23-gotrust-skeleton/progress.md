@@ -679,6 +679,74 @@
 | Login domain | gateway offers `local` | login accepted | accepted | pass |
 | Listener context test | cancel the session context | both listeners close | both close | pass |
 
+### Phase 17: review remediation (plan recorded)
+
+- **Status:** pending
+- **Started:** 2026-10-24 (review), fixes not started
+- Actions taken:
+  - reviewed every Go file, test, `README.md` and packaging asset in the tree reviewed
+    then, with four independent read-only slices plus cross-cutting checks
+  - confirmed the requested gates stay green: build, vet, test, `-race`,
+    `gofmt`, `reuse lint`, no-cgo and windows/amd64 builds
+  - reproduced four defects with temporary targeted tests, then removed them:
+    settings delete panic, Ports/Targets drift after a middle delete, CONNECT
+    pipelining hang against the real proxy, and the Cookie/Authorization
+    redaction leak; reproduced the `currentConfig` data race under `-race`
+  - verified the DNS/stack findings against the pinned fork source
+    (`CanUseTCPTunnel` always true, `DialUDP` not implemented, `"auto"` passed
+    to concrete-address resolver dialers)
+  - recorded three P0, 13 P1, the P2 batch and the test gaps in `findings.md`;
+    added the fix order to `task_plan.md` as Phase 17
+- Results:
+  | Check | Result |
+  |---|---|
+  | Build/vet/test/race/gofmt | clean |
+  | `reuse lint` | 47/47 compliant |
+  | `CGO_ENABLED=0`, windows/amd64 | pass |
+  | Working tree after the review | clean, no code changed |
+  | Settings delete through `SettingsView` | panic: index out of range [1] with length 1 |
+  | Delete middle profile, save next | port 8443 instead of 9443 |
+  | CONNECT + payload in one write | 200 then no bytes for 3 s |
+  | `Cookie: theme=dark; session=SECRET123` | `SECRET123` survives redaction |
+  | `currentConfig` vs `storeAuthChoice` under `-race` | data race reported |
+- Files created/modified:
+  - `.planning/2026-10-23-gotrust-skeleton/task_plan.md` (Phase 17, Next Step)
+  - `.planning/2026-10-23-gotrust-skeleton/findings.md` (review evidence)
+  - `.planning/2026-10-23-gotrust-skeleton/progress.md` (this entry)
+  - no source files
+- Next: P0-3 + P1-11 in one change with regression tests, then P0-2, then P0-1.
+
+### Phase 18: tray interaction
+
+- **Status:** in_progress (menu item done; double-click blocked on mygo)
+- Actions taken:
+  - restored 显示窗口 after the first attempt wrongly duplicated it, and added
+    打开默认应用: first granted application URL (fallback: first host rule with
+    a browser link) through `Actions.OpenResource`, i.e. the desktop's default
+    browser; disabled while the grant has no URL
+  - added `session.Resources.DefaultAppURL()` and tray tests for the URL choice
+    and the disabled state
+  - traced the double-click request to mygo v0.6.3: its Linux backend installs
+    an AppIndicator menu and never calls `Clicked`/`RightClicked`; only darwin
+    and windows do, so the panel owns the primary click and a double-click is
+    not observable
+  - verified `libayatana-appindicator-glib` is not a drop-in (GMenu vs
+    GtkMenu, no `set_icon_full`, no GTK3) and drafted the upstream issue/PR
+- Results:
+  | Check | Result |
+  |---|---|
+  | `go test ./ui ./session` | pass (new tray tests included) |
+  | `go vet ./...`, `gofmt -l .` | clean |
+  | Native tray menu | not clicked; items are a pure function and tested |
+  | Double-click | not implemented: mygo exposes no Linux click event |
+  | glib backend | requires a new mygo backend, not a .so swap |
+- Files created/modified:
+  - `ui/view.go` (tray menu item), `ui/view_test.go` (two tests),
+    `session/resources.go` (`DefaultAppURL`), `README.md`
+  - planning files
+- Next: file the upstream mygo issue/PR when the operator approves (draft in
+  `findings.md`); Phase 17 P0 fixes remain the release blocker.
+
 ## Error Log
 
 | Timestamp | Error | Attempt | Resolution |
@@ -690,8 +758,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 14 complete: reconnect ladder, keep-alive results and expiry states |
-| Where am I going? | Phase 16 install (`pacman -U`), then Phase 8 (dae) if wanted |
+| Where am I? | Phase 17 recorded (review remediation); Phase 16 `pacman -U` still awaits sudo |
+| Where am I going? | P0 fixes in order: settings panic/buffers, proxy lifetime, UI deadlock; then DNS/stack, client data, races, redaction, rotation; Phase 8 (dae) last |
 | What's the goal? | a daily-use aTrust tray client |
-| What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal |
-| What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; every state is rendered and inspected, the binary runs and exits cleanly |
+| What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
+| What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |

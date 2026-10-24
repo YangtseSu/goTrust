@@ -367,3 +367,197 @@ dae is deferred last.
   instances of an app share the name across different theme paths. Nothing broke
   in one instance, but an extension that caches icons by name can resolve the
   wrong path after a process exits.
+
+## Code review 2026-10-24 (the tree reviewed then)
+
+Scope: every Go file, its tests, `README.md`, `data/` and the packaging assets.
+Four independent read-only slices (config/logging, session, proxy, UI/wiring)
+plus cross-cutting race/lifecycle checks. The tree was clean before and after;
+no code was changed by the review.
+
+### Baseline
+
+- `go build ./...`, `go vet ./...`, `go test ./...`, `go test -race ./...`,
+  `gofmt -l .`: clean.
+- `reuse lint`: compliant (47/47 files).
+- `CGO_ENABLED=0 go build` and `GOOS=windows GOARCH=amd64` build: pass.
+- The green suite does not exercise the paths below; the reproduced failures
+  needed targeted tests, which were run from temporary files and removed.
+
+### P0 — release blockers
+
+1. **UI freeze: `disconnect` joins the login on the UI thread.**
+   `main.go:614-642` calls `Manager.Logout` (`session/session.go:364`), which
+   waits for `m.login` held by `loginSession` (`session/session.go:173`). The
+   login goroutine, woken by cancellation, publishes through
+   `onSessionState` (`main.go:562`) → `refreshTray` → `tray.SetMenu` → mygo
+   `onMain`, which blocks until the main thread drains the loop — but the main
+   thread is waiting on the mutex. Permanent hang; same on quit. Not
+   reproduced natively (needs a real login); the lock order is deterministic in
+   the code. Fix by keeping the join off the UI thread or posting tray/window
+   updates without blocking.
+2. **Proxies are never released on session failure.**
+   Only `disconnect` closes `a.proxy` (`main.go:626-640`). `expire` and an
+   exhausted ladder leave both listeners bound, the failed view offers only
+   连接 (`ui/view.go:291-297`), and `connect` → `startProxy` then fails with
+   `address already in use` on every retry until the process exits.
+3. **Settings delete crashes the process (reproduced).**
+   `ui/settings.go:350-355` snapshots `index`, the 删除 action runs inside the
+   frame and shrinks `Ports`/`Targets`, then `:438`/`:493` index the old value:
+   `panic: index out of range [1] with length 1`. Reproduced with
+   `ui.NewTester`: 新建 → 删除. Unrecovered panic on the GTK main thread.
+
+### P1 — severe
+
+4. **Tunnel DNS is built with the literal `"auto"`** (`session/session.go:317`).
+   `resolve.NewResolver` turns it into `net.ParseIP("auto") == nil` →
+   `0.0.0.0:53`, and the secondary into `JoinHostPort("auto","53")`
+   (upstream `resolve/resolver.go:388-418`). Hostnames that miss
+   `dnsResource` cannot resolve through SOCKS5. Upstream `main.go:357-386`
+   resolves `auto` via `client.DNSServer()`/`DNSServers()` first.
+5. **`newStack` can never pick gVisor** (`session/session.go:423-443`):
+   the fork's `CanUseTCPTunnel()` returns `true` unconditionally, so the
+   `IP()`/gVisor branch is dead. The TCP tunnel's `DialUDP` is
+   `not implemented`, so SOCKS5 UDP and remote DNS are unavailable, contrary
+   to upstream's no-TUN default.
+6. **SOCKS5 keeps the resolver of the session it started with**
+   (`main.go:586-596`); after a successful auto-reconnect `m.resolver` points
+   at the new stack while the proxy still holds the closed one.
+7. **`Dial` refuses while `PhaseReconnecting`** (`session/session.go:401-408`),
+   but a restored session stays in `SessionRestoring` until real tunnel
+   traffic confirms it (upstream `session_recovery.go:81-89`). With keep-alive
+   off or without targets nothing ever confirms; the proxy is stuck.
+8. **`--config` does not move `client_data`** (`config/config.go:454-467`):
+   the path always comes from the default `Dir()`, so a temporary settings
+   file reads and overwrites the real account's ticket. README:117 promises
+   otherwise.
+9. **Deleting/renaming a profile leaves `client_data-*.json` behind**
+   (`config/config.go:402-418`, path at `:454-467`; inline rename at
+   `ui/settings.go:307`). Credentials outlive the account and a same-named
+   profile inherits them; a rename loses the material instead.
+10. **`currentConfig` returns a shallow copy** (`main.go:897`), and
+    `storeAuthChoice`/`storeTOTPSecret` (`prompt.go:497`, `:324`) mutate the
+    shared `Profiles` array without the lock. Reproduced with
+    `go test -race` (`Config.Active` vs `storeAuthChoice`). A failed
+    `SaveFile` also leaves the in-memory config mutated.
+11. **Deleting a middle profile misaligns the parallel buffers**
+    (`ui/settings.go:87-100`, `:257-276`): reproduced with 默认/B(8443)/C(9443),
+    delete B, save C → port 8443, and C inherits B's keep-alive targets.
+12. **Discovered auth methods survive a gateway edit**
+    (`ui/settings.go:152-161`; `dropStaleMethods` runs only on reload/select),
+    so the picker can store the old gateway's method for the new one.
+13. **Redaction leaks all but the first cookie and `map[Authorization:…]`**
+    (`logging/logging.go:272-281`). Reproduced:
+    `Cookie: theme=dark; session=SECRET123` keeps `SECRET123`;
+    `map[Authorization:[Bearer tok123]` keeps `tok123`.
+14. **Pipelined CONNECT bytes hang the tunnel (reproduced).**
+    `proxy/server.go:258-262` uses `io.Copy(target, buffered)`, which selects
+    `(*bufio.Reader).WriteTo` and keeps reading the client until EOF before the
+    target→client direction starts. A client that writes CONNECT plus payload
+    in one go receives 200 and then nothing (3 s, 0 bytes).
+15. **One failed rotation disables file logging for the process**
+    (`logging/logging.go:206-246`): after `openLocked` fails, `size=0` and
+    `file=nil`, so the rotation path never retries; the comment claims it does.
+16. **Settings hide epoch is check-then-act** (`main.go:477-497`): a reopen
+    between the check and `window.Hide()` lets the queued hide swallow the
+    freshly shown window.
+
+### P2 — medium, and nits
+
+- Ladder attempt after 断开 can publish `PhaseFailed: context canceled` over
+  Idle (`session/session.go:173`, `reconnect.go:231`); check `ctx` on entry.
+- Every connecting state wipes `Resources`/`ClientIP`/`KeepAlive`
+  (`session/session.go:195,228,252,286`), so the grant vanishes during a
+  ladder attempt.
+- `set`/`setTransition`/`recordKeepAlive` emit after unlocking
+  (`session/session.go:570-596`): an old snapshot can overwrite a newer phase.
+- `proxy.Server.Close` does not close hijacked CONNECT or SOCKS5 connections
+  and tracks no connections (`proxy/server.go:115-144`).
+- Request hop-by-hop headers are forwarded to the origin, including
+  `Proxy-Authorization` (`proxy/server.go:273-283`). Half-close truncates the
+  other direction (`:264-267`); streamed responses are not flushed (`:302`).
+- A non-loopback bind is neither rejected nor warned about
+  (`proxy/server.go:148-155`, `config/config.go:475`).
+- Proxy binds are not syntax-checked in the settings window
+  (`ui/settings.go:317`); the error only appears after a successful login.
+- `openResource` accepts any scheme; a portal `file:`/`smb:` URL reaches
+  `xdg-open` (`main.go:408`, `session/resources.go:410`).
+- A stored TOTP secret is not cleared with 保存密码 and has no UI to remove it
+  (`main.go:905-913`, `prompt.go:318-326`).
+- `writeClientData` truncates in place (`session/session.go:665`); config and
+  resource caches lack `Sync` (`config/config.go:239-277`).
+- Unknown TOML keys are ignored (`config/config.go:216`); `profileSlug`
+  collides on case-insensitive filesystems (`:585`); keep-alive has no lower
+  interval bound (`ui/settings.go:299`).
+- `Login` is accepted during a client-owned restore and then overwrites the
+  old client without closing it (`session/session.go:164-181`).
+- `connect` can leak a server bound after `disconnect` cleared `a.proxy`
+  (`main.go:544-558`); a cancelled login still paints an English red error
+  (`main.go:519-526`).
+- Dead code: `proxy.Server.socks`, `Config.SelectProfile/RenameProfile/
+  ClientDataPath`, `Logger.Writer/Verbose`, `cliPrompter.logger`,
+  `ReconnectState.Reason`, redundant `Attention`; `--print-resources` drops
+  the snapshot metadata; `forward` builds a Transport per request.
+- Inherited from upstream: the login channel's certificate check is disabled
+  (`client/atrust/auth/auth.go:145`); the tunnel authenticates at the aTrust layer.
+
+### Test gaps
+
+- No app-level test for `disconnect`, proxy rebind after failure, or proxy
+  behaviour after a reconnect; P0-1/P0-2, P1-6/P1-7 are invisible to the suite.
+- Settings tests count callbacks and call state methods directly; none drives
+  新建/删除 through `SettingsView` with the real state, so P0-3/P1-11 pass.
+- Proxy tests read the 200 before sending the payload, missing P1-14; no
+  `Dial`-error, half-close, hop-by-hop or post-`Close` tunnel test.
+- Logging tests do not assert rotated content, failed-rotation recovery,
+  truncation, or concurrent writers.
+- `TestClientDataPathIsPerProfile` (`config/config_test.go:312`) encodes the
+  default-directory behaviour of P1-8 instead of catching it.
+
+## Tray interaction and the appindicator backend (2026-10-24)
+
+Requested: double-click opens the main window; the menu opens a server-returned
+application URL with the default browser.
+
+- **打开默认应用 is implemented.** `ui.TrayMenu` calls
+  `session.Resources.DefaultAppURL()` — the first `ResourceApp` entry with a
+  URL, then the first host rule with a browser link — and hands it to
+  `Actions.OpenResource`, the same path the resource row uses
+  (`mygo.Shell.OpenExternal`). The item is disabled while the grant has no URL.
+  Tests: `TestTrayMenuOpensTheDefaultApp`,
+  `TestTrayMenuDefaultAppIsDisabledWithoutAURL`.
+- **Double-click is not implementable with the pinned mygo v0.6.3 on Linux.**
+  Its backend creates an AppIndicator and installs the menu
+  (`internal/linux/menu.go:455-500`); `TrayHandler.Clicked/RightClicked` are
+  only called on darwin and windows (`internal/darwin/menu.go:296-298`,
+  `internal/windows/tray.go:301-305`), and `Tray.OnClick` is documented as
+  "clicked and it has no menu" (`modules.go:779`). The panel gives the primary
+  click to the menu, so the app never sees a double-click. A real fix is an
+  upstream activation backend; two synthetic Activate events would not be a
+  double-click.
+- **`libayatana-appindicator-glib` is not a drop-in.** Its
+  `app_indicator_set_menu` takes `GMenu*`
+  (`/usr/include/libayatana-appindicator-glib/ayatana-appindicator.h:102`),
+  while mygo builds a `GtkMenu`; it offers `app_indicator_set_icon`, not
+  `_set_icon_full`, adds `app_indicator_set_actions` and an `activate_event`
+  class signal, and links no GTK3. Supporting it is a new backend
+  (GMenu + GSimpleAction), not a package swap. The deprecation warning is
+  emitted by the legacy library itself.
+
+### Upstream issue/PR draft (to file, not filed yet)
+
+Title: Linux tray: expose activation events and add a
+`libayatana-appindicator-glib` backend
+
+- v0.6.3 binds `libayatana-appindicator3.so.1` and a GtkMenu; the Linux tray
+  never calls `TrayHandler.Clicked`/`RightClicked`, so an app cannot implement
+  "click the icon to open the window" or a primary-action menu item.
+- `libayatana-appindicator` is deprecated upstream; distributions ship
+  `libayatana-appindicator-glib`, which exposes `activate_event` and
+  `scroll_event` and uses `GMenu` + `GSimpleActionGroup` with no GTK3.
+- Proposal: add a glib backend selected at load time, with the current GtkMenu
+  backend as the fallback; map `activate_event` → `Clicked` and a configured
+  action → `RightClicked`/secondary activate; keep `NewTray`'s behavior and
+  the platform interface unchanged.
+- goTrust use case: a tray menu whose first action opens the main window, and a
+  double-click/activation that does the same without opening the menu.

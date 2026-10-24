@@ -12,12 +12,15 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 16: install `gotrust-git` with `pacman -U` once the operator supplies the
-sudo password. Phase 8 (dae export) stays deferred until then.
+Phase 17: fix P0-3 (settings delete panics mid-frame) and P1-11 (buffer
+misalignment) together with regression tests, then P0-2 (proxy lifetime) and
+P0-1 (UI deadlock). Phase 16's `pacman -U` install still needs the operator's
+sudo password; Phase 8 (dae export) stays deferred.
 
 ## Current Phase
 
-Phase 16 (the package is built; the install step needs sudo)
+Phase 17 (review remediation; three P0 defects block release). Phase 18's tray
+menu item is done; its double-click/upstream item is blocked on mygo.
 
 ## Phases
 
@@ -333,6 +336,64 @@ the repository is public. Then a self-use VCS package; it does not go to AUR.
       the package is built and tested from its extracted tree
 - **Status:** in_progress
 
+### Phase 17: Code review remediation (2026-10-24)
+
+Full-tree review of the tree reviewed then (config/logging, session, proxy,
+UI/wiring,
+cross-cutting). Evidence, reproductions and upstream references are in
+`findings.md` under "Code review 2026-10-24". Three P0 defects block release.
+Fix order is deliberate; each batch is one commit and starts from a failing
+test that reproduces the defect.
+
+- [ ] P0-3 + P1-11, settings window: deleting the selected profile panics
+      mid-frame, and deleting a middle profile shifts Ports/Targets onto the
+      next account
+- [ ] P0-2, proxy lifetime: close the old listeners before binding; a failed
+      session must not leave ports held so manual reconnect can never work
+- [ ] P0-1, UI deadlock: never join `Manager.Logout` from the UI thread while
+      the login goroutine may still need the main loop
+- [ ] P1-4/P1-5, tunnel DNS and stack: resolve `auto` through
+      `client.DNSServer()`/`DNSServers()`, choose gVisor when an IP exists
+- [ ] P1-6/P1-7, reconnect: hand the proxy a live resolver, allow `Dial` while
+      the client is restoring a session
+- [ ] P1-8/P1-9, client data: bind the path to the settings file, delete or
+      rename the file with the profile
+- [ ] P1-10, config race: `Clone()` before mutating in prompt handlers
+- [ ] P1-12/P1-16, settings freshness: drop stale auth methods per frame, make
+      the hide epoch a single check-and-act
+- [ ] P1-13/P1-14, logging and CONNECT: whole-header redaction, `CopyN` drain
+      of pipelined CONNECT bytes
+- [ ] P1-15, log rotation: reopen after a failed rotation instead of losing the
+      file for the rest of the process
+- [ ] P2 batch: proxy connection tracking, request hop-by-hop headers,
+      half-close, URL scheme allowlist, TOTP policy, atomic client data, fsync,
+      TOML unknown keys, bind validation, keep-alive bounds
+- [ ] Verification: `go test -race ./...`, real UI smoke (断开 during login,
+      设置 delete, session expiry then reconnect), `reuse lint`
+- **Status:** pending
+- **Note:** Phase 16's `pacman -U` install stays open on the operator's sudo
+  password; it does not block Phase 17.
+
+### Phase 18: Tray interaction and the appindicator backend (2026-10-24)
+
+- [x] 打开默认应用: the tray opens the URL the gateway returned for the first
+      granted application (the same value the resource row shows) with the
+      desktop's default browser; the item is disabled when the grant has no
+      URL
+- [ ] Double-click opens the main window: blocked by mygo v0.6.3, whose Linux
+      backend never reports clicks and lets the panel take the primary click
+      for the menu; needs an upstream activation backend, not a fake
+- [ ] Upstream mygo issue/PR: activation callbacks plus a
+      `libayatana-appindicator-glib` backend (GMenu/GAction, `activate_event`),
+      keeping the GTK3 backend as the fallback; draft is in `findings.md`
+- [ ] After mygo ships it: bump the pin, add the `-glib` package dependency,
+      re-run the native tray smoke; keep the legacy dependency for the
+      fallback
+- **Status:** in_progress
+- **Note:** the `libayatana-appindicator-WARNING` line comes from the legacy
+  backend. The `.so` is not a drop-in: GMenu vs GtkMenu, and no
+  `app_indicator_set_icon_full`. Do not swap the package dependency alone.
+
 ## Key Questions
 
 1. Can the resource model carry app names and launch URLs, or only the
@@ -378,6 +439,7 @@ the repository is public. Then a self-use VCS package; it does not go to AUR.
 | Resource list derives URLs when names are absent | The fork keeps address/port rules and app IDs, not necessarily names; showing `http://IP[:port]` is useful even without a portal label |
 | Arch package builds from the local checkout first | The repository is private until publication; `gotrust-git` stays self-use and switches its source URL at release |
 | dae remains last | The operator deferred transparent-proxy export; it is nice-to-have after the product phases |
+| Review remediation before new features, P0 first | In the tree reviewed then the UI can freeze, manual reconnect can never rebind, and deleting a profile crashes the process; no feature can be trusted until those are gone. Each fix gets a regression test |
 
 ## Errors Encountered
 

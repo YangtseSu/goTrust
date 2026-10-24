@@ -508,6 +508,19 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		}
 	}}
 
+	// 打开默认应用 opens the first portal application that has a launch
+	// address with the desktop's default browser. The main window lists the
+	// same URL on its resource row; the tray item is the shortcut for a user
+	// who does not want to open the window first.
+	openApp := &mygo.MenuItem{ID: "open-app", Label: "打开默认应用"}
+	if url := state.Session.Resources.DefaultAppURL(); url != "" && actions.OpenResource != nil {
+		openApp.Click = func(*mygo.MenuItem, *mygo.Window) {
+			actions.OpenResource(url)
+		}
+	} else {
+		openApp.Disabled = true
+	}
+
 	settingsItem := &mygo.MenuItem{ID: "settings", Label: "设置…", Click: func(*mygo.MenuItem, *mygo.Window) {
 		if actions.Settings != nil {
 			actions.Settings()
@@ -526,6 +539,7 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		profiles,
 		mygo.Separator(),
 		show,
+		openApp,
 		settingsItem,
 		mygo.Separator(),
 		quit,
