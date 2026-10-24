@@ -559,7 +559,9 @@ func (a *app) async(fn func(context.Context) error) {
 		a.setStatus("", true)
 		err := fn(ctx)
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
+			// 断开 cancels the attempt: the user asked for the stop, so report
+			// it as one instead of painting the cancelled login red.
+			if errors.Is(err, context.Canceled) || a.isStopping() {
 				a.setStatus("已取消", false)
 				return
 			}
@@ -693,15 +695,23 @@ func (a *app) startProxy(ctx context.Context, cancel context.CancelFunc) error {
 		return err
 	}
 
+	if !a.installProxy(server, cancel, epoch) {
+		return nil
+	}
+	return nil
+}
+
+// installProxy publishes a server unless the epoch moved while it was binding:
+// a disconnect or a terminal failure in that window already closed the
+// listeners and cleared the view, so installing it would hold the ports for a
+// session that no longer exists. It reports whether the server was installed.
+func (a *app) installProxy(server *gotrustproxy.Server, cancel context.CancelFunc, epoch uint64) bool {
 	a.mu.Lock()
 	if a.proxyEpoch != epoch {
 		a.mu.Unlock()
-		// A terminal failure or a disconnect closed the listeners while this
-		// server was binding. Installing it would hold the ports for a session
-		// that no longer exists.
 		cancel()
 		_ = server.Close()
-		return nil
+		return false
 	}
 	a.proxy = server
 	a.proxyCancel = cancel
@@ -710,7 +720,14 @@ func (a *app) startProxy(ctx context.Context, cancel context.CancelFunc) error {
 
 	a.invalidate()
 	a.refreshTray()
-	return nil
+	return true
+}
+
+// isStopping reports whether 断开 or quit is tearing the session down.
+func (a *app) isStopping() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.stopping
 }
 
 // disconnect stops the session for the UI: 断开, a profile switch and quit all

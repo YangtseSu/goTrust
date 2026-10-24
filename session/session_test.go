@@ -10,12 +10,16 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"inet.af/netaddr"
 
 	clientpkg "github.com/mythologyli/zju-connect/client"
+	"github.com/mythologyli/zju-connect/client/atrust"
 	"github.com/mythologyli/zju-connect/resolve"
 	"github.com/mythologyli/zju-connect/stack/gvisor"
 	"github.com/mythologyli/zju-connect/stack/tcptunnel"
@@ -401,5 +405,203 @@ func TestResolveRefusesWithoutASession(t *testing.T) {
 
 	if _, _, err := manager.Resolve(context.Background(), "intranet.example.com"); !errors.Is(err, ErrNotOnline) {
 		t.Fatalf("err = %v, want ErrNotOnline", err)
+	}
+}
+
+// stallGateway accepts a connection and never answers, which is what a login
+// looks like while the gateway is thinking. The tests cancel the attempt from
+// the state observer.
+func stallGateway(t *testing.T) string {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				_, _ = io.Copy(io.Discard, conn)
+			}()
+		}
+	}()
+	return listener.Addr().String()
+}
+
+// gatewayConfig points a profile at the stalling gateway, so a login reaches
+// method discovery and then waits.
+func gatewayConfig(t *testing.T) config.Config {
+	t.Helper()
+
+	host, portText, err := net.SplitHostPort(stallGateway(t))
+	if err != nil {
+		t.Fatalf("split gateway address: %v", err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatalf("parse gateway port: %v", err)
+	}
+	cfg := config.Default()
+	cfg.Profiles[0].Server.Address = host
+	cfg.Profiles[0].Server.Port = port
+	cfg.Profiles[0].Auth.Username = "alice"
+	return cfg
+}
+
+// 断开 cancels the login. The cancelled attempt must not publish a failure:
+// it would overwrite the idle state the disconnect publishes and paint an
+// English "context canceled" over the window.
+func TestACancelledLoginPublishesNoFailure(t *testing.T) {
+	cfg := gatewayConfig(t)
+
+	var mu sync.Mutex
+	var phases []Phase
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	manager := New(Options{
+		Config: func() config.Config { return cfg },
+		OnState: func(state State) {
+			mu.Lock()
+			phases = append(phases, state.Phase)
+			mu.Unlock()
+			if state.Detail == "discovering the authentication methods" {
+				cancel()
+			}
+		},
+	})
+
+	if err := manager.Login(ctx); err == nil {
+		t.Fatal("the cancelled login reported success")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, phase := range phases {
+		if phase == PhaseFailed {
+			t.Fatalf("phases = %v, a cancelled login published a failure", phases)
+		}
+	}
+}
+
+// A reconnect attempt starts from the lost session and must keep showing what
+// the account was granted: the connecting steps used to replace the whole
+// snapshot with an empty one, so the window flashed an empty resource list.
+func TestAReconnectingAttemptKeepsTheGrant(t *testing.T) {
+	cfg := gatewayConfig(t)
+
+	var mu sync.Mutex
+	var connecting []State
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	manager := New(Options{
+		Config: func() config.Config { return cfg },
+		OnState: func(state State) {
+			if state.Phase != PhaseConnecting {
+				return
+			}
+			mu.Lock()
+			connecting = append(connecting, state)
+			mu.Unlock()
+			if state.Detail == "discovering the authentication methods" {
+				cancel()
+			}
+		},
+	})
+
+	seeded := Resources{Entries: []ResourceEntry{{
+		Kind:  ResourceDomain,
+		Title: "intranet.example",
+		Copy:  "intranet.example",
+	}}}
+	manager.set(State{
+		Phase:     PhaseIdle,
+		Detail:    "lost",
+		ClientIP:  "192.0.2.4",
+		Resources: seeded,
+		KeepAlive: KeepAliveState{Target: "http://192.0.2.10/", OK: true},
+	})
+
+	_ = manager.Login(ctx)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(connecting) == 0 {
+		t.Fatal("no connecting state was published")
+	}
+	for _, state := range connecting {
+		if len(state.Resources.Entries) != 1 || state.ClientIP != "192.0.2.4" ||
+			state.KeepAlive.Target != "http://192.0.2.10/" {
+			t.Fatalf("a connecting state dropped the grant: %+v", state)
+		}
+	}
+}
+
+// A reconnecting phase with a live client is the client's own restore. A second
+// login there would replace and leak that client, and destroy the session being
+// revived; only the ladder, which tore the client down, may log in.
+func TestLoginRefusesAClientOwnedRestore(t *testing.T) {
+	manager := New(Options{Config: func() config.Config { return config.Default() }})
+	client := &atrust.Client{}
+	manager.mu.Lock()
+	manager.state = State{Phase: PhaseReconnecting, Detail: "正在恢复会话"}
+	manager.client = client
+	manager.mu.Unlock()
+
+	err := manager.Login(context.Background())
+	if err == nil {
+		t.Fatal("login was accepted during a client-owned restore")
+	}
+	if !strings.Contains(err.Error(), "restoring") {
+		t.Fatalf("err = %v, want it to explain the restore", err)
+	}
+	if !manager.hasClient() {
+		t.Fatal("the live client was replaced")
+	}
+}
+
+// Publications are ordered: an update that happens while an older one is still
+// being delivered must not overtake it, or the window keeps a phase that
+// already passed.
+func TestPublicationsAreOrdered(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	events := make(chan string, 2)
+
+	manager := New(Options{OnState: func(state State) {
+		if state.Detail == "first" {
+			close(entered)
+			<-release
+		}
+		events <- state.Detail
+	}})
+
+	go manager.set(State{Phase: PhaseConnecting, Detail: "first", Since: time.Now()})
+	<-entered
+
+	second := make(chan struct{})
+	go func() {
+		manager.set(State{Phase: PhaseOnline, Detail: "second", Since: time.Now()})
+		close(second)
+	}()
+
+	select {
+	case <-second:
+		t.Fatal("a newer publication overtook one still being delivered")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+	<-second
+	if first, next := <-events, <-events; first != "first" || next != "second" {
+		t.Fatalf("events = %q, %q", first, next)
 	}
 }

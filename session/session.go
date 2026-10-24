@@ -126,14 +126,19 @@ type Manager struct {
 	options Options
 	logf    func(format string, args ...any)
 
-	mu       sync.RWMutex
-	state    State
-	client   *atrust.Client
-	dialer   tunnelDialer
-	resolver *resolve.Resolver
-	underlay *underlay.Dialer
-	cancel   context.CancelFunc
-	login    sync.Mutex
+	mu sync.RWMutex
+	// publishMu orders a state update with its publication. Without it two
+	// goroutines could emit an older snapshot after a newer one and leave the
+	// window showing a phase that already passed. OnState must not call back
+	// into the manager synchronously.
+	publishMu sync.Mutex
+	state     State
+	client    *atrust.Client
+	dialer    tunnelDialer
+	resolver  *resolve.Resolver
+	underlay  *underlay.Dialer
+	cancel    context.CancelFunc
+	login     sync.Mutex
 
 	// challenge records that the login asked the user something during the
 	// current attempt, so the ladder stops instead of retrying blindly.
@@ -182,9 +187,23 @@ func (m *Manager) loginSession(ctx context.Context) error {
 	m.login.Lock()
 	defer m.login.Unlock()
 
-	switch m.State().Phase {
+	if err := ctx.Err(); err != nil {
+		// An attempt that was cancelled before it started has nothing to
+		// report: 断开 already published the idle state.
+		return err
+	}
+
+	switch phase := m.State().Phase; phase {
 	case PhaseConnecting, PhaseOnline:
-		return fmt.Errorf("the session is already %s", m.State().Phase)
+		return fmt.Errorf("the session is already %s", phase)
+	case PhaseReconnecting:
+		// A client-owned restore still holds a live client and its data path.
+		// A second login would replace and leak it, and destroy the session the
+		// client is reviving. Only the ladder starts a login from this phase,
+		// and it tears the client down before its first attempt.
+		if m.hasClient() {
+			return errors.New("the session is restoring itself; wait for it to finish")
+		}
 	}
 
 	cfg := m.settings()
@@ -200,7 +219,7 @@ func (m *Manager) loginSession(ctx context.Context) error {
 	// the attempt's deadline and the application cancels it once Login returns,
 	// so deriving the session from it would stop the keep-alive immediately.
 	sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	m.set(State{Phase: PhaseConnecting, Detail: "preparing the tunnel", Since: time.Now()})
+	m.connectingState("preparing the tunnel")
 
 	underlayDialer, err := underlay.New(underlay.Options{})
 	if err != nil {
@@ -214,7 +233,12 @@ func (m *Manager) loginSession(ctx context.Context) error {
 		cancel()
 		_ = underlayDialer.Close()
 		wrapped := fmt.Errorf("%s: %w", stage, cause)
-		m.fail(wrapped)
+		// A cancelled attempt is what 断开 asked for. Publishing a failure
+		// would race the idle state that disconnect publishes and paint an
+		// English "context canceled" over the window.
+		if ctx.Err() == nil {
+			m.fail(wrapped)
+		}
 		return wrapped
 	}
 
@@ -233,7 +257,7 @@ func (m *Manager) loginSession(ctx context.Context) error {
 	// logged in), so the client continues with the stored cookies and lets the
 	// portal answer. A session never outlives its connection: after a
 	// disconnect the gateway offers the methods again and a login is made.
-	m.set(State{Phase: PhaseConnecting, Detail: "discovering the authentication methods", Since: time.Now()})
+	m.connectingState("discovering the authentication methods")
 	methods, err := DiscoverAuthMethods(ctx, profile)
 	if err != nil {
 		return fail("discover the authentication methods", err)
@@ -257,7 +281,7 @@ func (m *Manager) loginSession(ctx context.Context) error {
 		UnderlayDialer: underlayDialer,
 	})
 
-	m.set(State{Phase: PhaseConnecting, Detail: "logging in", Since: time.Now()})
+	m.connectingState("logging in")
 
 	// A nil handler panics the upstream client when a gateway asks for a
 	// challenge, so a configuration without one still gets a handler that
@@ -291,7 +315,7 @@ func (m *Manager) loginSession(ctx context.Context) error {
 		return fail("log in", err)
 	}
 
-	m.set(State{Phase: PhaseConnecting, Detail: "opening the data path", Since: time.Now()})
+	m.connectingState("opening the data path")
 
 	ipResources, err := client.IPResources()
 	if err != nil {
@@ -608,6 +632,9 @@ func newLoginMethod(cfg config.AuthConfig, method AuthMethod) (auth.LoginMethod,
 }
 
 func (m *Manager) set(state State) {
+	m.publishMu.Lock()
+	defer m.publishMu.Unlock()
+
 	m.mu.Lock()
 	m.state = state
 	m.mu.Unlock()
@@ -615,10 +642,39 @@ func (m *Manager) set(state State) {
 	m.emit(state)
 }
 
+// connectingState publishes a login step without dropping what the account was
+// granted: a reconnect attempt must keep showing the grant, the tunnel address
+// and the last probe result instead of flashing an empty window.
+func (m *Manager) connectingState(detail string) {
+	m.mu.RLock()
+	previous := m.state
+	m.mu.RUnlock()
+
+	m.set(State{
+		Phase:     PhaseConnecting,
+		Detail:    detail,
+		ClientIP:  previous.ClientIP,
+		Resources: previous.Resources,
+		KeepAlive: previous.KeepAlive,
+		Since:     time.Now(),
+	})
+}
+
+// hasClient reports whether a client is installed, which is what makes a
+// reconnecting phase a client-owned restore rather than a ladder attempt.
+func (m *Manager) hasClient() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.client != nil
+}
+
 // setTransition replaces the state and stamps Since only when the phase changes:
 // the reconnect countdown republishes the same phase every second, and a
 // timestamp that moves with it would claim the phase restarted.
 func (m *Manager) setTransition(state State) {
+	m.publishMu.Lock()
+	defer m.publishMu.Unlock()
+
 	m.mu.Lock()
 	if m.state.Phase == state.Phase {
 		state.Since = m.state.Since
@@ -651,6 +707,9 @@ func (m *Manager) recordKeepAlive(result service.KeepAliveResult) {
 	if result.Err != nil {
 		keepAlive.Err = result.Err.Error()
 	}
+
+	m.publishMu.Lock()
+	defer m.publishMu.Unlock()
 
 	m.mu.Lock()
 	state := m.state

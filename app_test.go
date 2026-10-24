@@ -578,3 +578,91 @@ func TestOpenResourceAllowsOnlyHTTP(t *testing.T) {
 		t.Fatalf("opened = %v, want the http URL", opened)
 	}
 }
+
+// A server that finishes binding after 断开 must close itself: the epoch moved,
+// so installing it would hold the ports for a session that is already gone. The
+// release runs between the epoch read and the installation, which is the window
+// the guard exists for.
+func TestAProxyBoundAfterReleaseClosesItself(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("probe for a free port: %v", err)
+	}
+	address := listener.Addr().String()
+	_ = listener.Close()
+
+	cfg := config.Default()
+	cfg.Proxy.SOCKS5Bind = address
+	cfg.Proxy.HTTPBind = ""
+	application := &app{cfg: cfg}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	server, err := gotrustproxy.New(gotrustproxy.Options{
+		SOCKS5Bind: address,
+		Dial: func(context.Context, string, string) (net.Conn, error) {
+			return nil, session.ErrNotOnline
+		},
+	})
+	if err != nil {
+		cancel()
+		t.Fatalf("new proxy: %v", err)
+	}
+	if err := server.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("start proxy: %v", err)
+	}
+
+	application.mu.RLock()
+	epoch := application.proxyEpoch
+	application.mu.RUnlock()
+
+	application.releaseProxy()
+
+	if application.installProxy(server, cancel, epoch) {
+		t.Fatal("a server bound before the release was installed")
+	}
+	held, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("the refused server still holds %s: %v", address, err)
+	}
+	_ = held.Close()
+
+	application.mu.RLock()
+	installed := application.proxy
+	addresses := application.view.Addresses
+	application.mu.RUnlock()
+	if installed != nil || addresses != nil {
+		t.Fatalf("proxy = %v addresses = %v", installed, addresses)
+	}
+}
+
+// 断开 cancels the attempt. The status line must report the stop instead of
+// quoting the cancelled login in red: "context canceled" is English text in a
+// Chinese window, and the user caused it.
+func TestAStoppedAttemptReportsCancelled(t *testing.T) {
+	application := &app{cfg: config.Default()}
+	application.stopping = true
+
+	application.async(func(context.Context) error { return errors.New("log in: context canceled") })
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		application.mu.RLock()
+		status := application.view.Status
+		statusError := application.view.StatusError
+		application.mu.RUnlock()
+		if status != "" {
+			if statusError {
+				t.Fatalf("status = %q, want a plain cancellation", status)
+			}
+			if status != "已取消" {
+				t.Fatalf("status = %q, want 已取消", status)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the status line was not updated")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

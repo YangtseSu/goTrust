@@ -426,12 +426,15 @@ test except where noted):
         resource caches, reject unknown TOML keys, make `profileSlug`
         collision-safe on case-insensitive filesystems (an uppercase letter now
         takes a hash suffix, so `Work` and `work` never share a file)
-  - [ ] session: no `PhaseFailed: context canceled` after 断开; keep
+  - [x] session: no `PhaseFailed: context canceled` after 断开; keep
         `Resources`/`ClientIP`/`KeepAlive` during a ladder attempt; publish
         `set`/`setTransition`/`recordKeepAlive` under the lock snapshot;
         refuse `Login` during a client-owned restore without overwriting the
         client; verify the proxy-epoch guard covers a server bound after
-        `disconnect`; a cancelled login must not paint an English red error
+        `disconnect`; a cancelled login must not paint an English red error.
+        A real `--no-ui` run cancelled against a stalling gateway logged no
+        `session failed` line; `installProxy` is the extracted guard with a
+        test that installs nothing after a release
   - [ ] keep-alive: lower interval bound in the settings view
   - [ ] dead code and metadata: drop `Config.SelectProfile/RenameProfile/
         ClientDataPath`, `Logger.Writer/Verbose`, `cliPrompter.logger`,

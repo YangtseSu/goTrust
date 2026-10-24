@@ -1253,6 +1253,53 @@
   kept during the ladder, snapshot-published transitions, login during a
   restore, cancelled-login status).
 
+### Phase 17: cancelled logins, ladder snapshots and publish order (P2)
+
+- **Status:** done (one commit); the rest of the P2 batch remains
+- Actions taken:
+  - wrote the checks first and ran them in a throwaway worktree at HEAD: a login
+    cancelled at method discovery published `connecting … failed`, the first
+    connecting state of an attempt carried an empty grant, a second login was
+    accepted during a client-owned restore (and failed later on an unrelated
+    config error), a newer state overtook one whose delivery was still in
+    progress, and a stopped attempt wrote `log in: context canceled` into the
+    status line
+  - `loginSession` returns at once on an already-cancelled context, and the
+    failure helper publishes only when `ctx.Err() == nil`: 断开 asked for the
+    stop, and its idle state must not be overwritten by a red failure
+  - the four connecting steps go through `connectingState`, which carries
+    `Resources`, `ClientIP` and `KeepAlive` from the previous snapshot, so a
+    reconnect attempt no longer flashes an empty resource list
+  - `Login` refuses a `PhaseReconnecting` state that still owns a client: that
+    is the client's own restore, and a second login would replace and leak the
+    client. The ladder still logs in, because it tore the client down first
+    (`hasClient`)
+  - `set`, `setTransition` and `recordKeepAlive` update and publish under one
+    `publishMu`, so an older snapshot cannot be emitted after a newer one. The
+    callback runs outside `m.mu`; it must not call back into the manager
+    synchronously, which the app's handler does not do
+  - `app.async` reports `已取消` when the attempt was stopped, even for an
+    error that does not wrap `context.Canceled`
+  - the proxy install step is now `installProxy(server, cancel, epoch)`; the
+    guard compares the epoch under the app lock and closes a server that bound
+    after the release
+- Results:
+  | Check | Result |
+  |---|---|
+  | Pre-fix: cancelled login / grant / restore / ordering / status | failed in all five |
+  | After: same tests | pass |
+  | Real `--no-ui` cancelled against a stalling gateway | no `session failed` line in the log, exit 1 with `context canceled` on the CLI |
+  | `installProxy` after `releaseProxy` | refuses, port free, view empty |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
+- Note: the proxy-epoch guard already existed (P0-2); the batch asked for a
+  verification, so the test pins the decision and the extraction adds no
+  behaviour. The restore refusal has no live gateway: its regression uses a
+  zero-value client in the state.
+- Files created/modified: `session/session.go`, `session/session_test.go`,
+  `main.go`, `app_test.go`, planning files
+- Next: P2 keep-alive interval bound and dead-code/metadata cleanup.
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)
