@@ -277,4 +277,6 @@ headless deployment can publish what the account was granted.
 
 Point a browser or an application at `127.0.0.1:1081` (HTTP) or
 `127.0.0.1:1080` (SOCKS5). Hostnames are resolved inside the tunnel, so DNS
-hijacking and fake-IP are unnecessary.
+hijacking and fake-IP are unnecessary. Names the portal did not map go to the
+DNS server the gateway named, over the packet stack; a TCP-only gateway has no
+UDP path and uses the system resolver for them instead.

@@ -12,15 +12,16 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: all three P0 defects are fixed with regression tests; next is the
-P1-4/P1-5 tunnel DNS and stack batch. Phase 16's `pacman -U` install still needs
+Phase 17: the three P0 defects and the P1-4/P1-5 tunnel DNS and stack batch are
+fixed with regression tests; next is P1-6/P1-7 (proxy resolver handoff, `Dial`
+while the client restores a session). Phase 16's `pacman -U` install still needs
 the operator's sudo password; Phase 8 (dae export) stays deferred.
 
 ## Current Phase
 
-Phase 17 (review remediation; the three P0 defects are fixed, the P1 batches
-are next). Phase 18's tray menu item is done; its double-click/upstream item is
-blocked on mygo.
+Phase 17 (review remediation; P0 and P1-4/P1-5 are done, the rest of the P1
+batches are next). Phase 18's tray menu item is done; its double-click/upstream
+item is blocked on mygo.
 
 ## Phases
 
@@ -361,8 +362,10 @@ test that reproduces the defect.
       from racing it; `connect` waits for the join before a new login;
       `disconnectNow` joins synchronously only in `--no-ui` and after
       `App.Run`
-- [ ] P1-4/P1-5, tunnel DNS and stack: resolve `auto` through
-      `client.DNSServer()`/`DNSServers()`, choose gVisor when an IP exists
+- [x] P1-4/P1-5, tunnel DNS and stack: resolve `auto` through
+      `client.DNSServer()`/`DNSServers()`, choose gVisor when an IP exists.
+      The packet stack carries UDP, so a TCP-only gateway still falls back to
+      the TCP tunnel and remote DNS is off when the gateway names no server
 - [ ] P1-6/P1-7, reconnect: hand the proxy a live resolver, allow `Dial` while
       the client is restoring a session
 - [ ] P1-8/P1-9, client data: bind the path to the settings file, delete or

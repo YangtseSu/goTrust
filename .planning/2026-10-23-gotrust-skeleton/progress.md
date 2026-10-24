@@ -811,6 +811,42 @@
 - Files created/modified: `main.go`, `app_test.go`, planning files
 - Next: P1-4/P1-5 (tunnel DNS `auto`, gVisor when the gateway assigns an IP).
 
+### Phase 17: tunnel DNS and the packet stack (P1-4, P1-5)
+
+- **Status:** done (one commit); P1-6/P1-7 remain
+- Actions taken:
+  - reproduced the stack defect at HEAD in a throwaway worktree: a real
+    `atrust.Client` reports `CanUseTCPTunnel() = true`, so `newStack` always
+    returned `*tcptunnel.Stack` and its `IP()`/gVisor branch was dead. The DNS
+    defect was traced to the literal `"auto"`: `net.ParseIP("auto")` is nil, so
+    the old resolver dialled `:53`, the unspecified address
+  - `newStack` is a `Manager` method over `clientpkg.Client` now. It opens the
+    gVisor netstack whenever the gateway assigned an address; that stack
+    carries UDP, which remote DNS needs. A TCP-only gateway takes the TCP
+    tunnel, and a packet stack that fails to come up is logged and leaves the
+    TCP path instead of failing the login
+  - `tunnelDNS` reads `client.DNSServer()`/`DNSServers()`: an unusable primary
+    turns remote DNS off instead of dialling 0.0.0.0, and a missing second
+    server stays empty so the resolver keeps the system configuration instead
+    of a hard-coded public resolver. The resolver and `service.NewDnsServer`
+    now receive those addresses
+  - README: names the portal did not map go to the gateway's server over the
+    packet stack; a TCP-only gateway uses the system resolver for them
+- Results:
+  | Check | Result |
+  |---|---|
+  | HEAD `newStack` with a real client (worktree) | `CanUseTCPTunnel=true`, returned `*tcptunnel.Stack`; repro test failed |
+  | After the fix, with and without an assigned address | `*gvisor.Stack` / `*tcptunnel.Stack` |
+  | `net.ParseIP("auto")` / `UDPAddr.String()` | `<nil>` / `:53` (unspecified), the old resolver target |
+  | `go test ./...`, `go test -race ./session ./proxy ./ui` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
+- Note: no live gateway login this session; the choice, the DNS inputs and the
+  TCP-only fallback are covered by unit tests, plus the fork's own stack tests.
+- Files created/modified: `session/session.go`, `session/session_test.go`,
+  `README.md`, planning files
+- Next: P1-6/P1-7 (hand the proxy a live resolver, allow `Dial` while the
+  client is restoring a session).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)
@@ -853,8 +889,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 17 recorded (review remediation); Phase 16 `pacman -U` still awaits sudo |
-| Where am I going? | P0 fixes in order: settings panic/buffers, proxy lifetime, UI deadlock; then DNS/stack, client data, races, redaction, rotation; Phase 8 (dae) last |
+| Where am I? | Phase 17 recorded (review remediation); P0 fixes and P1-4/P1-5 landed; Phase 16 `pacman -U` still awaits sudo |
+| Where am I going? | Remaining P1 batches: proxy resolver handoff and `Dial` while restoring, client-data path/rename, config race, settings freshness, redaction and CONNECT, rotation; then the P2 batch; Phase 8 (dae) last |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |

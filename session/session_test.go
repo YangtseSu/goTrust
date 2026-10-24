@@ -6,10 +6,18 @@ package session
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"inet.af/netaddr"
+
+	clientpkg "github.com/mythologyli/zju-connect/client"
+	"github.com/mythologyli/zju-connect/stack/gvisor"
+	"github.com/mythologyli/zju-connect/stack/tcptunnel"
 
 	"github.com/YangtseSu/goTrust/config"
 )
@@ -172,5 +180,124 @@ func TestWriteClientDataCreatesAPrivateDirectory(t *testing.T) {
 	raw, err := os.ReadFile(path)
 	if err != nil || string(raw) != `{"sid":"x"}` {
 		t.Fatalf("data = %q, %v", raw, err)
+	}
+}
+
+// stubClient is the part of the upstream client the data-path choice reads. A
+// real login cannot be made in a test, so the decision itself is exercised
+// through this.
+type stubClient struct {
+	ip         net.IP
+	dnsServer  string
+	dnsServers []string
+}
+
+func (c stubClient) IP() (net.IP, error) {
+	if c.ip == nil {
+		return nil, errors.New("IP not available")
+	}
+	return c.ip, nil
+}
+
+func (c stubClient) IPSet() (*netaddr.IPSet, error) { return nil, errors.New("IP set not available") }
+
+func (c stubClient) IPResources() ([]clientpkg.IPResource, error) { return nil, nil }
+
+func (c stubClient) DomainResources() (clientpkg.DomainResources, error) { return nil, nil }
+
+func (c stubClient) DNSResource() (map[string][]net.IP, error) { return nil, nil }
+
+func (c stubClient) DNSServer() (string, error) {
+	if c.dnsServer == "" {
+		return "", errors.New("DNS server not available")
+	}
+	return c.dnsServer, nil
+}
+
+func (c stubClient) DNSServers() ([]string, error) {
+	if len(c.dnsServers) == 0 {
+		return nil, errors.New("DNS servers not available")
+	}
+	return c.dnsServers, nil
+}
+
+func (c stubClient) CanUseTCPTunnel() bool { return true }
+
+func (c stubClient) DialTCP(context.Context, *net.TCPAddr) (net.Conn, error) {
+	return nil, errors.New("not used in this test")
+}
+
+func (c stubClient) NewL3Conn() (io.ReadWriteCloser, error) {
+	return nil, errors.New("not used in this test")
+}
+
+// A gateway that assigns an address can carry UDP, which remote DNS needs, so
+// the packet stack has to win over the TCP tunnel there. The upstream
+// CanUseTCPTunnel reports true unconditionally and must not decide this.
+func TestNewStackPrefersThePacketStackWhenAnAddressExists(t *testing.T) {
+	manager := New(Options{})
+
+	vpnStack, err := manager.newStack(stubClient{ip: net.ParseIP("192.0.2.10")})
+	if err != nil {
+		t.Fatalf("new stack: %v", err)
+	}
+	if _, ok := vpnStack.(*gvisor.Stack); !ok {
+		t.Fatalf("stack = %T, want the packet stack", vpnStack)
+	}
+}
+
+// A TCP-only gateway assigns no address, so the netstack cannot come up: the
+// TCP tunnel is the only usable path and must not fail the login.
+func TestNewStackFallsBackToTheTCPTunnelWithoutAnAddress(t *testing.T) {
+	manager := New(Options{})
+
+	vpnStack, err := manager.newStack(stubClient{})
+	if err != nil {
+		t.Fatalf("new stack: %v", err)
+	}
+	if _, ok := vpnStack.(*tcptunnel.Stack); !ok {
+		t.Fatalf("stack = %T, want the TCP tunnel", vpnStack)
+	}
+}
+
+// The gateway names its own resolvers; both have to reach the resolver as
+// addresses. The login reply can carry the literal "auto", which net.ParseIP
+// turns into an unspecified address instead of an error.
+func TestTunnelDNSStopsAtTheLiteralAuto(t *testing.T) {
+	manager := New(Options{})
+
+	remote, secondary, useRemote := manager.tunnelDNS(stubClient{
+		dnsServer:  "auto",
+		dnsServers: []string{"auto", "auto"},
+	})
+	if remote != "" || secondary != "" || useRemote {
+		t.Fatalf("remote = %q, secondary = %q, useRemote = %v, want no remote DNS", remote, secondary, useRemote)
+	}
+}
+
+func TestTunnelDNSTakesBothServersFromTheGateway(t *testing.T) {
+	manager := New(Options{})
+
+	remote, secondary, useRemote := manager.tunnelDNS(stubClient{
+		dnsServer:  "192.0.2.53",
+		dnsServers: []string{"192.0.2.53", "203.0.113.53"},
+	})
+	if !useRemote || remote != "192.0.2.53" || secondary != "203.0.113.53" {
+		t.Fatalf("remote = %q, secondary = %q, useRemote = %v, want both gateway servers", remote, secondary, useRemote)
+	}
+}
+
+// One named server is enough for the tunnel; the second name stays empty so
+// the resolver keeps the system configuration for everything else instead of a
+// hard-coded public server.
+func TestTunnelDNSLeavesTheSecondaryToTheSystem(t *testing.T) {
+	manager := New(Options{})
+
+	remote, secondary, useRemote := manager.tunnelDNS(stubClient{
+		dnsServer:  "192.0.2.53",
+		dnsServers: []string{"192.0.2.53"},
+	})
+	if !useRemote || remote != "192.0.2.53" || secondary != "" {
+		t.Fatalf("remote = %q, secondary = %q, useRemote = %v, want the gateway server only", remote, secondary, useRemote)
 	}
 }

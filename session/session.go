@@ -308,14 +308,15 @@ func (m *Manager) loginSession(ctx context.Context) error {
 		m.logf("the gateway granted %d displayable resources", len(resources.Entries))
 	}
 
-	vpnStack, err := newStack(client)
+	vpnStack, err := m.newStack(client)
 	if err != nil {
 		client.Close()
 		return fail("open the data path", err)
 	}
 
-	resolver := resolve.NewResolver(vpnStack, "auto", "auto", 3600, domainResources, dnsResource, true)
-	vpnStack.SetupResolve(service.NewDnsServer(resolver, []string{"auto", "auto"}))
+	remoteDNSServer, secondaryDNSServer, useRemoteDNS := m.tunnelDNS(client)
+	resolver := resolve.NewResolver(vpnStack, remoteDNSServer, secondaryDNSServer, 3600, domainResources, dnsResource, useRemoteDNS)
+	vpnStack.SetupResolve(service.NewDnsServer(resolver, []string{remoteDNSServer, secondaryDNSServer}))
 	vpnStack.SetupIPPool(resolver.IPPool)
 	go vpnStack.Run()
 
@@ -417,25 +418,43 @@ func (m *Manager) Resolver() *resolve.Resolver {
 	return m.resolver
 }
 
-// newStack picks the data path the gateway supports. A TCP-only gateway hands
-// out no address, so the netstack cannot come up and the TCP tunnel is the only
-// option there.
-func newStack(client *atrust.Client) (stack.Stack, error) {
-	if client.CanUseTCPTunnel() {
+// newStack picks the data path the gateway supports. The packet stack is the
+// default because it carries UDP as well as TCP, which remote DNS needs, and
+// it needs the address the gateway assigned. A TCP-only gateway assigns none,
+// so the TCP tunnel is the only option there. Its DialUDP is unimplemented, so
+// a packet stack that fails to come up still leaves a working TCP path.
+func (m *Manager) newStack(client clientpkg.Client) (stack.Stack, error) {
+	if ip, err := client.IP(); err != nil || ip == nil {
 		return tcptunnel.NewStack(client)
 	}
-	if ip, err := client.IP(); err != nil || ip == nil {
-		m, tcpErr := tcptunnel.NewStack(client)
-		if tcpErr != nil {
-			return nil, fmt.Errorf("no tunnel address and no TCP tunnel: %w", tcpErr)
-		}
-		return m, nil
-	}
-	gvisorStack, err := gvisor.NewStack(client)
+	vpnStack, err := gvisor.NewStack(client)
 	if err != nil {
-		return nil, err
+		m.logf("the packet stack is unavailable (%v), using the TCP tunnel", err)
+		return tcptunnel.NewStack(client)
 	}
-	return gvisorStack, nil
+	return vpnStack, nil
+}
+
+// tunnelDNS returns the resolvers the tunnel should use. The gateway names its
+// own servers in the login reply; "auto" is a placeholder, not an address, and
+// dialling it through net.ParseIP would silently target 0.0.0.0:53. Without a
+// usable name the tunnel keeps the system resolver for everything the gateway
+// did not map itself.
+func (m *Manager) tunnelDNS(client clientpkg.Client) (remote, secondary string, useRemote bool) {
+	remote, err := client.DNSServer()
+	if err != nil || net.ParseIP(remote) == nil {
+		m.logf("the gateway named no usable DNS server: remote DNS is off")
+		return "", "", false
+	}
+
+	// The second name is the fallback for everything the tunnel resolver does
+	// not answer itself. Leave it empty when the gateway offers only one, so
+	// the resolver falls back to the system configuration instead of a
+	// hard-coded public server.
+	if servers, err := client.DNSServers(); err == nil && len(servers) > 1 && net.ParseIP(servers[1]) != nil {
+		secondary = servers[1]
+	}
+	return remote, secondary, true
 }
 
 // runKeepAlive holds the session open with real application traffic. Without a
