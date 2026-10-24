@@ -12,9 +12,10 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: the three P0 defects and the P1-4…P1-7 batches are fixed with
-regression tests; next is P1-8/P1-9 (the client-data path must follow
-`--config`, and a profile delete or rename must take its file with it). Phase
+Phase 17: P0 and P1-4…P1-7 are fixed with regression tests. The remaining
+queue, in order: P1-8/P1-9, P1-10, P1-12/P1-16, P1-13/P1-14, P1-15, P1-17
+(packet-stack restore confirmation, needs a fork commit and pin bump), the
+itemised P2 batch, then the verification pass. Next commit is P1-8/P1-9. Phase
 16's `pacman -U` install still needs the operator's sudo password; Phase 8 (dae
 export) stays deferred.
 
@@ -370,28 +371,67 @@ test that reproduces the defect.
 - [x] P1-6/P1-7, reconnect: hand the proxy a live resolver, allow `Dial` while
       the client is restoring a session. `Manager.Resolve` reads the resolver
       per request; `Dial` refuses only when the ladder has torn the tunnel down
-- [ ] Follow-up found while fixing P1-5: `ObserveTunnelTraffic` is called only
-      by the TCP tunnel (`client/atrust/tcptunnel.go:620`), so a restored
-      session on the gVisor stack never leaves `SessionRestoring` on its own.
-      Candidate fixes: a fork hook in the gVisor `DialTCP`, or goTrust
-      confirming on a successful non-fallback keep-alive probe
-- [ ] P1-8/P1-9, client data: bind the path to the settings file, delete or
-      rename the file with the profile
-- [ ] P1-10, config race: `Clone()` before mutating in prompt handlers
-- [ ] P1-12/P1-16, settings freshness: drop stale auth methods per frame, make
-      the hide epoch a single check-and-act
-- [ ] P1-13/P1-14, logging and CONNECT: whole-header redaction, `CopyN` drain
-      of pipelined CONNECT bytes
+
+Open work, in this order (each still one commit, each starting from a failing
+test except where noted):
+
+- [ ] P1-8/P1-9, client data: derive the path from the loaded settings file, so
+      `--config` moves it; deleting or renaming a profile moves or removes
+      `client_data-*.json` with it. Acceptance: a temporary `--config` never
+      touches the default account's file; after rename the new slug accepts the
+      stored material and after delete the file is gone
+- [ ] P1-10, config race: `Clone()` before mutating in `storeAuthChoice`,
+      `storeTOTPSecret` and every prompt handler, and leave the in-memory
+      config untouched when `SaveFile` fails. Acceptance: `go test -race`
+      covers the two prompt handlers against a concurrent `Active()`
+- [ ] P1-12/P1-16, settings freshness: drop stale auth methods per frame; make
+      the hide epoch one check-and-act. Acceptance: an edited gateway invalidates
+      the picker before save; a queued hide cannot swallow a reopened window
+- [ ] P1-13/P1-14, logging and CONNECT: redact whole cookie and `map[…]` values;
+      drain pipelined CONNECT bytes with `CopyN`. Acceptance: `SESSION123` never
+      appears in a redacted line; CONNECT+payload in one write is echoed
 - [ ] P1-15, log rotation: reopen after a failed rotation instead of losing the
-      file for the rest of the process
-- [ ] P2 batch: proxy connection tracking, request hop-by-hop headers,
-      half-close, URL scheme allowlist, TOTP policy, atomic client data, fsync,
-      TOML unknown keys, bind validation, keep-alive bounds
+      file for the rest of the process. Acceptance: a rotation failure recovers
+      on the next write
+- [ ] P1-17, restore confirmation on the packet stack (found while fixing P1-5,
+      not in the review list): `ObserveTunnelTraffic` is called only by the TCP
+      tunnel (`client/atrust/tcptunnel.go:620`), so a restored session on the
+      gVisor stack never leaves `SessionRestoring` and the window keeps saying
+      `正在恢复会话` over a working tunnel. Fix in the fork's gVisor `DialTCP`
+      (mirroring the TCP tunnel) and bump the pin; keep-alive confirmation is
+      only a partial fallback because probes can be off. Acceptance: after a
+      restore, the first tunnelled connection publishes `online`; the window and
+      tray leave the reconnecting state without help
+- [ ] P2 batch, itemised from `findings.md`:
+  - [ ] proxy: track hijacked CONNECT/SOCKS5 connections and close them in
+        `Server.Close`; forward no hop-by-hop request headers
+        (`Proxy-Authorization` included); half-close both directions; flush
+        streamed responses; cache the `forward` Transport
+  - [ ] proxy/config input: reject or warn on a non-loopback bind, syntax-check
+        binds in the settings window, allowlist `openResource` schemes
+        (`http`/`https` only)
+  - [ ] TOTP: clear the stored secret with 保存密码 and offer a removal action
+  - [ ] persistence: atomic temp+rename `writeClientData`, `Sync` config and
+        resource caches, reject unknown TOML keys, make `profileSlug`
+        collision-safe on case-insensitive filesystems
+  - [ ] session: no `PhaseFailed: context canceled` after 断开; keep
+        `Resources`/`ClientIP`/`KeepAlive` during a ladder attempt; publish
+        `set`/`setTransition`/`recordKeepAlive` under the lock snapshot;
+        refuse `Login` during a client-owned restore without overwriting the
+        client; verify the proxy-epoch guard covers a server bound after
+        `disconnect`; a cancelled login must not paint an English red error
+  - [ ] keep-alive: lower interval bound in the settings view
+  - [ ] dead code and metadata: drop `Config.SelectProfile/RenameProfile/
+        ClientDataPath`, `Logger.Writer/Verbose`, `cliPrompter.logger`,
+        `ReconnectState.Reason`, redundant `Attention` (whatever the fixes
+        above leave unused); `--print-resources` prints the snapshot metadata;
+        document or remove the inherited `InsecureSkipVerify`
 - [ ] Verification: `go test -race ./...`, real UI smoke (断开 during login,
       设置 delete, session expiry then reconnect), `reuse lint`
 - **Status:** pending
 - **Note:** Phase 16's `pacman -U` install stays open on the operator's sudo
-  password; it does not block Phase 17.
+  password; it does not block Phase 17. P1-17 needs a fork commit and a pin
+  bump; every other item above is goTrust-local.
 
 ### Phase 18: Tray interaction and the appindicator backend (2026-10-24)
 

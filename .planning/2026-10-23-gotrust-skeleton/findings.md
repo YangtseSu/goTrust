@@ -529,7 +529,9 @@ no code was changed by the review.
   Keep-alive probes are real application traffic, but the fork does not report
   them as such. Candidate fixes: a fork hook in `stack/gvisor` `DialTCP` →
   `ObserveTunnelTraffic`, or goTrust confirming on a non-fallback keep-alive
-  success. Neither was in the review list; recorded for the next batch.
+  success. Not in the review list; scheduled as **P1-17** in `task_plan.md`,
+  the last P1 item before the P2 batch, with the fork hook as the primary fix
+  because keep-alive can be off.
 - `Manager.Resolve` reads the resolver per call, so the SOCKS5 listener follows
   an auto-reconnect instead of holding the dead stack's resolver.
 

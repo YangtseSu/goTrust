@@ -875,12 +875,30 @@
   | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
 - Note: no live gateway. `ObserveTunnelTraffic` is called only by the TCP
   tunnel, so with the gVisor stack the phase can stay `正在恢复会话` after the
-  tunnel works; recorded in `findings.md` as the next follow-up (a fork hook or
-  confirming on a successful keep-alive probe).
+  tunnel works; scheduled as P1-17 (last P1 before the P2 batch, needs a fork
+  hook and a pin bump).
 - Files created/modified: `session/session.go`, `session/session_test.go`,
   `main.go`, planning files
 - Next: P1-8/P1-9 (`--config` must move the client data, a profile delete or
   rename must take its file with it).
+
+### Phase 17: queue itemised, P1-17 scheduled
+
+- **Status:** schedule updated (planning files only)
+- The follow-up found while fixing P1-5 (the packet stack never reports
+  `ObserveTunnelTraffic`, so a restored session keeps saying
+  `正在恢复会话`) was recorded but not queued. It is now **P1-17**, the last P1
+  item before the P2 batch, with the fork hook as the primary fix, a pin bump,
+  and an acceptance test that the first tunnelled connection publishes `online`.
+- The P2 batch is itemised with every finding from the review and an acceptance
+  line each: proxy connection tracking and hop-by-hop headers, half-close and
+  flush, bind validation, scheme allowlist, TOTP removal, atomic client data and
+  cache sync, TOML unknown keys, slug collisions, ladder/dial races,
+  stale-snapshot publishes, keep-alive bounds, dead code and
+  `--print-resources` metadata.
+- Order recorded in `task_plan.md`: P1-8/P1-9 → P1-10 → P1-12/P1-16 →
+  P1-13/P1-14 → P1-15 → P1-17 → P2 → verification. Only P1-17 depends on the
+  fork; the rest are goTrust-local.
 
 ### Phase 18: tray interaction
 
@@ -925,7 +943,7 @@
 | Question | Answer |
 |----------|--------|
 | Where am I? | Phase 17 recorded (review remediation); P0 and P1-4/P1-5/P1-6/P1-7 landed; Phase 16 `pacman -U` still awaits sudo |
-| Where am I going? | Remaining P1 batches: client-data path/rename, config race, settings freshness, redaction and CONNECT, rotation; then the P2 batch; Phase 8 (dae) last |
+| Where am I going? | Scheduled queue: P1-8/P1-9 → P1-10 → P1-12/P1-16 → P1-13/P1-14 → P1-15 → P1-17 (packet-stack restore confirmation, fork + pin) → itemised P2 batch → verification; Phase 8 (dae) last |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |
