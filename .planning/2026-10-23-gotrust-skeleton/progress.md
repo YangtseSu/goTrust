@@ -1494,7 +1494,11 @@
     `change-code`/message/strategy and the account field. Final fix: capture
     the payload from both answers, use the login answer's key/nonce from the
     session, no extra `authConfig`; unit tests cover the live
-    psw → auth-check(change-password) → change-password order
+    psw → auth-check(change-password) → change-password order. After the change the portal
+    keeps the account online and refuses the pending `auth-check` with
+    75500006; the fork now signals `auth.ErrReauthRequired` and the manager
+    retries the login once with the new credential (proven by the operator's
+    manual re-login in the same log)
   - goTrust: `session.Options.ChangePassword`/`OnPasswordChanged`, the forced
     panel in the login flow (message, account, rules, prompt, skip, cancel,
     context release), the voluntary panel in the settings window (offered only
@@ -1518,7 +1522,9 @@
   | `--no-ui` refusal | real binary + fake gateway: clear message, exit 1 |
   | Live forced change, first package (`r47`) | failed `75500000 (Parameter error or missing occurred)` |
   | Causes / fixes | (1) missing shared `shared-params` and the login-style `<password>_nonce` encryption; (2) the extra `authConfig` before encrypting replaced the login's key/nonce and CSRF → `75500001 (authentication timed out)`; (3) the live gateway announces the change in the **auth-check** answer, which was parsed for next-step only, so the challenge reached the window with code 0 and no `account-field` for `75500402`. Final: read the payload from auth-check too, use the password answer's key/nonce and CSRF, no extra `authConfig` |
-  | Live forced change after the final fix | operator retry pending |
+  | Live forced change, third package (`r49`) | change succeeded at 23:03:25 and the credential was saved; the follow-up `auth-check` got `75500006` ("account already logged in") |
+  | Fix for the continuation | the change leaves the account online and closes the pending chain; the fork now returns `auth.ErrReauthRequired` and the manager retries the login once with the saved credential (the operator's manual re-login with the new password succeeded at 23:03:49) |
+  | Live forced change after the re-login fix | operator retry pending |
   | Live 90-day expiry | not triggered; operator test pending |
 - Files created/modified:
   - fork: `client/atrust/auth/password_change.go` (new),

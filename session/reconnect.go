@@ -177,7 +177,7 @@ func (m *Manager) runReconnect(ctx context.Context, reason string) {
 		func(ctx context.Context, attempt int) error {
 			m.logf("auto-reconnect: attempt %d/%d", attempt, len(reconnectDelays))
 			m.challenge.Store(false)
-			return m.loginSession(ctx)
+			return m.loginWithRetry(ctx)
 		},
 		m.challenge.Load,
 	)

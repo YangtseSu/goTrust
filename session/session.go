@@ -192,12 +192,49 @@ func (m *Manager) Login(ctx context.Context) error {
 	if m.reconnectRunning() {
 		return errors.New("auto-reconnect is already retrying the session")
 	}
-	return m.loginSession(ctx)
+	return m.loginWithRetry(ctx)
+}
+
+// loginWithRetry handles the one failed attempt that must be followed
+// immediately by a new one: the gateway accepted a forced password change and
+// then refuses the pending authentication chain (75500006, "already logged
+// in"), because the change left the account online. The prompt's callback has
+// already written the new password, so the retry logs in with it. One retry
+// only: a gateway that demands another change is a failure, not a loop.
+func (m *Manager) loginWithRetry(ctx context.Context) error {
+	retried, err := retryAfterReauth(ctx, m.loginSession, func(ctx context.Context) error {
+		m.logf("the password change closed the pending login; logging in again with the saved credential")
+		return m.loginAttempt(ctx, true)
+	})
+	if retried && errors.Is(err, auth.ErrReauthRequired) {
+		exhausted := errors.New("the gateway still requires a fresh login after the password change")
+		m.fail(exhausted)
+		return exhausted
+	}
+	return err
+}
+
+// retryAfterReauth runs retry once when first reports ErrReauthRequired and the
+// context is still alive. It reports whether the retry ran. The caller decides
+// what a second sentinel means.
+func retryAfterReauth(ctx context.Context, first, retry func(context.Context) error) (bool, error) {
+	err := first(ctx)
+	if !errors.Is(err, auth.ErrReauthRequired) || ctx.Err() != nil {
+		return false, err
+	}
+	return true, retry(ctx)
 }
 
 // loginSession is the login itself. The ladder calls it directly: it is the
 // owner of the attempts, so the reconnect guard in Login does not apply.
 func (m *Manager) loginSession(ctx context.Context) error {
+	return m.loginAttempt(ctx, false)
+}
+
+// loginAttempt is one login. afterReauth lets the retry start while the phase
+// is still connecting from the attempt the password change ended; a caller
+// that is not the retry must not find a half-open attempt.
+func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	m.login.Lock()
 	defer m.login.Unlock()
 
@@ -209,7 +246,9 @@ func (m *Manager) loginSession(ctx context.Context) error {
 
 	switch phase := m.State().Phase; phase {
 	case PhaseConnecting, PhaseOnline:
-		return fmt.Errorf("the session is already %s", phase)
+		if !afterReauth || phase == PhaseOnline {
+			return fmt.Errorf("the session is already %s", phase)
+		}
 	case PhaseReconnecting:
 		// A client-owned restore still holds a live client and its data path.
 		// A second login would replace and leak it, and destroy the session the
@@ -343,6 +382,14 @@ func (m *Manager) loginSession(ctx context.Context) error {
 		},
 	}); err != nil {
 		client.Close()
+		if errors.Is(err, auth.ErrReauthRequired) {
+			// The password changed (or was skipped); the portal refuses the
+			// pending chain. Release everything without publishing a failure:
+			// the caller logs in again with the new credential.
+			_ = underlayDialer.Close()
+			cancel()
+			return err
+		}
 		var required *auth.PasswordChangeRequiredError
 		if errors.As(err, &required) {
 			return fail("log in", passwordChangeUnavailable(required))

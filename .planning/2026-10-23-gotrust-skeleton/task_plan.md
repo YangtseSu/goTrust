@@ -534,6 +534,13 @@ policy). Endpoints and the signal are in `findings.md`.
   shared-params. Fork `7f399b5` does both, the pin moved to
   `v1.3.2-0.20261024143624-7f399b5d1dbf`, and the package was rebuilt (`r48`);
   the forced-flow completion still needs the operator's retry.
+- **Note (live completion and re-login):** the next package changed the password
+  successfully and saved it, but the portal then answered the follow-up
+  `auth-check` with `75500006 (account already logged in)` because the change
+  leaves the account online and closes the pending chain. A fresh login with
+  the new password works (the operator's manual retry in the same log), so the
+  fork returns `auth.ErrReauthRequired` and the manager retries once with the
+  saved credential.
 
 ### Phase 20: Keyring credential storage (second; backend chosen at execution)
 

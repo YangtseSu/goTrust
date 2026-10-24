@@ -30,6 +30,48 @@ func TestPasswordActionsNeedALiveSession(t *testing.T) {
 	}
 }
 
+// A password change ends the pending login; the manager retries exactly once
+// with the credential the prompt saved, and reports a second demand instead of
+// looping.
+func TestRetryAfterReauth(t *testing.T) {
+	ctx := context.Background()
+	sentinel := auth.ErrReauthRequired
+
+	calls := 0
+	retried, err := retryAfterReauth(ctx,
+		func(context.Context) error { calls++; return sentinel },
+		func(context.Context) error { calls++; return nil })
+	if !retried || err != nil || calls != 2 {
+		t.Fatalf("success retry = retried %v, err %v, calls %d", retried, err, calls)
+	}
+
+	calls = 0
+	retried, err = retryAfterReauth(ctx,
+		func(context.Context) error { calls++; return errors.New("offline") },
+		func(context.Context) error { calls++; return nil })
+	if retried || err == nil || calls != 1 {
+		t.Fatalf("other error = retried %v, err %v, calls %d", retried, err, calls)
+	}
+
+	calls = 0
+	retried, err = retryAfterReauth(ctx,
+		func(context.Context) error { calls++; return sentinel },
+		func(context.Context) error { calls++; return sentinel })
+	if !retried || !errors.Is(err, sentinel) || calls != 2 {
+		t.Fatalf("second demand = retried %v, err %v, calls %d", retried, err, calls)
+	}
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	calls = 0
+	retried, err = retryAfterReauth(cancelled,
+		func(context.Context) error { calls++; return sentinel },
+		func(context.Context) error { calls++; return nil })
+	if retried || !errors.Is(err, sentinel) || calls != 1 {
+		t.Fatalf("cancelled = retried %v, err %v, calls %d", retried, err, calls)
+	}
+}
+
 // A headless login that meets a forced change must say what it needs instead of
 // failing with the client's generic message.
 func TestPasswordChangeUnavailableExplainsTheWindow(t *testing.T) {
