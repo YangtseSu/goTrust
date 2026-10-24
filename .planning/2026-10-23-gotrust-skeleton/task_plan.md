@@ -12,10 +12,10 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: P0 and P1-4…P1-9 are fixed with regression tests. The remaining
-queue, in order: P1-10, P1-12/P1-16, P1-13/P1-14, P1-15, P1-17 (packet-stack
-restore confirmation, needs a fork commit and pin bump), the itemised P2 batch,
-then the verification pass. Next commit is P1-10. Phase 16's `pacman -U` install
+Phase 17: P0 and P1-4…P1-10 are fixed with regression tests. The remaining
+queue, in order: P1-12/P1-16, P1-13/P1-14, P1-15, P1-17 (packet-stack restore
+confirmation, needs a fork commit and pin bump), the itemised P2 batch, then the
+verification pass. Next commit is P1-12/P1-16. Phase 16's `pacman -U` install
 still needs the operator's sudo password; Phase 8 (dae export) stays deferred.
 
 ## Current Phase
@@ -379,10 +379,11 @@ test except where noted):
       `client_data-*.json` with it. The settings draft records the change and
       the app applies it only after a successful save; a custom
       `client_data_path` is never touched
-- [ ] P1-10, config race: `Clone()` before mutating in `storeAuthChoice`,
+- [x] P1-10, config race: `Clone()` before mutating in `storeAuthChoice`,
       `storeTOTPSecret` and every prompt handler, and leave the in-memory
-      config untouched when `SaveFile` fails. Acceptance: `go test -race`
-      covers the two prompt handlers against a concurrent `Active()`
+      config untouched when `SaveFile` fails. `mutableConfig` is the one copy
+      the handlers edit; `persistFlag` and `selectProfile` only write scalar
+      fields on their value copy, so they need no clone
 - [ ] P1-12/P1-16, settings freshness: drop stale auth methods per frame; make
       the hide epoch one check-and-act. Acceptance: an edited gateway invalidates
       the picker before save; a queued hide cannot swallow a reopened window

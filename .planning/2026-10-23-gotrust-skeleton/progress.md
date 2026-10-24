@@ -934,6 +934,36 @@
   planning files
 - Next: P1-10 (clone the config before a prompt handler mutates it).
 
+### Phase 17: prompt handlers edit a private config copy (P1-10)
+
+- **Status:** done (one commit); P1-12/P1-16 next
+- Actions taken:
+  - reproduced both symptoms at HEAD in a throwaway worktree:
+    `storeAuthChoice` against an unwritable settings path left `auth_type` set
+    in memory, and `go test -race` reported a data race between the handler's
+    write through the shared `Profiles` array and `Active()` on the reader
+    goroutine
+  - `currentConfig` copies the struct but the slice header shares the backing
+    array; `mutableConfig` returns a `Clone()` and is now the only source for
+    the two handlers that edit a profile
+  - because the edit lives in the clone, `applyConfig` runs only after a
+    successful `SaveFile`, so a failed save leaves the running settings intact
+  - audited the other `currentConfig` callers: `persistFlag` and
+    `selectProfile` write only top-level scalar fields on their value copy, and
+    `cfgForDisk` already clones; no other shared-array writes exist outside
+    `config`/`ui`
+- Results:
+  | Check | Result |
+  |---|---|
+  | HEAD: failed save after `storeAuthChoice` | `auth_type = auth/psw` in memory; repro failed |
+  | HEAD: handler vs concurrent `Active()` | `WARNING: DATA RACE` |
+  | After: both tests | pass, race-clean |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
+- Files created/modified: `main.go`, `prompt.go`, `prompt_test.go`, planning
+  files
+- Next: P1-12/P1-16 (stale auth methods across a gateway edit, the hide epoch).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)
@@ -976,8 +1006,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4…P1-9 landed; Phase 16 `pacman -U` still awaits sudo |
-| Where am I going? | Scheduled queue: P1-10 → P1-12/P1-16 → P1-13/P1-14 → P1-15 → P1-17 (packet-stack restore confirmation, fork + pin) → itemised P2 batch → verification; Phase 8 (dae) last |
+| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4…P1-10 landed; Phase 16 `pacman -U` still awaits sudo |
+| Where am I going? | Scheduled queue: P1-12/P1-16 → P1-13/P1-14 → P1-15 → P1-17 (packet-stack restore confirmation, fork + pin) → itemised P2 batch → verification; Phase 8 (dae) last |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |

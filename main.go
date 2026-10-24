@@ -1088,6 +1088,15 @@ func (a *app) currentConfig() config.Config {
 	return a.cfg
 }
 
+// mutableConfig returns a private copy of the settings for a handler that edits
+// a profile. currentConfig copies the struct but shares the Profiles array with
+// the live configuration: writing a field through that copy would race with a
+// login reading Active() on another goroutine, and the edit would survive a
+// failed save.
+func (a *app) mutableConfig() config.Config {
+	return a.currentConfig().Clone()
+}
+
 // cfgForDisk clears a password the user chose not to store. The in-memory
 // configuration keeps it for this run.
 func cfgForDisk(cfg config.Config) config.Config {

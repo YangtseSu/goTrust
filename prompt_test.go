@@ -12,6 +12,7 @@ import (
 	"image/png"
 	"io"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -564,4 +565,50 @@ func TestChooseAuthHonoursTheContext(t *testing.T) {
 		defer testApp.mu.RUnlock()
 		return testApp.view.Choice == nil
 	})
+}
+
+// A prompt handler that cannot save must not leave its edit in memory. The
+// settings file is the contract; a half-applied configuration would send the
+// next login down a path the file does not describe.
+func TestAFailedPromptSaveLeavesTheSettingsAlone(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	testApp := promptTestApp()
+	testApp.cfg = config.Default()
+	testApp.configPath = filepath.Join(blocker, "config.toml")
+
+	testApp.storeAuthChoice(session.AuthMethod{Type: "auth/psw", Domain: "local"})
+	if got := testApp.currentConfig().Active().Auth.AuthType; got != "" {
+		t.Fatalf("auth type = %q after a failed save, want it untouched", got)
+	}
+
+	testApp.storeTOTPSecret("JBSWY3DPEHPK3PXP")
+	if got := testApp.currentConfig().Active().Auth.TOTPSecret; got != "" {
+		t.Fatalf("TOTP secret = %q after a failed save, want it untouched", got)
+	}
+}
+
+// currentConfig copies the struct but not the Profiles array. A handler that
+// edited that copy in place raced a login reading Active() on another
+// goroutine; with -race this test is the regression.
+func TestPromptHandlersDoNotWriteTheLiveConfig(t *testing.T) {
+	testApp := promptTestApp()
+	testApp.cfg = config.Default()
+	testApp.configPath = filepath.Join(t.TempDir(), "config.toml")
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 200 {
+			_ = testApp.currentConfig().Active()
+		}
+	}()
+
+	for range 200 {
+		testApp.storeAuthChoice(session.AuthMethod{Type: "auth/psw", Domain: "local"})
+	}
+	<-done
 }

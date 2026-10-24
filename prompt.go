@@ -316,7 +316,7 @@ func (a *app) cancelCode(cause error) {
 // already holds the password with owner-only permissions, so the secret goes
 // to the same place and only after the user ticked the box.
 func (a *app) storeTOTPSecret(secret string) {
-	cfg := a.currentConfig()
+	cfg := a.mutableConfig()
 	index := cfg.ActiveIndex()
 	if index < 0 {
 		return
@@ -489,7 +489,7 @@ func (a *app) cancelChoice(cause error) {
 // storeAuthChoice pins the chosen pair in the active profile, so a later login
 // does not ask again.
 func (a *app) storeAuthChoice(method session.AuthMethod) {
-	cfg := a.currentConfig()
+	cfg := a.mutableConfig()
 	index := cfg.ActiveIndex()
 	if index < 0 {
 		return
