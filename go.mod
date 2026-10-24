@@ -54,3 +54,5 @@ require (
 // Upstream main lacks the aTrust session-lifecycle and keep-alive fixes this
 // app depends on; the fork's dev branch carries them and its CI is green.
 replace github.com/mythologyli/zju-connect => github.com/YangtseSu/zju-connect v1.3.2-0.20261024152456-347753428ab2
+
+tool github.com/egoist/mygo/cmd/mygo
