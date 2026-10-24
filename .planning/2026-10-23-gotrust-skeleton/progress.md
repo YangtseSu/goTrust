@@ -716,6 +716,34 @@
   - no source files
 - Next: P0-3 + P1-11 in one change with regression tests, then P0-2, then P0-1.
 
+### Phase 17: settings delete panic and buffer alignment (P0-3, P1-11)
+
+- **Status:** done (one commit); P0-2 and P0-1 remain
+- Actions taken:
+  - wrote three failing tests first, driving 新建/复制/删除 through
+    `SettingsView` with the real state and the real callbacks: the mid-frame
+    delete panicked with `index out of range [1] with length 1`, a middle
+    delete left C with B's port `8443`, and a copy showed B's stored targets
+    instead of the edited ones
+  - `SettingsState.selection()` re-resolves the index and profile after
+    refresh; `SettingsView` calls it again after `profileSection`, so the rest
+    of the frame never indexes a profile the buttons just removed
+  - `DeleteProfile` splices both positional buffers at the deleted index
+    before refreshing, instead of truncating the tail onto its neighbour
+  - `DuplicateProfile` writes the editor's port and target text onto the
+    appended copy, so the copy matches what the user sees
+- Results:
+  | Check | Result |
+  |---|---|
+  | `go test ./ui` before the fix | panic, 8443 on C, wrong copy targets |
+  | `go test ./ui` after the fix | pass |
+  | `go build ./...`, `go vet ./...`, `gofmt -l .` | clean |
+  | `go test ./...`, `go test -race ./ui` | pass |
+  | Settings view frame after delete | renders the status line, no panic |
+- Files created/modified: `ui/settings.go`, `ui/settings_test.go`, planning
+  files
+- Next: P0-2 (release proxy listeners on session failure), then P0-1.
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)

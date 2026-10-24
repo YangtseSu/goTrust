@@ -12,10 +12,9 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: fix P0-3 (settings delete panics mid-frame) and P1-11 (buffer
-misalignment) together with regression tests, then P0-2 (proxy lifetime) and
-P0-1 (UI deadlock). Phase 16's `pacman -U` install still needs the operator's
-sudo password; Phase 8 (dae export) stays deferred.
+Phase 17: P0-3 + P1-11 are fixed with regression tests; next is P0-2 (proxy
+lifetime), then P0-1 (UI deadlock). Phase 16's `pacman -U` install still needs
+the operator's sudo password; Phase 8 (dae export) stays deferred.
 
 ## Current Phase
 
@@ -345,9 +344,10 @@ cross-cutting). Evidence, reproductions and upstream references are in
 Fix order is deliberate; each batch is one commit and starts from a failing
 test that reproduces the defect.
 
-- [ ] P0-3 + P1-11, settings window: deleting the selected profile panics
+- [x] P0-3 + P1-11, settings window: deleting the selected profile panics
       mid-frame, and deleting a middle profile shifts Ports/Targets onto the
-      next account
+      next account. The frame re-reads the selection after the profile buttons,
+      and the positional buffers are spliced on delete and carried into a copy
 - [ ] P0-2, proxy lifetime: close the old listeners before binding; a failed
       session must not leave ports held so manual reconnect can never work
 - [ ] P0-1, UI deadlock: never join `Manager.Logout` from the UI thread while

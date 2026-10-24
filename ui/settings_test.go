@@ -378,3 +378,132 @@ func TestSettingsReloadKeepsMethodsForTheSameGateway(t *testing.T) {
 		t.Fatalf("methods survived a gateway change: %+v", state.Methods)
 	}
 }
+
+// settingsActionsFor wires the callbacks the way main.go does, so the tests
+// drive the real state through the real buttons.
+func settingsActionsFor(state *SettingsState) SettingsActions {
+	return SettingsActions{
+		NewProfile:       func() { state.AddProfile() },
+		DuplicateProfile: func() { state.DuplicateProfile() },
+		DeleteProfile:    func() { state.DeleteProfile() },
+		SelectProfile:    func(index int) { state.Select(index) },
+		SelectAuth:       func(index int) { state.SelectAuth(index) },
+	}
+}
+
+// Deleting the selected profile shrinks the draft from inside the frame. The
+// rest of that frame must not index the profile that disappeared: the old
+// code read Ports[1] after 新建 → 删除 and panicked on the GTK main thread.
+func TestSettingsViewDeletesTheSelectedProfileWithoutAPanic(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	tester := ui.NewTester(SettingsView(state, settingsActionsFor(state)), 560, 1600)
+
+	if err := tester.Click("新建"); err != nil {
+		t.Fatalf("click new: %v", err)
+	}
+	if len(state.Draft.Profiles) != 2 || state.Selected != 1 {
+		t.Fatalf("profiles = %v selected = %d", state.Draft.ProfileNames(), state.Selected)
+	}
+
+	if err := tester.Click("删除"); err != nil {
+		t.Fatalf("click delete: %v", err)
+	}
+	if names := state.Draft.ProfileNames(); len(names) != 1 || names[0] != config.DefaultProfileName {
+		t.Fatalf("profiles = %v", names)
+	}
+	if state.Selected != 0 {
+		t.Fatalf("selected = %d", state.Selected)
+	}
+	if len(state.Ports) != 1 || len(state.Targets) != 1 {
+		t.Fatalf("buffers after delete: ports=%d targets=%d", len(state.Ports), len(state.Targets))
+	}
+
+	tester.Frame()
+	if !tester.HasText("已删除配置；保存后生效") {
+		t.Fatalf("the status line did not survive; texts: %v", tester.Texts())
+	}
+}
+
+// Ports and keep-alive targets live in buffers indexed like Draft.Profiles.
+// Deleting a middle profile has to drop that profile's buffers, not merely
+// truncate the end: 默认/B(8443)/C(9443) minus B must leave C holding 9443.
+func TestSettingsDeleteKeepsPortsAndTargetsOnTheirProfile(t *testing.T) {
+	state := threeProfileState(t)
+	state.Select(state.Draft.ProfileIndex("B"))
+	state.Ports[state.Selected] = "8443"
+	state.Targets[state.Selected] = "http://192.0.2.20/"
+
+	tester := ui.NewTester(SettingsView(state, settingsActionsFor(state)), 560, 1600)
+	if err := tester.Click("删除"); err != nil {
+		t.Fatalf("click delete: %v", err)
+	}
+
+	if names := state.Draft.ProfileNames(); len(names) != 2 || names[0] != config.DefaultProfileName || names[1] != "C" {
+		t.Fatalf("profiles = %v", names)
+	}
+	if state.Selected != 1 {
+		t.Fatalf("selected = %d", state.Selected)
+	}
+	if state.Ports[1] != "9443" {
+		t.Fatalf("C's port buffer = %q, want 9443", state.Ports[1])
+	}
+	if state.Targets[1] != "http://192.0.2.31/" {
+		t.Fatalf("C's targets buffer = %q", state.Targets[1])
+	}
+
+	cfg, err := state.Apply()
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	profile := cfg.Active()
+	if profile.Name != "C" || profile.Server.Port != 9443 {
+		t.Fatalf("active = %q port = %d", profile.Name, profile.Server.Port)
+	}
+	if len(profile.Keep.Targets) != 1 || profile.Keep.Targets[0] != "http://192.0.2.31/" {
+		t.Fatalf("active targets = %v", profile.Keep.Targets)
+	}
+}
+
+// 复制 copies what the editor shows, including the unsaved port and targets,
+// and leaves the other profiles' buffers where they were.
+func TestSettingsDuplicateCopiesTheEditedBuffers(t *testing.T) {
+	state := threeProfileState(t)
+	state.Select(state.Draft.ProfileIndex("B"))
+	state.Ports[state.Selected] = "8450"
+	state.Targets[state.Selected] = "http://192.0.2.20/"
+
+	state.DuplicateProfile()
+
+	copied := state.Draft.ProfileIndex("B 副本")
+	if copied < 0 {
+		t.Fatalf("profiles = %v", state.Draft.ProfileNames())
+	}
+	if state.Selected != copied {
+		t.Fatalf("selected = %d, copy = %d", state.Selected, copied)
+	}
+	if state.Ports[copied] != "8450" || state.Targets[copied] != "http://192.0.2.20/" {
+		t.Fatalf("copy buffers = %q %q", state.Ports[copied], state.Targets[copied])
+	}
+	if state.Ports[2] != "9443" || state.Targets[2] != "http://192.0.2.31/" {
+		t.Fatalf("C was disturbed: %q %q", state.Ports[2], state.Targets[2])
+	}
+}
+
+// threeProfileState is 默认/B(8443)/C(9443) with distinct keep-alive targets.
+func threeProfileState(t *testing.T) *SettingsState {
+	t.Helper()
+	cfg := config.Default()
+	if _, err := cfg.AddProfile("B"); err != nil {
+		t.Fatalf("add B: %v", err)
+	}
+	if _, err := cfg.AddProfile("C"); err != nil {
+		t.Fatalf("add C: %v", err)
+	}
+	b := cfg.ProfileIndex("B")
+	cfg.Profiles[b].Server.Port = 8443
+	cfg.Profiles[b].Keep.Targets = []string{"http://192.0.2.21/"}
+	c := cfg.ProfileIndex("C")
+	cfg.Profiles[c].Server.Port = 9443
+	cfg.Profiles[c].Keep.Targets = []string{"http://192.0.2.31/"}
+	return NewSettingsState(cfg, "/tmp/logs")
+}

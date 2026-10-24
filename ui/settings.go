@@ -100,6 +100,17 @@ func (s *SettingsState) refresh() {
 	s.Targets = s.Targets[:len(s.Draft.Profiles)]
 }
 
+// selection returns the index and the profile the editor shows, or nil after
+// refresh when nothing is selectable. A frame reads it again after a profile
+// button ran, because 新建/复制/删除 change the list from inside that frame.
+func (s *SettingsState) selection() (int, *config.Profile) {
+	s.refresh()
+	if s.Selected < 0 || s.Selected >= len(s.Draft.Profiles) {
+		return -1, nil
+	}
+	return s.Selected, &s.Draft.Profiles[s.Selected]
+}
+
 // Reload resets the draft from cfg, after a save or a tray-driven profile
 // switch.
 func (s *SettingsState) Reload(cfg config.Config) {
@@ -237,18 +248,28 @@ func (s *SettingsState) AddProfile() {
 // DuplicateProfile copies the selected profile.
 func (s *SettingsState) DuplicateProfile() {
 	s.refresh()
-	source := s.Draft.Profiles[s.Selected]
+	index := s.Selected
+	source := s.Draft.Profiles[index]
+	// The copy shows what the editor shows; the draft's stored port and
+	// targets can be older than the text fields. DuplicateProfile appends it,
+	// so its buffers are written at the end after refresh.
+	port, targets := s.Ports[index], s.Targets[index]
 	name := source.Name + " 副本"
 	for suffix := 2; s.Draft.ProfileIndex(name) >= 0; suffix++ {
 		name = fmt.Sprintf("%s 副本 %d", source.Name, suffix)
 	}
-	if _, err := s.Draft.DuplicateProfile(s.Selected, name); err != nil {
+	if _, err := s.Draft.DuplicateProfile(index, name); err != nil {
 		s.Status = err.Error()
 		s.StatusError = true
 		return
 	}
 	s.refresh()
-	s.Select(s.Draft.ProfileIndex(name))
+	copied := s.Draft.ProfileIndex(name)
+	if copied >= 0 && copied < len(s.Ports) {
+		s.Ports[copied] = port
+		s.Targets[copied] = targets
+	}
+	s.Select(copied)
 	s.Status = "已复制为 " + name + "；保存后生效"
 	s.StatusError = false
 }
@@ -256,11 +277,16 @@ func (s *SettingsState) DuplicateProfile() {
 // DeleteProfile removes the selected profile, unless it is the last one.
 func (s *SettingsState) DeleteProfile() {
 	s.refresh()
-	if err := s.Draft.DeleteProfile(s.Selected); err != nil {
+	index := s.Selected
+	if err := s.Draft.DeleteProfile(index); err != nil {
 		s.Status = err.Error()
 		s.StatusError = true
 		return
 	}
+	// The buffers are positional: truncating them would hand the deleted
+	// profile's port and targets to the profile that moved up.
+	s.Ports = append(s.Ports[:index], s.Ports[index+1:]...)
+	s.Targets = append(s.Targets[:index], s.Targets[index+1:]...)
 	s.refresh()
 	active := s.Draft.ActiveIndex()
 	if active < 0 {
@@ -347,12 +373,11 @@ func splitTargets(text string) []string {
 func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Context) {
 	return func(c *ui.Context) {
 		state.refresh()
-		index := state.Selected
-		if index < 0 || index >= len(state.Draft.Profiles) {
+		index, profile := state.selection()
+		if profile == nil {
 			ui.Text(c, "没有可用的配置").FontSize(13)
 			return
 		}
-		profile := &state.Draft.Profiles[index]
 		names := state.Draft.ProfileNames()
 		active := state.ActiveAtOpen
 		enabled := profile.Keep.IsEnabled()
@@ -370,6 +395,15 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 				ui.Column(c).Gap(sectionGap).Children(func() {
 					ui.Form(c, func() {
 						profileSection(c, state, actions, names)
+						// 新建/复制/删除 change the list and the selection
+						// from inside this frame. Re-read them before the
+						// sections that index the profile buffers, or the
+						// rest of the frame works on a profile that is gone.
+						index, profile = state.selection()
+						if profile == nil {
+							return
+						}
+						enabled = profile.Keep.IsEnabled()
 						connectionSection(c, state, actions, profile, index)
 						proxySection(c, state)
 						keepAliveSection(c, state, profile, &enabled, index)
