@@ -14,3 +14,7 @@
 .idea/
 .vscode/
 *.swp
+
+# local agent tooling: installed skills and their lockfile
+.agents/
+skills-lock.json
