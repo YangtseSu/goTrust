@@ -12,18 +12,18 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 19 (password change, full) and Phase 20 (keyring, backend decided at
-execution). Research for all three is in `findings.md`. Phase 17 is closed
-apart from the manual expiry→reconnect case; a live 断开 exposed a fatal
-packet-stack panic, fixed in one commit (package `r44`).
+Phase 19 (password change, full) landed without live expiry evidence; Phase 19
+backend decided at execution) remain. Research for all three is in
+`findings.md`. Phase 17 is closed apart from the manual expiry→reconnect case;
+a live 断开 exposed a fatal packet-stack panic, fixed in one commit (package
+`r44`).
 
 ## Current Phase
 
-Phase 19 is planned, not started: the `[identity]` config section, the
-per-install device id, and the fork's endpoint environment are itemised below.
-Phase 17 is complete apart from the manual expiry→reconnect case, Phase 16 is
-closed, Phase 8 (dae export) stays deferred, and Phase 18's double-click waits
-on mygo.
+Phase 19 is complete apart from the live 90-day expiry test. Phase 19 is
+planned, not started. Phase 17 is complete apart from the manual
+expiry→reconnect case, Phase 16 is closed, Phase 8 (dae export) stays deferred,
+and Phase 18's double-click waits on mygo.
 
 ## Phases
 
@@ -486,26 +486,47 @@ test except where noted):
 Done completely, live-tested when the gateway first forces it (the 90-day
 policy). Endpoints and the signal are in `findings.md`.
 
-- [ ] Fork: typed signal for `next-step:"forced-change"`
+- [x] Fork: typed signal for `next-step:"forced-change"`
       (`change-code`, `change message`, `policy-object`, `username`,
       `domain`, `pwdRulePrompt`), `Session.ChangePassword(ctx, old, new)` over
-      `POST forced-change` (form-urlencoded),
-      `Session.SkipPasswordChange(ctx)` (`skip:true`, `remainedSkipTimes`), and
-      `Session.PasswordStrategy(ctx)` over `portal/user/policy-object`
-- [ ] Panel in the login flow: old password, new password twice, rules rendered
+      `POST reset-path`,
+      `Session.SkipPasswordChange(ctx)` (`skip:true`, `remainedSkipTimes`), the
+      forced change over `POST forced-change`
+      (form-urlencoded), `Session.PasswordStrategy(ctx)` over
+      `portal/user/policy-object`, and `Session.CheckWeakPassword` over
+      `portal/public/policy-probe`. `LoginOptions.PasswordChangeHandler`
+      answers the demand inside the login chain (the reset form's shape:
+      `oldPassword`/`newPassword`, optional `account-field`, `skip`), a nil
+      handler yields `*PasswordChangeRequiredError`, and the chain continues
+      after the change
+- [x] Panel in the login flow: old password, new password twice, rules rendered
       from `policy-object`, the account field for `75500402`, 跳过 when
       `75500404`, `pwdRulePrompt` text; wired like the code/captcha prompts and
       released by 断开/cancel
-- [ ] Voluntary reset while online: `POST reset-path`
+- [x] Voluntary reset while online: `POST reset-path`
       (`{oldPassword,newPassword}`) from the settings window, policy
-      check via `portal/public/policy-probe`
-- [ ] After success: rewrite the stored credential (config today, keyring after
-      Phase 20) and continue or re-login; the portal is expected to end other
-      terminals' sessions
-- [ ] Tests: typed signal parsing, panel validation and cancel, skip, stored
-      credential updated, headless refusal is clear
+      check via `portal/public/policy-probe`; only the profile that owns the
+      live session is offered
+- [x] After success: rewrite the stored credential (config today, keyring after
+      Phase 20) and continue; the portal is expected to end other terminals'
+      sessions. A forced change continues the same login; the online reset keeps
+      the tunnel and warns that other terminals must log in again
+- [x] Tests: typed signal parsing, form/JSON bodies and encryption, skip,
+      rules/violations, panel validation and cancel, stored credential updated,
+      headless refusal is clear
 - [ ] Live test with the real 90-day expiry (operator); until then the panel is
       exercised with the bundle's shapes only
+- **Status:** complete apart from the live expiry check
+- **Note:** the reset form uses these shapes: `forced-change` is form-urlencoded
+  with RSA-encrypted
+  `oldPassword`/`newPassword` (no anti-replay suffix) and optional
+  `account-field`/`skip=true`; `reset-path` is JSON with the same pair;
+  `policy-probe` takes `{password}`; `policy-object` returns the rule object. The
+  voluntary entry is 设置 → 连接 → 密码安全 → 重置密码 and its panel follows the
+  重置密码 dialog (旧密码/新密码/确认密码,
+  密码规则, 确定/取消, the "其他终端已在线账号需重新登录" note). The panel was
+  rendered through `ui.NewTester` (light) and the forced-flow real-window smoke
+  waits on a gateway that demands the change.
 
 ### Phase 20: Keyring credential storage (second; backend chosen at execution)
 

@@ -201,6 +201,27 @@ covered by unit tests only. The primary method must be password, CAS or OAuth2;
 a gateway whose only method is a primary SMS login is not supported because
 goTrust does not collect a phone number.
 
+## Resetting the password
+
+A gateway with a password policy (the common 90-day expiry, and the first login
+after an administrator set one) makes the login stop instead of finishing: the
+window shows a 重置密码 panel with the gateway's message, the account, the
+gateway's rule list and its own prompt. 旧密码, 新密码 and 确认密码 are required;
+a gateway that also asks for a new account name adds that field, and one that
+allows postponing the change adds 跳过本次修改. 取消 abandons the login like any
+other prompt.
+
+The rules the client can evaluate (length, character classes, the account name,
+repeated characters) are checked before the panel closes, so a typo does not
+cost a login attempt; the rest are the portal's to answer. The new password is
+encrypted the same way as the login password and travels through the session the
+login already opened. After the gateway accepts the change, the new password is
+written into the profile (the settings file is 0600; with 保存密码 off it stays
+in memory only) and the login continues in the same session.
+
+While online, 设置 → 连接 → 密码安全 → 重置密码 opens the
+重置密码 dialog: 旧密码, 新密码, 确认密码, the 密码规则 list, and 确定/取消.
+
 ## Tray and startup
 
 The tray menu shows a disabled status line (`已连接 203.0.113.4`, `连接中`,

@@ -716,3 +716,50 @@ that would need a call is marked [[INFERENCE]] or "missing".
   path, the rule rendering, and the voluntary `reset-path` reset; the
   live 90-day test waits until the gateway triggers it.
 
+
+### Verified password request shapes (Phase 19, 2026-10-24)
+
+The reset flow uses these request shapes:
+
+- **Forced reset page** fields: `oldPassword`, `newPwd`, `confirmPwd`, plus
+  `account-field` when `change-code` is `75500402` (also shown when the change
+  may be skipped, `75500404`). It hides the rule list for a non-local `domain`
+  unless `pwdRulePrompt` is present.
+- **Submit**: `POST forced-change`,
+  `Content-Type: application/x-www-form-urlencoded`, body
+  `oldPassword=<rsa>&newPassword=<rsa>[&account-field=<name>]`. The page encrypts
+  both with `sa()` (`RSA RSA`, hex, 245-char chunks) and **does not
+  append the anti-replay nonce** the login password uses.
+- **Skip**: same endpoint, body `skip=true`; the answer's
+  `data.remainedSkipTimes` feeds "剩余跳过机会 N 次".
+- **Voluntary reset**: `POST reset-path`, JSON
+  `{oldPassword:<rsa>,newPassword:<rsa>}` (the reset form adds no
+  `account-field`); the note is "密码重置后，其他终端已在线账号需重新登录".
+- **Weak password**: `POST
+  portal/public/policy-probe`, JSON `{password:<plaintext>}`; the form treats
+  `code == 0` as acceptable and a non-zero code with `validate == false` as
+  "密码不能属于弱密码库".
+- **Rules**: `GET portal/user/policy-object` returns `{code,
+  data:{enablePswLength:{enable,value}, enablePswCombination:{enable,
+  value:{enableAllLetter, enableUpperAndLowerLetter, enableNumber,
+  enableSpecialLetter}}, enablePswNotContainName, enablePswNotEqualHistory:
+  {enable,value}, notContainContChar:{enable,value}, notContainKeyboardContChar:
+  {enable,value}, notBelongToWeakDb, effectiveTime, enablePswExpire,
+  changeFirstLogin, changeMangerResetPwd}}`. The default object the voluntary
+  page uses is `{changeFirstLogin:"1", effectiveTime:"90", enablePswExpire:"1",
+  enablePswLength:{enable:true,value:"8"}, enablePswCombination:{enable:true,
+  value:{enableAllLetter:true,enableUpperAndLowerLetter:false,
+  enableNumber:true,enableSpecialLetter:true}}, enablePswNotContainName:true,
+  enablePswNotEqualHistory:{enable:true,value:"3"},
+  notContainContChar:{enable:true,value:"3"},
+  notContainKeyboardContChar:{enable:true,value:"3"}, notBelongToWeakDb:1,
+  changeMangerResetPwd:1}`.
+- **Repeated characters**: the rule regex is `(\w|\W)\1{n-1}`, i.e. value
+  `3` rejects `"aaa"` (exactly three repeats, not four).
+- **GoTrust implementation**: the fork answers the demand in place
+  (`auth.LoginOptions.PasswordChangeHandler`), continues the chain with the
+  answer's `next-step` (default `auth/auth-check`), and reports the new
+  password through `OnPasswordChanged` only after `code == 0`; the chain skips
+  `reportEnv` when the portal issued no ticket with the change. The voluntary
+  path is `Client.ChangePassword` / `PasswordStrategy` / `CheckWeakPassword`,
+  gated on the live session.

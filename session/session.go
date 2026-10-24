@@ -106,6 +106,15 @@ type Options struct {
 	// settings window that pins a method never asks. Nil fails the login with
 	// the list, which is what a headless run should do.
 	ChooseAuth func(ctx context.Context, methods []AuthMethod) (AuthMethod, error)
+	// ChangePassword answers the gateway's forced password change. Like Prompt
+	// it receives the login attempt's context, so 断开 releases the panel. Nil
+	// fails the login with the gateway's message instead of hanging on a
+	// question nobody can see.
+	ChangePassword func(ctx context.Context, challenge PasswordChangeChallenge) (PasswordChangeAnswer, error)
+	// OnPasswordChanged receives the profile name and the new password once the
+	// portal accepted a forced change, so the caller can replace the stored
+	// credential before the next login.
+	OnPasswordChanged func(profile, newPassword string)
 	// Logf receives progress lines. Nil discards them.
 	Logf func(format string, args ...any)
 	// ResourceCachePath is where the last granted resources are cached for
@@ -135,11 +144,15 @@ type Manager struct {
 	publishMu sync.Mutex
 	state     State
 	client    *atrust.Client
-	dialer    tunnelDialer
-	resolver  *resolve.Resolver
-	underlay  *underlay.Dialer
-	cancel    context.CancelFunc
-	login     sync.Mutex
+	// liveProfile is the profile the installed client logged in with, so a
+	// password change or a credential rewrite after a profile switch still
+	// lands on the account the portal acted on.
+	liveProfile string
+	dialer      tunnelDialer
+	resolver    *resolve.Resolver
+	underlay    *underlay.Dialer
+	cancel      context.CancelFunc
+	login       sync.Mutex
 
 	// challenge records that the login asked the user something during the
 	// current attempt, so the ladder stops instead of retrying blindly.
@@ -296,13 +309,30 @@ func (m *Manager) loginSession(ctx context.Context) error {
 		}
 	}
 
+	// A forced password change stops the reconnect ladder the same way a
+	// captcha does: it needs a person, so retrying blindly is wrong.
+	var passwordHandler auth.PasswordChangeHandler
+	if m.options.ChangePassword != nil {
+		answer := m.options.ChangePassword
+		passwordHandler = auth.PasswordChangeHandlerFunc(func(challenge auth.PasswordChangeChallenge) (auth.PasswordChangeResponse, error) {
+			m.challenge.Store(true)
+			return answer(ctx, challenge)
+		})
+	}
+
 	if _, err := client.SetupContext(ctx, atrust.SetupOptions{
-		ServerAddress:            profile.ServerAddress(),
-		ServerPort:               profile.Server.Port,
-		LoginMethod:              loginMethod,
-		TOTPSecret:               profile.Auth.TOTPSecret,
-		ClientData:               clientData,
-		ChallengeHandler:         prompt,
+		ServerAddress:         profile.ServerAddress(),
+		ServerPort:            profile.Server.Port,
+		LoginMethod:           loginMethod,
+		TOTPSecret:            profile.Auth.TOTPSecret,
+		ClientData:            clientData,
+		ChallengeHandler:      prompt,
+		PasswordChangeHandler: passwordHandler,
+		OnPasswordChanged: func(newPassword string) {
+			if m.options.OnPasswordChanged != nil {
+				m.options.OnPasswordChanged(profile.Name, newPassword)
+			}
+		},
 		BestNodesRefreshInterval: 5 * time.Minute,
 		SessionRefreshInterval:   60 * time.Second,
 		OnSessionState: func(state atrust.SessionState, reason string) {
@@ -313,6 +343,10 @@ func (m *Manager) loginSession(ctx context.Context) error {
 		},
 	}); err != nil {
 		client.Close()
+		var required *auth.PasswordChangeRequiredError
+		if errors.As(err, &required) {
+			return fail("log in", passwordChangeUnavailable(required))
+		}
 		return fail("log in", err)
 	}
 
@@ -362,6 +396,7 @@ func (m *Manager) loginSession(ctx context.Context) error {
 
 	m.mu.Lock()
 	m.client = client
+	m.liveProfile = profile.Name
 	m.resolver = resolver
 	m.underlay = underlayDialer
 	m.dialer = dial.NewDialer(vpnStack, resolver, ipResources, false, "")
@@ -430,6 +465,7 @@ func (m *Manager) teardown() {
 
 	m.cancel = nil
 	m.client = nil
+	m.liveProfile = ""
 	m.dialer = nil
 	m.resolver = nil
 	m.underlay = nil

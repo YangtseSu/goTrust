@@ -44,6 +44,12 @@ type choiceResult struct {
 	err    error
 }
 
+// passwordResult answers a forced password change.
+type passwordResult struct {
+	answer session.PasswordChangeAnswer
+	err    error
+}
+
 // uiPrompter renders the click captcha in the main window and waits for the
 // user. The context is the login attempt's: cancelling the login closes the
 // prompt instead of leaving a dialog nobody will answer.
@@ -311,6 +317,39 @@ func (a *app) cancelCode(cause error) {
 	a.invalidate()
 }
 
+// storeChangedPassword rewrites a profile's credential after the gateway
+// accepted a change. The next login needs it; a profile that does not store
+// passwords keeps it in memory only, exactly like a password typed into the
+// settings window.
+func (a *app) storeChangedPassword(profileName, newPassword string) {
+	cfg := a.mutableConfig()
+	index := cfg.ProfileIndex(profileName)
+	if index < 0 {
+		a.logf("changed password for unknown profile %q; not stored", profileName)
+		return
+	}
+	name := cfg.Profiles[index].Name
+	cfg.Profiles[index].Auth.Password = newPassword
+	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+		a.logf("save the changed password: %v", err)
+		a.setStatusError("保存新密码失败: " + err.Error())
+		return
+	}
+	a.applyConfig(cfg)
+
+	a.mu.Lock()
+	if state := a.settings; state != nil {
+		for profile := range state.Draft.Profiles {
+			if state.Draft.Profiles[profile].Name == name {
+				state.Draft.Profiles[profile].Auth.Password = newPassword
+			}
+		}
+	}
+	a.mu.Unlock()
+	a.invalidateSettings()
+	a.logf("stored the changed password for profile %s", name)
+}
+
 // storeTOTPSecret writes the secret into the active profile. The settings file
 // already holds the password with owner-only permissions, so the secret goes
 // to the same place and only after the user ticked the box. A profile that does
@@ -479,6 +518,110 @@ func (a *app) chooseAuthIndex(index int) {
 	reply <- choiceResult{method: method}
 }
 
+// changePasswordPrompt is session.Options.ChangePassword: it shows the
+// gateway's forced change and blocks the login goroutine until the window
+// answers or the attempt ends.
+func (a *app) changePasswordPrompt(ctx context.Context, challenge session.PasswordChangeChallenge) (session.PasswordChangeAnswer, error) {
+	reply := make(chan passwordResult, 1)
+	a.beginPassword(&gotrustui.PasswordPrompt{
+		Message:      challenge.Message,
+		Username:     challenge.Username,
+		Domain:       challenge.Domain,
+		Prompt:       challenge.Prompt,
+		ShowAccount:  challenge.ShowAccount,
+		CanSkip:      challenge.CanSkip,
+		CustomizePwd: challenge.CustomizePwd,
+		Strategy:     challenge.Strategy,
+	}, reply)
+	defer a.endPassword(reply)
+
+	select {
+	case result := <-reply:
+		return result.answer, result.err
+	case <-ctx.Done():
+		return session.PasswordChangeAnswer{}, ctx.Err()
+	}
+}
+
+func (a *app) beginPassword(prompt *gotrustui.PasswordPrompt, reply chan passwordResult) {
+	a.mu.Lock()
+	a.view.Password = prompt
+	a.password = reply
+	a.mu.Unlock()
+
+	a.setStatus("网关要求重置密码", false)
+	a.revealWindow()
+	a.invalidate()
+}
+
+func (a *app) endPassword(reply chan passwordResult) {
+	a.mu.Lock()
+	if a.password == reply {
+		a.password = nil
+		a.view.Password = nil
+	}
+	a.mu.Unlock()
+
+	a.invalidate()
+}
+
+// submitPassword answers the forced change. A skip is only sent when the
+// gateway offered it; otherwise the fields are validated before they leave the
+// window, so a typo does not cost a full login attempt.
+func (a *app) submitPassword() {
+	a.mu.Lock()
+	prompt := a.view.Password
+	reply := a.password
+	if prompt == nil || reply == nil {
+		a.mu.Unlock()
+		return
+	}
+	answer := session.PasswordChangeAnswer{
+		OldPassword: prompt.OldPassword,
+		NewPassword: prompt.NewPassword,
+		NewUserName: prompt.NewUserName,
+		Skip:        prompt.Skip && prompt.CanSkip,
+	}
+	copied := *prompt
+	a.mu.Unlock()
+
+	if !answer.Skip {
+		if err := copied.Validate(); err != nil {
+			a.setStatusError(err.Error())
+			return
+		}
+	}
+
+	a.mu.Lock()
+	if a.password == reply {
+		a.password = nil
+		a.view.Password = nil
+	}
+	a.mu.Unlock()
+
+	a.invalidate()
+	if answer.Skip {
+		a.setStatus("已跳过密码重置，正在登录…", true)
+		reply <- passwordResult{answer: answer}
+		return
+	}
+	a.setStatus("正在重置密码，随后完成登录…", true)
+	reply <- passwordResult{answer: answer}
+}
+
+func (a *app) cancelPassword(cause error) {
+	a.mu.Lock()
+	reply := a.password
+	a.password = nil
+	a.view.Password = nil
+	a.mu.Unlock()
+
+	if reply != nil {
+		reply <- passwordResult{err: cause}
+	}
+	a.invalidate()
+}
+
 func (a *app) cancelChoice(cause error) {
 	a.mu.Lock()
 	reply := a.choice
@@ -517,6 +660,7 @@ func (a *app) cancelPrompts(cause error) {
 	a.cancelCode(cause)
 	a.cancelExternal(cause)
 	a.cancelChoice(cause)
+	a.cancelPassword(cause)
 }
 
 // revealWindow brings the main window forward: a login started from the tray

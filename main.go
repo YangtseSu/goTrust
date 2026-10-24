@@ -103,15 +103,21 @@ func main() {
 		OnState:           application.onSessionState,
 		ResourceCachePath: config.ResourcesPath(path),
 	}
+	sessionOptions.OnPasswordChanged = application.storeChangedPassword
 	if *headless {
 		sessionOptions.Prompt = func(context.Context) session.Prompter {
 			return cliPrompter{}
+		}
+		sessionOptions.ChangePassword = func(context.Context, session.PasswordChangeChallenge) (session.PasswordChangeAnswer, error) {
+			return session.PasswordChangeAnswer{}, errors.New(
+				"the gateway requires a password change, which needs the window; leave --no-ui off and log in again")
 		}
 	} else {
 		sessionOptions.Prompt = func(ctx context.Context) session.Prompter {
 			return &uiPrompter{app: application, ctx: ctx}
 		}
 		sessionOptions.ChooseAuth = application.chooseAuth
+		sessionOptions.ChangePassword = application.changePasswordPrompt
 	}
 	application.manager = session.New(sessionOptions)
 
@@ -164,6 +170,7 @@ type app struct {
 	code     chan codeResult
 	external chan externalResult
 	choice   chan choiceResult
+	password chan passwordResult
 	// browser opens a URL; nil uses the desktop's default browser. Tests
 	// replace it because opening a browser is a visible side effect.
 	browser func(string) error
@@ -367,8 +374,10 @@ func (a *app) openSettings() {
 }
 
 func (a *app) resetSettingsDraft() {
+	online := a.manager != nil && a.manager.State().Phase == session.PhaseOnline
 	a.mu.Lock()
 	a.settings = gotrustui.NewSettingsState(a.cfg, a.logDir)
+	a.settings.Online = online
 	a.mu.Unlock()
 }
 
@@ -416,6 +425,8 @@ func (a *app) actions() gotrustui.Actions {
 		CancelExternal: func() { a.cancelExternal(errors.New("external login cancelled")) },
 		ChooseAuth:     a.chooseAuthIndex,
 		CancelChoice:   func() { a.cancelChoice(errors.New("authentication method cancelled")) },
+		SubmitPassword: a.submitPassword,
+		CancelPassword: func() { a.cancelPassword(errors.New("password change cancelled")) },
 
 		OpenResource: a.openResource,
 		CopyResource: a.copyResource,
@@ -484,7 +495,144 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 		SelectAuth: func(index int) {
 			mutate(func(state *gotrustui.SettingsState) { state.SelectAuth(index) })
 		},
+		OpenPassword:   a.openSettingsPassword,
+		SubmitPassword: a.submitSettingsPassword,
+		CancelPassword: a.cancelSettingsPassword,
 	}
+}
+
+// openSettingsPassword opens the voluntary change panel and loads the policy
+// from the live session. A policy that cannot be read still leaves the form
+// usable: the portal re-checks every rule when the change is sent.
+func (a *app) openSettingsPassword() {
+	a.mu.Lock()
+	state := a.settings
+	if state == nil || !state.CanChangePassword() {
+		a.mu.Unlock()
+		return
+	}
+	username := state.Draft.Active().Auth.Username
+	state.Password = &gotrustui.PasswordPrompt{Username: username}
+	state.PasswordBusy = true
+	state.PasswordStatus = "正在读取密码规则…"
+	state.PasswordError = false
+	a.mu.Unlock()
+	a.invalidateSettings()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		strategy, err := a.manager.PasswordStrategy(ctx)
+
+		a.mu.Lock()
+		if current := a.settings; current != nil && current.Password != nil {
+			current.PasswordBusy = false
+			if err != nil {
+				current.PasswordStatus = "读取密码规则失败: " + err.Error()
+				current.PasswordError = true
+			} else {
+				current.Password.Strategy = strategy
+				current.PasswordStatus = ""
+			}
+		}
+		a.mu.Unlock()
+		a.invalidateSettings()
+	}()
+}
+
+// cancelSettingsPassword returns to the sections. A change in flight cannot be
+// cancelled from the window: the portal has no cancel call, so the panel stays
+// busy until the answer arrives.
+func (a *app) cancelSettingsPassword() {
+	a.mu.Lock()
+	state := a.settings
+	if state == nil || state.PasswordBusy {
+		a.mu.Unlock()
+		return
+	}
+	state.Password = nil
+	state.PasswordStatus = ""
+	state.PasswordError = false
+	a.mu.Unlock()
+	a.invalidateSettings()
+}
+
+// submitSettingsPassword sends the voluntary change through the live session.
+// The weak-password answer is advisory: a database that cannot be reached is
+// logged and the change still goes to the portal, which is the authority.
+func (a *app) submitSettingsPassword() {
+	a.mu.Lock()
+	state := a.settings
+	if state == nil || state.Password == nil || state.PasswordBusy {
+		a.mu.Unlock()
+		return
+	}
+	answer := *state.Password
+	if err := (&answer).Validate(); err != nil {
+		state.PasswordStatus = err.Error()
+		state.PasswordError = true
+		a.mu.Unlock()
+		a.invalidateSettings()
+		return
+	}
+	state.PasswordBusy = true
+	state.PasswordStatus = "正在重置密码…"
+	state.PasswordError = false
+	a.mu.Unlock()
+	a.invalidateSettings()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		err := a.changePasswordOnline(ctx, answer.OldPassword, answer.NewPassword)
+
+		a.mu.Lock()
+		if current := a.settings; current != nil && current.Password != nil {
+			current.PasswordBusy = false
+			if err != nil {
+				current.PasswordStatus = "重置失败: " + err.Error()
+				current.PasswordError = true
+			} else {
+				current.Password = nil
+				current.Status = "密码重置成功，其他终端已在线账号需重新登录"
+				current.StatusError = false
+			}
+		}
+		a.mu.Unlock()
+		a.invalidateSettings()
+	}()
+}
+
+// changePasswordOnline checks the weak-password database, sends the change and
+// stores the new credential. The order matches the reset form: the weak
+// check is what the form runs before the submit.
+func (a *app) changePasswordOnline(ctx context.Context, oldPassword, newPassword string) error {
+	result, err := a.manager.CheckWeakPassword(ctx, newPassword)
+	switch {
+	case err != nil:
+		a.logf("weak-password check failed (%v); sending the change anyway", err)
+	case result.Code != 0 && !result.Validate:
+		message := result.Message
+		if message == "" {
+			message = "新密码属于常见弱密码"
+		}
+		return errors.New(message)
+	case result.Code != 0:
+		if result.Message != "" {
+			return errors.New(result.Message)
+		}
+		return fmt.Errorf("网关拒绝该密码（%d）", result.Code)
+	}
+
+	profile := a.manager.LiveProfile()
+	if profile == "" {
+		profile = a.currentConfig().ActiveProfile
+	}
+	if err := a.manager.ResetPassword(ctx, oldPassword, newPassword); err != nil {
+		return err
+	}
+	a.storeChangedPassword(profile, newPassword)
+	return nil
 }
 
 func (a *app) closeSettings() {
@@ -622,6 +770,13 @@ func (a *app) onSessionState(state session.State) {
 	if state.Phase == session.PhaseFailed && state.Attention && !stopping {
 		a.releaseProxy()
 	}
+
+	a.mu.Lock()
+	if a.settings != nil {
+		a.settings.Online = state.Phase == session.PhaseOnline
+	}
+	a.mu.Unlock()
+	a.invalidateSettings()
 
 	if window := a.window.Load(); window != nil {
 		window.Invalidate()

@@ -1467,19 +1467,72 @@
 - Next: file the upstream mygo issue/PR when the operator approves (draft in
   `findings.md`); Phase 17 P0 fixes remain the release blocker.
 
+### Phase 19: password change and forced reset
+
+- **Status:** complete apart from the live 90-day expiry test
+- Actions taken:
+  - the reset flow uses these request shapes
+    (recorded in `findings.md`) (recorded in `findings.md`): `forced-change` is
+    form-urlencoded with RSA `oldPassword`/`newPassword` and optional
+    `account-field`/`skip=true`; `reset-path` is JSON; `policy-probe` takes
+    the plaintext; the account field is required whenever the page shows it
+  - fork (`fcff928`, pushed to `YangtseSu/zju-connect` `dev`): the password
+    answer keeps the forced-change payload, `LoginOptions` gains
+    `PasswordChangeHandler` and `OnPasswordChanged`, and the chain answers
+    `forced-change` in place (change or skip), continuing with the answer's
+    `next-step` and skipping `reportEnv` only when the portal issued no
+    ticket. A nil handler yields `*PasswordChangeRequiredError`, and the
+    session outlives setup so `ChangePassword` can finish it. Added
+    `ResetPassword` (security endpoint), `PasswordStrategy`, `Rules`/
+    `Violations`, and `CheckWeakPassword`
+  - goTrust: `session.Options.ChangePassword`/`OnPasswordChanged`, the forced
+    panel in the login flow (message, account, rules, prompt, skip, cancel,
+    context release), the voluntary panel in the settings window (offered only
+    for the profile that owns the live session; weak check first), and
+    `storeChangedPassword` rewriting the profile credential (disk only when
+    `store_password` is on). The voluntary entry is labelled 重置密码 under
+    连接 → 密码安全 and its panel follows the reset dialog:
+    旧密码/新密码/确认密码, 密码规则, 确定/取消, and the
+    "密码重置后，其他终端已在线账号需重新登录" note
+  - `--no-ui` gets a clear refusal: the real binary against a fake gateway
+    reached the demand and exited with "the gateway requires a password
+    change, which needs the window"
+- Results:
+  | Check | Result |
+  |---|---|
+  | fork `go test ./...`, `go vet` | pass |
+  | `go test -race ./...` (goTrust, pinned `fcff928`) | pass |
+  | `reuse lint` | 52/52 compliant |
+  | Forced panel, rendered | `ui.NewTester` PNG (light), inspected |
+  | Forced panel, native | headless mutter + Xwayland, real GTK window, the gateway's message and fields visible |
+  | `--no-ui` refusal | real binary + fake gateway: clear message, exit 1 |
+  | Live 90-day expiry | not triggered; operator test pending |
+- Files created/modified:
+  - fork: `client/atrust/auth/password_change.go` (new),
+    `password_change_test.go` (new), `auth.go`, `psw.go`,
+    `client/atrust/client.go`
+  - goTrust: `session/password.go` (new), `session/password_test.go` (new),
+    `session/session.go`, `ui/password.go` (new), `ui/password_test.go` (new),
+    `ui/settings.go`, `ui/view.go`, `ui/render_test.go`, `prompt.go`,
+    `password_test.go` (new), `main.go`, `go.mod`, `go.sum`, `README.md`
+  - planning files
+- Next: live-test the forced change when the gateway first demands it;
+  Phase 20 (keyring) remains.
+
 ## Error Log
 
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
 | 2026-10-23 | `go get github.com/mythologyli/zju-connect@dev`: unknown revision | 1 | `main` is the default branch; used `replace` with a fork pseudo-version |
 | 2026-10-23 | pseudo-version `v1.3.1-0.20261020T02-…` rejected | 2 | timestamp needs 14 digits; stripped the separators first |
+| 2026-10-24 | `go mod tidy` on the fresh fork commit: goproxy.cn sumdb lookup 404 | 1 | a just-pushed pseudo-version is not in the checksum database; fetched it directly with `GOPRIVATE=github.com/YangtseSu/zju-connect GOSUMDB=off` and the hashes were computed locally |
 
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 17 is complete: every P0/P1/P2 item landed with a regression test, and the automated verification (race suite, `reuse lint`, real-binary lifecycle) is green |
-| Where am I going? | The native smoke now runs headlessly; only the expiry→reconnect case needs the real gateway. Phase 8 (dae) stays deferred and Phase 18's double-click waits on mygo. Phase 16 is closed: `gotrust-git` is installed |
+| Where am I? | Phase 19 is complete apart from the live expiry test: the fork answers the forced change and goTrust shows the panel, rewrites the credential and refuses clearly without a window; the race suite, `reuse lint` and the native panel smoke are green |
+| Where am I going? | The live 90-day expiry test waits on the gateway, keyring storage (Phase 20) is next. Phase 8 (dae) stays deferred and Phase 18's double-click waits on mygo. Phase 16 is closed: `gotrust-git` is installed |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
-| What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |
+| What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package, and the forced/voluntary password change; a full review with five reproduced defects, recorded as Phase 17 |

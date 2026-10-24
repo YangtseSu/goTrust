@@ -155,6 +155,20 @@ func TestRenderEveryState(t *testing.T) {
 			},
 		},
 		{
+			name: "main-password",
+			state: State{
+				Session: session.State{Phase: session.PhaseConnecting, Detail: "网关要求重置密码"},
+				Config:  cfg,
+				Password: &PasswordPrompt{
+					Message:  "密码已过期，请修改后继续登录",
+					Username: "alice",
+					Prompt:   "密码需包含至少两类字符",
+					CanSkip:  true,
+					Strategy: passwordTestStrategy(),
+				},
+			},
+		},
+		{
 			name: "main-choice",
 			state: State{
 				Session: session.State{Phase: session.PhaseConnecting, Detail: "选择认证方式"},
@@ -207,6 +221,28 @@ func TestRenderEveryState(t *testing.T) {
 	t.Run("settings-small", func(t *testing.T) {
 		state := NewSettingsState(cfg, "/home/user/.local/state/goTrust")
 		save("settings-small", ui.NewTester(SettingsView(state, SettingsActions{}), 560, 440))
+	})
+
+	t.Run("main-password-small", func(t *testing.T) {
+		state := State{
+			Session: session.State{Phase: session.PhaseConnecting, Detail: "网关要求重置密码"},
+			Config:  cfg,
+			Password: &PasswordPrompt{
+				Message:  "密码已过期，请修改后继续登录",
+				Username: "alice",
+				Prompt:   "密码需包含至少两类字符",
+				CanSkip:  true,
+				Strategy: passwordTestStrategy(),
+			},
+		}
+		save("main-password-small", ui.NewTester(View(&state, Actions{}), 440, 400))
+	})
+
+	t.Run("settings-password", func(t *testing.T) {
+		state := NewSettingsState(cfg, "/home/user/.local/state/goTrust")
+		state.Online = true
+		state.Password = &PasswordPrompt{Username: "alice", Strategy: passwordTestStrategy()}
+		save("settings-password", ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760))
 	})
 
 	t.Run("settings-dark", func(t *testing.T) {

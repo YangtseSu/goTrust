@@ -36,6 +36,16 @@ type SettingsState struct {
 	StatusError bool
 	LogDir      string
 	Busy        bool
+	// Online mirrors the live session: a voluntary password change goes through
+	// the portal session, so it needs a connected client.
+	Online bool
+	// Password is the voluntary change panel, nil while the sections show.
+	// PasswordBusy disables its buttons while the portal answers, and
+	// PasswordStatus reports the outcome inside the panel.
+	Password       *PasswordPrompt
+	PasswordBusy   bool
+	PasswordStatus string
+	PasswordError  bool
 	// Methods are the gateway's offered authentication methods, filled by 获取
 	// 认证方式. MethodsFrom is the gateway they belong to, so a reload or a
 	// profile switch only drops them when the target really changed.
@@ -97,6 +107,12 @@ type SettingsActions struct {
 	// methods; SelectAuth stores the chosen one in the draft.
 	DiscoverAuth func()
 	SelectAuth   func(int)
+	// OpenPassword opens the voluntary password panel; SubmitPassword sends
+	// the change through the live session; CancelPassword returns to the
+	// sections.
+	OpenPassword   func()
+	SubmitPassword func()
+	CancelPassword func()
 }
 
 // NewSettingsState copies cfg into an editable draft and selects the active
@@ -141,6 +157,24 @@ func (s *SettingsState) selection() (int, *config.Profile) {
 		return -1, nil
 	}
 	return s.Selected, &s.Draft.Profiles[s.Selected]
+}
+
+// CanChangePassword reports whether the editor's profile owns the live session:
+// the portal changes the password of the account it is logged in with, not of
+// whichever profile the draft shows.
+func (s *SettingsState) CanChangePassword() bool {
+	if !s.Online {
+		return false
+	}
+	profile := s.SelectedProfile()
+	return profile != nil && profile.Name == s.Draft.ActiveProfile
+}
+
+// SelectedProfile returns the profile the editor shows, or nil when nothing is
+// selectable.
+func (s *SettingsState) SelectedProfile() *config.Profile {
+	_, profile := s.selection()
+	return profile
 }
 
 // Reload resets the draft from cfg, after a save or a tray-driven profile
@@ -451,6 +485,20 @@ func splitTargets(text string) []string {
 func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Context) {
 	return func(c *ui.Context) {
 		state.refresh()
+		if state.Password != nil {
+			ui.Column(c).Fill().Padding(windowPadding).Gap(sectionGap).Children(func() {
+				ui.Scroll(c).Grow(1).Children(func() {
+					settingsPasswordPanel(c, state, actions)
+				})
+				ui.Divider(c)
+				ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
+					if ui.Button(c, "关闭").Disabled(state.PasswordBusy).Clicked() && actions.Close != nil {
+						actions.Close()
+					}
+				})
+			})
+			return
+		}
 		// A discovered list belongs to the gateway it was read from, and the
 		// gateway is edited in this window. Drop it as soon as the address or
 		// the port names something else, before the picker can store another
@@ -577,6 +625,18 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 		})
 		ui.Field(c, "密码", func() {
 			ui.TextInput(c, &profile.Auth.Password).Password()
+		})
+		ui.Field(c, "密码安全", func() {
+			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+				if ui.Button(c, "重置密码").Disabled(!state.CanChangePassword()).Clicked() && actions.OpenPassword != nil {
+					actions.OpenPassword()
+				}
+				if !state.Online {
+					caption(c, "连接后才能重置密码")
+				} else if !state.CanChangePassword() {
+					caption(c, "只有当前连接的配置可以重置密码")
+				}
+			})
 		})
 		ui.Field(c, "", func() {
 			ui.Checkbox(c, &profile.Auth.StorePass, "保存密码和 TOTP 密钥（文件权限 0600）")

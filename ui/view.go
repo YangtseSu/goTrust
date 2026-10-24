@@ -43,6 +43,8 @@ type State struct {
 	Code     *CodePrompt
 	External *ExternalLogin
 	Choice   *AuthChoice
+	// Password is the gateway's forced password change, shown in the same slot.
+	Password *PasswordPrompt
 }
 
 // Actions are what the window and the tray can ask the application to do.
@@ -73,6 +75,10 @@ type Actions struct {
 	// ChooseAuth picks one of the offered authentication methods by index.
 	ChooseAuth   func(int)
 	CancelChoice func()
+	// SubmitPassword answers the forced password change; CancelPassword
+	// abandons the login.
+	SubmitPassword func()
+	CancelPassword func()
 	// OpenResource opens a granted resource's suggested URL in the browser;
 	// CopyResource puts an entry's copy value on the clipboard.
 	OpenResource func(string)
@@ -93,6 +99,8 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 				codePanel(c, state, actions)
 			case state.External != nil:
 				externalPanel(c, state, actions)
+			case state.Password != nil:
+				passwordPanel(c, state, actions)
 			default:
 				controls(c, state, actions)
 				resources(c, state, actions)
