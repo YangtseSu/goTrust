@@ -182,6 +182,25 @@ func TestWriteClientDataCreatesAPrivateDirectory(t *testing.T) {
 	if err != nil || string(raw) != `{"sid":"x"}` {
 		t.Fatalf("data = %q, %v", raw, err)
 	}
+
+	// The write goes through a temporary file: nothing may be left behind.
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatalf("read the directory: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.Name() != filepath.Base(path) {
+			t.Fatalf("leftover file after the write: %s", entry.Name())
+		}
+	}
+
+	// A rewrite replaces the file instead of truncating the ticket in place.
+	if err := writeClientData(path, []byte(`{"sid":"y"}`)); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	if raw, err := os.ReadFile(path); err != nil || string(raw) != `{"sid":"y"}` {
+		t.Fatalf("rewritten data = %q, %v", raw, err)
+	}
 }
 
 // stubClient is the part of the upstream client the data-path choice reads. A

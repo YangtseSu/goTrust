@@ -131,7 +131,8 @@ only once the settings are saved.
 
 A JSON `config.json` from the unreleased v1 layout is ignored; there is no
 migration path. Delete it if it is still present. A file whose `version` is
-newer than the build is refused rather than rewritten.
+newer than the build is refused rather than rewritten, and a key this build does
+not know is refused too: a typo must not silently fall back to a default.
 
 ## Settings window
 

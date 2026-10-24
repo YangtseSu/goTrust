@@ -1208,6 +1208,51 @@
 - Next: P2 persistence (atomic client data, `Sync` on config and cache
   writes, unknown TOML keys, slug collisions).
 
+### Phase 17: durable settings, strict parsing and unique client-data names (P2)
+
+- **Status:** done (one commit); the rest of the P2 batch remains
+- Actions taken:
+  - wrote the observable checks first and ran them in a throwaway worktree:
+    `LoadFile` silently accepted `proxy.typo_bind`, and `Work` and `work`
+    resolved to the same path once case is folded
+  - `writeClientData` now writes a 0600 temporary file beside the target,
+    `Sync`s it and renames it over the ticket; the old `os.WriteFile` truncated
+    in place, so a crash could leave half a ticket that the next login would
+    read as account material. The final `Chmod` is unnecessary now: the rename
+    brings the temporary file's mode with it
+  - `SaveFile` and `WriteResourceCache` `Sync` before the rename as well; both
+    already used temp+rename
+  - `LoadFile` switches to `toml.Decode` and refuses any `MetaData.Undecoded()`
+    key, naming it (`proxy.typo_bind`); a newer `version` was already refused
+  - `profileSlug`: an uppercase letter marks the stem as rewritten, so the file
+    name carries the existing FNV suffix. `Work` and `work` now differ on a
+    case-insensitive filesystem; a lowercase name keeps its plain file name
+  - the real `~/.config/goTrust/config.toml` was loaded with the new parser
+    (`--print-resources`, exit 0), so the strict decode does not reject the
+    file this build already writes
+- Results:
+  | Check | Result |
+  |---|---|
+  | Pre-fix: unknown key / `Work` vs `work` | accepted / same path (case-folded); tests failed |
+  | After: unknown key / file this build wrote | refused with the key / loads |
+  | After: `Work` / `work` / lowercase stem | distinct paths / plain name kept |
+  | After: client-data rewrite | no temporary file left, new content, 0600 |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
+- Note: the `Sync` calls and the temp+rename in `writeClientData` are structural
+  durability guarantees; no test can kill the process between write and rename
+  deterministically, so they are covered by the observable side effects (no
+  temporary file, atomic replacement) instead of a failing-before test. A
+  profile whose name contains an uppercase letter gets a new client-data file
+  name once; the old file is device material, not a credential, and a fresh
+  login recreates it.
+- Files created/modified: `config/config.go`, `config/config_test.go`,
+  `session/session.go`, `session/session_test.go`, `session/resources.go`,
+  `README.md`, planning files
+- Next: P2 session (no `PhaseFailed: context canceled` after 断开, resources
+  kept during the ladder, snapshot-published transitions, login during a
+  restore, cancelled-login status).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)

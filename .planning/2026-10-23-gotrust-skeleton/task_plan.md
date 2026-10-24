@@ -419,10 +419,13 @@ test except where noted):
         (`http`/`https` only). The bind rule is one exported
         `config.ValidateBind`, run by `Config.Validate` before a login and by
         the settings save; the real binary refuses an exposed bind and exits 1
-  - [ ] TOTP: clear the stored secret with 保存密码 and offer a removal action
-  - [ ] persistence: atomic temp+rename `writeClientData`, `Sync` config and
+  - [x] TOTP: clear the stored secret with 保存密码 and offer a removal action;
+        the prompt refuses to store one for a profile that stores no password,
+        and 保存密码和 TOTP 密钥 is the toggle's label
+  - [x] persistence: atomic temp+rename `writeClientData`, `Sync` config and
         resource caches, reject unknown TOML keys, make `profileSlug`
-        collision-safe on case-insensitive filesystems
+        collision-safe on case-insensitive filesystems (an uppercase letter now
+        takes a hash suffix, so `Work` and `work` never share a file)
   - [ ] session: no `PhaseFailed: context canceled` after 断开; keep
         `Resources`/`ClientIP`/`KeepAlive` during a ladder attempt; publish
         `set`/`setTransition`/`recordKeepAlive` under the lock snapshot;

@@ -544,6 +544,10 @@ func WriteResourceCache(path string, snapshot ResourceSnapshot) error {
 		_ = temp.Close()
 		return fmt.Errorf("write the resource cache: %w", err)
 	}
+	if err := temp.Sync(); err != nil {
+		_ = temp.Close()
+		return fmt.Errorf("sync the resource cache: %w", err)
+	}
 	if err := temp.Close(); err != nil {
 		return fmt.Errorf("close the resource cache: %w", err)
 	}

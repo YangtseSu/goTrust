@@ -224,8 +224,19 @@ func LoadFile(path string) (Config, error) {
 	}
 
 	var cfg Config
-	if err := toml.Unmarshal(raw, &cfg); err != nil {
+	meta, err := toml.Decode(string(raw), &cfg)
+	if err != nil {
 		return Config{}, fmt.Errorf("parse %s: %w", path, err)
+	}
+	// A field this build does not know is a typo or a hand edit, and silently
+	// ignoring it would run a configuration the file does not describe.
+	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
+		keys := make([]string, len(undecoded))
+		for index, key := range undecoded {
+			keys[index] = key.String()
+		}
+		return Config{}, fmt.Errorf("%s has settings this build does not know: %s",
+			path, strings.Join(keys, ", "))
 	}
 	if cfg.Version > CurrentVersion {
 		return Config{}, fmt.Errorf(
@@ -281,6 +292,10 @@ func SaveFile(path string, cfg Config) error {
 	if _, err := temporary.Write(encoded.Bytes()); err != nil {
 		_ = temporary.Close()
 		return fmt.Errorf("write settings: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("sync settings: %w", err)
 	}
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close settings: %w", err)
@@ -626,9 +641,13 @@ func profileSlug(name string) string {
 	rewritten := false
 	for _, r := range name {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
-			r == '-', r == '_', r == '.':
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
 			slug.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			// Kept for readability, but a case-insensitive filesystem cannot
+			// tell "Work" from "work", so the stem takes a hash suffix below.
+			slug.WriteRune(r)
+			rewritten = true
 		default:
 			slug.WriteByte('_')
 			rewritten = true

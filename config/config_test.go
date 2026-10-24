@@ -508,3 +508,52 @@ func TestValidateBindKeepsTheProxyOnLoopback(t *testing.T) {
 		t.Fatal("a malformed SOCKS5 bind passed validation")
 	}
 }
+
+// A hand-edited file with a typo must fail instead of silently running
+// defaults: the file is the contract.
+func TestLoadFileRejectsUnknownSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	raw := "version = 2\n\n[proxy]\nsocks5_bind = \"127.0.0.1:1080\"\n" +
+		"http_bind = \"127.0.0.1:1081\"\ntypo_bind = \"127.0.0.1:1082\"\n"
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatal("an unknown setting was accepted")
+	}
+	if !strings.Contains(err.Error(), "proxy.typo_bind") {
+		t.Fatalf("error = %v, want it to name the unknown key", err)
+	}
+
+	// Everything this build writes loads again.
+	if err := SaveFile(path, Default()); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if _, err := LoadFile(path); err != nil {
+		t.Fatalf("the file this build wrote was rejected: %v", err)
+	}
+}
+
+// File names are the account material's identity. A case-insensitive
+// filesystem cannot tell "Work" from "work", so the two profiles must not share
+// a path, while a lowercase name keeps the plain file name it already had.
+func TestProfileSlugSurvivesCaseInsensitiveFilesystems(t *testing.T) {
+	cfg := Default()
+
+	upper, err := cfg.ClientDataPathFor(Profile{Name: "Work"})
+	if err != nil {
+		t.Fatalf("upper path: %v", err)
+	}
+	lower, err := cfg.ClientDataPathFor(Profile{Name: "work"})
+	if err != nil {
+		t.Fatalf("lower path: %v", err)
+	}
+	if upper == lower || strings.EqualFold(upper, lower) {
+		t.Fatalf("both profiles resolve to %q / %q", upper, lower)
+	}
+	if base := filepath.Base(lower); base != "client_data-work.json" {
+		t.Fatalf("lowercase stem = %q, want the plain name", base)
+	}
+}

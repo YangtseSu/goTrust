@@ -701,15 +701,38 @@ func readClientData(path string) ([]byte, error) {
 }
 
 // writeClientData stores the session material. The file carries cookies, the
-// sign key and the sid ticket, so it is restricted to its owner.
+// sign key and the sid ticket, so it is restricted to its owner and written
+// beside the target, synced and renamed: a crash mid-write must not leave a
+// truncated ticket that the next login would read as account material.
 func writeClientData(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create %s: %w", dir, err)
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
+	temporary, err := os.CreateTemp(dir, ".client-data-*.json")
+	if err != nil {
+		return fmt.Errorf("create the client data file: %w", err)
 	}
-	// WriteFile does not change the mode of an existing file, and an older
-	// version may have created it readable by others.
-	return os.Chmod(path, 0o600)
+	temporaryName := temporary.Name()
+	defer func() { _ = os.Remove(temporaryName) }()
+
+	if err := temporary.Chmod(0o600); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("restrict the client data: %w", err)
+	}
+	if _, err := temporary.Write(data); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("write the client data: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("sync the client data: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close the client data: %w", err)
+	}
+	if err := os.Rename(temporaryName, path); err != nil {
+		return fmt.Errorf("replace %s: %w", path, err)
+	}
+	return nil
 }
