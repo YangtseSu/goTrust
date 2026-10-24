@@ -46,6 +46,38 @@ type SettingsState struct {
 	// the edited one after a dropdown choice, which is what the save hint
 	// reports.
 	ActiveAtOpen string
+
+	// removedProfiles are the profiles deleted from the draft since it was
+	// loaded. Their stored client data is removed after a successful save, not
+	// before: closing the window without saving must leave the account alone.
+	removedProfiles []config.Profile
+	// renamed is the selected profile's pending name change, if any. Apply
+	// reports it so the caller can move the client data file once the settings
+	// file names the new profile.
+	renamed *ClientDataChange
+}
+
+// ClientDataChange is one stored account file that follows the draft. To is the
+// profile's new name and settings; an empty To.Name means the profile was
+// deleted. Deletions come before a rename in the list, because a rename may
+// take the name of a profile deleted in the same save.
+type ClientDataChange struct {
+	From config.Profile
+	To   config.Profile
+}
+
+// ClientDataChanges lists the account files the draft moves or removes. It is
+// meaningful after Apply: the caller writes the settings file first and only
+// then applies these, in order.
+func (s *SettingsState) ClientDataChanges() []ClientDataChange {
+	changes := make([]ClientDataChange, 0, len(s.removedProfiles)+1)
+	for _, profile := range s.removedProfiles {
+		changes = append(changes, ClientDataChange{From: profile})
+	}
+	if s.renamed != nil {
+		changes = append(changes, *s.renamed)
+	}
+	return changes
 }
 
 // SettingsActions are the settings window's callbacks.
@@ -117,6 +149,8 @@ func (s *SettingsState) Reload(cfg config.Config) {
 	s.Draft = cfg.Clone()
 	s.ActiveAtOpen = cfg.ActiveProfile
 	s.Discovering = false
+	s.removedProfiles = nil
+	s.renamed = nil
 	s.Selected = s.Draft.ActiveIndex()
 	if s.Selected < 0 {
 		s.Selected = 0
@@ -142,6 +176,9 @@ func (s *SettingsState) Select(index int) bool {
 	s.Selected = index
 	s.NameText = s.Draft.Profiles[index].Name
 	s.SelectText = s.NameText
+	// The name field now shows another profile's name, so any rename typed for
+	// the previous selection is gone.
+	s.renamed = nil
 	if changed {
 		s.dropStaleMethods()
 	}
@@ -278,11 +315,16 @@ func (s *SettingsState) DuplicateProfile() {
 func (s *SettingsState) DeleteProfile() {
 	s.refresh()
 	index := s.Selected
+	removed := s.Draft.Profiles[index]
 	if err := s.Draft.DeleteProfile(index); err != nil {
 		s.Status = err.Error()
 		s.StatusError = true
 		return
 	}
+	// The stored material is removed only after a save; until then the draft is
+	// just an edit.
+	s.removedProfiles = append(s.removedProfiles, removed)
+	s.renamed = nil
 	// The buffers are positional: truncating them would hand the deleted
 	// profile's port and targets to the profile that moved up.
 	s.Ports = append(s.Ports[:index], s.Ports[index+1:]...)
@@ -331,6 +373,7 @@ func (s *SettingsState) Apply() (config.Config, error) {
 	}
 
 	profile := &cfg.Profiles[index]
+	previousName := profile.Name
 	profile.Name = name
 	profile.Server.Address = strings.TrimSpace(profile.Server.Address)
 	profile.Server.Port = port
@@ -346,6 +389,14 @@ func (s *SettingsState) Apply() (config.Config, error) {
 
 	cfg.ActiveProfile = name
 	cfg.Version = config.CurrentVersion
+
+	// A renamed profile's client data file has to follow it. The saved draft
+	// names the new profile already, so this is safe to report here; the caller
+	// applies it only after the settings file is written.
+	s.renamed = nil
+	if previousName != name {
+		s.renamed = &ClientDataChange{From: s.Draft.Profiles[index], To: cfg.Profiles[index]}
+	}
 	return cfg, nil
 }
 

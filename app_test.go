@@ -442,3 +442,72 @@ func TestPendingLogoutIsSharedAndAwaited(t *testing.T) {
 		t.Fatalf("wait after the join: %v", err)
 	}
 }
+
+// A saved rename moves the profile's stored client data, and a saved delete
+// removes it. Closing the window without saving must leave the files where the
+// stored settings still point, so the draft reports changes and the save applies
+// them.
+func TestSavingProfileChangesMovesItsClientData(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+
+	cfg := config.Default()
+	if _, err := cfg.AddProfile("工作"); err != nil {
+		t.Fatalf("add profile: %v", err)
+	}
+	if err := config.SaveFile(configPath, cfg); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+	loaded, err := config.LoadFile(configPath)
+	if err != nil {
+		t.Fatalf("load settings: %v", err)
+	}
+
+	workIndex := loaded.ProfileIndex("工作")
+	workPath, err := loaded.ClientDataPathFor(loaded.Profiles[workIndex])
+	if err != nil {
+		t.Fatalf("client data path: %v", err)
+	}
+	if filepath.Dir(workPath) != dir {
+		t.Fatalf("client data at %q, want it beside the settings", workPath)
+	}
+	if err := os.WriteFile(workPath, []byte(`{"sid":"kept"}`), 0o600); err != nil {
+		t.Fatalf("write client data: %v", err)
+	}
+
+	application := &app{cfg: loaded, configPath: configPath, logf: func(string, ...any) {}}
+	state := gotrustui.NewSettingsState(loaded, dir)
+	application.settings = state
+
+	state.Select(workIndex)
+	state.NameText = "工作二"
+	application.saveSettings()
+
+	renamed := application.currentConfig()
+	newIndex := renamed.ProfileIndex("工作二")
+	if newIndex < 0 {
+		t.Fatalf("profiles = %v, the rename was not saved", renamed.ProfileNames())
+	}
+	newPath, err := renamed.ClientDataPathFor(renamed.Profiles[newIndex])
+	if err != nil {
+		t.Fatalf("new client data path: %v", err)
+	}
+	if _, err := os.Stat(workPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the old file still exists (%v)", err)
+	}
+	raw, err := os.ReadFile(newPath)
+	if err != nil || string(raw) != `{"sid":"kept"}` {
+		t.Fatalf("moved client data = %q, %v", raw, err)
+	}
+
+	// The delete reaches the filesystem only when the draft is saved.
+	state.Select(newIndex)
+	state.DeleteProfile()
+	if _, err := os.Stat(newPath); err != nil {
+		t.Fatalf("an unsaved draft touched the client data: %v", err)
+	}
+	application.saveSettings()
+	if _, err := os.Stat(newPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the deleted profile's client data remains (%v)", err)
+	}
+}

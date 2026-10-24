@@ -513,8 +513,10 @@ no code was changed by the review.
   `Dial`-error, half-close, hop-by-hop or post-`Close` tunnel test.
 - Logging tests do not assert rotated content, failed-rotation recovery,
   truncation, or concurrent writers.
-- `TestClientDataPathIsPerProfile` (`config/config_test.go:312`) encodes the
-  default-directory behaviour of P1-8 instead of catching it.
+- `TestClientDataPathIsPerProfile` (`config/config_test.go:312`) encoded the
+  default-directory behaviour of P1-8 instead of catching it; that behaviour is
+  still correct for a configuration that was never loaded, and
+  `TestClientDataFollowsTheLoadedSettingsFile` now covers the loaded case.
 
 ### After the P1-4/P1-5 fix (2026-10-24)
 

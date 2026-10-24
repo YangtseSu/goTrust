@@ -117,8 +117,11 @@ An empty `socks5_bind` or `http_bind` disables that listener; at least one must
 remain. `client_data_path` is per profile and defaults to
 `client_data-<profile>.json` beside the settings (`默认` keeps the original
 `client_data.json`), so one profile's stored ticket never restores another's
-session. The client data file holds cookies and the sid ticket and is 0600 as
-well.
+session. `--config` moves the settings file, and the account material follows
+it: a temporary configuration never reads or overwrites the real account's
+files. The client data file holds cookies and the sid ticket and is 0600 as
+well. A profile rename moves its file and a profile delete removes it, both
+only once the settings are saved.
 
 A JSON `config.json` from the unreleased v1 layout is ignored; there is no
 migration path. Delete it if it is still present. A file whose `version` is

@@ -12,12 +12,11 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 17: P0 and P1-4…P1-7 are fixed with regression tests. The remaining
-queue, in order: P1-8/P1-9, P1-10, P1-12/P1-16, P1-13/P1-14, P1-15, P1-17
-(packet-stack restore confirmation, needs a fork commit and pin bump), the
-itemised P2 batch, then the verification pass. Next commit is P1-8/P1-9. Phase
-16's `pacman -U` install still needs the operator's sudo password; Phase 8 (dae
-export) stays deferred.
+Phase 17: P0 and P1-4…P1-9 are fixed with regression tests. The remaining
+queue, in order: P1-10, P1-12/P1-16, P1-13/P1-14, P1-15, P1-17 (packet-stack
+restore confirmation, needs a fork commit and pin bump), the itemised P2 batch,
+then the verification pass. Next commit is P1-10. Phase 16's `pacman -U` install
+still needs the operator's sudo password; Phase 8 (dae export) stays deferred.
 
 ## Current Phase
 
@@ -375,11 +374,11 @@ test that reproduces the defect.
 Open work, in this order (each still one commit, each starting from a failing
 test except where noted):
 
-- [ ] P1-8/P1-9, client data: derive the path from the loaded settings file, so
+- [x] P1-8/P1-9, client data: derive the path from the loaded settings file, so
       `--config` moves it; deleting or renaming a profile moves or removes
-      `client_data-*.json` with it. Acceptance: a temporary `--config` never
-      touches the default account's file; after rename the new slug accepts the
-      stored material and after delete the file is gone
+      `client_data-*.json` with it. The settings draft records the change and
+      the app applies it only after a successful save; a custom
+      `client_data_path` is never touched
 - [ ] P1-10, config race: `Clone()` before mutating in `storeAuthChoice`,
       `storeTOTPSecret` and every prompt handler, and leave the in-memory
       config untouched when `SaveFile` fails. Acceptance: `go test -race`

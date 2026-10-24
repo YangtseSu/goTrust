@@ -128,6 +128,55 @@ func TestSettingsProfileActions(t *testing.T) {
 	}
 }
 
+// A rename or a delete only becomes a file move when the draft is saved. The
+// state reports what to move; the caller applies it after writing the settings.
+func TestSettingsClientDataChangesFollowTheDraft(t *testing.T) {
+	cfg := config.Default()
+	if _, err := cfg.AddProfile("工作"); err != nil {
+		t.Fatalf("add profile: %v", err)
+	}
+	state := NewSettingsState(cfg, "/tmp/logs")
+
+	if _, err := state.Apply(); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if changes := state.ClientDataChanges(); len(changes) != 0 {
+		t.Fatalf("changes = %+v, want none for an unchanged draft", changes)
+	}
+
+	state.NameText = "工作二"
+	if _, err := state.Apply(); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	changes := state.ClientDataChanges()
+	if len(changes) != 1 {
+		t.Fatalf("changes = %+v, want the rename", changes)
+	}
+	if changes[0].From.Name != "工作" || changes[0].To.Name != "工作二" {
+		t.Fatalf("rename = %q -> %q", changes[0].From.Name, changes[0].To.Name)
+	}
+
+	// Selecting another profile discards the typed name, so the rename is no
+	// longer pending.
+	state.Select(0)
+	if changes := state.ClientDataChanges(); len(changes) != 0 {
+		t.Fatalf("changes = %+v, want none after the selection changed", changes)
+	}
+
+	state.Select(1)
+	state.DeleteProfile()
+	changes = state.ClientDataChanges()
+	if len(changes) != 1 || changes[0].From.Name != "工作" || changes[0].To.Name != "" {
+		t.Fatalf("changes = %+v, want one removal of 工作", changes)
+	}
+
+	// A successful save reloads the draft, which clears what was applied.
+	state.Reload(cfg)
+	if changes := state.ClientDataChanges(); len(changes) != 0 {
+		t.Fatalf("changes = %+v after reload", changes)
+	}
+}
+
 func TestSettingsCannotDeleteTheLastProfile(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	state.DeleteProfile()

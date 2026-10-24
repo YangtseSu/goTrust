@@ -49,6 +49,14 @@ type Config struct {
 	Proxy         ProxyConfig   `toml:"proxy"`
 	Logging       LoggingConfig `toml:"logging"`
 	Profiles      []Profile     `toml:"profiles"`
+
+	// path is the settings file this configuration was read from, empty for a
+	// configuration that was never loaded. It is not encoded: the profiles'
+	// client data lives beside the file that names them, so --config moves the
+	// account material with the settings instead of leaving it in the default
+	// directory. A value copy carries it, which is why the settings window's
+	// draft keeps pointing at the same place.
+	path string
 }
 
 // AppConfig holds the launch and lifecycle choices that belong to the
@@ -206,7 +214,9 @@ func Load() (Config, error) {
 func LoadFile(path string) (Config, error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return Default(), nil
+		cfg := Default()
+		cfg.path = path
+		return cfg, nil
 	}
 	if err != nil {
 		return Config{}, fmt.Errorf("read %s: %w", path, err)
@@ -221,6 +231,7 @@ func LoadFile(path string) (Config, error) {
 			"%s uses settings version %d, which this build does not understand (latest %d)",
 			path, cfg.Version, CurrentVersion)
 	}
+	cfg.path = path
 	cfg.normalise()
 	return cfg, nil
 }
@@ -450,14 +461,23 @@ func (c Config) ClientDataPath() (string, error) {
 }
 
 // ClientDataPathFor resolves one profile's client data file. Profiles must not
-// share it: a stored ticket restores whatever account obtained it.
+// share it: a stored ticket restores whatever account obtained it. The file
+// lives beside the settings file that names the profile, so --config moves the
+// account material too; a configuration that was never loaded falls back to the
+// user config directory.
 func (c Config) ClientDataPathFor(profile Profile) (string, error) {
 	if custom := strings.TrimSpace(profile.Debug.ClientData); custom != "" {
 		return custom, nil
 	}
-	dir, err := Dir()
-	if err != nil {
-		return "", err
+	dir := ""
+	if c.path != "" {
+		dir = filepath.Dir(c.path)
+	} else {
+		defaultDir, err := Dir()
+		if err != nil {
+			return "", err
+		}
+		dir = defaultDir
 	}
 	if profile.Name == DefaultProfileName {
 		// The v1 file name, so a session stored before profiles keeps working.

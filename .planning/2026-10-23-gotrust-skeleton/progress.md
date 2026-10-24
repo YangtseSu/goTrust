@@ -900,6 +900,40 @@
   P1-13/P1-14 → P1-15 → P1-17 → P2 → verification. Only P1-17 depends on the
   fork; the rest are goTrust-local.
 
+### Phase 17: account material follows the settings and the profile (P1-8, P1-9)
+
+- **Status:** done (one commit); P1-10 next
+- Actions taken:
+  - reproduced both defects at HEAD in a throwaway worktree: `--config` on a
+    temporary path still resolved client data to
+    `$XDG_CONFIG_HOME/goTrust/client_data.json`, and a saved profile rename
+    left the old `client_data-*.json` behind
+  - `Config` now carries the settings file it was loaded from (unexported, not
+    encoded). `ClientDataPathFor` uses that file's directory and falls back to
+    `Dir()` only for a configuration that was never loaded; every copy
+    (`Clone`, the settings draft, `cfgForDisk`) carries it
+  - `SettingsState` records a deleted profile and the pending rename;
+    `ClientDataChanges` reports them in apply order (removals first, then the
+    rename). The rename is detected in `Apply` from the draft's old name and is
+    cleared by `Select`/`Reload`, so a discarded draft changes nothing
+  - `saveSettings` applies the changes only after `SaveFile` succeeded: remove
+    the deleted profile's file, rename the file to the new slug (replacing a
+    stale file with that name). A custom `client_data_path` belongs to the
+    user, so it is never moved or deleted
+  - README and the `--config` help state the rule
+- Results:
+  | Check | Result |
+  |---|---|
+  | HEAD: `--config` on a custom path | client data resolved to the default directory; repro failed |
+  | HEAD: saved rename | old file remains; repro failed |
+  | After: rename / delete / unsaved draft | moved / removed / untouched |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
+- Files created/modified: `config/config.go`, `config/config_test.go`,
+  `ui/settings.go`, `ui/settings_test.go`, `main.go`, `app_test.go`, `README.md`,
+  planning files
+- Next: P1-10 (clone the config before a prompt handler mutates it).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)
@@ -942,8 +976,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4/P1-5/P1-6/P1-7 landed; Phase 16 `pacman -U` still awaits sudo |
-| Where am I going? | Scheduled queue: P1-8/P1-9 → P1-10 → P1-12/P1-16 → P1-13/P1-14 → P1-15 → P1-17 (packet-stack restore confirmation, fork + pin) → itemised P2 batch → verification; Phase 8 (dae) last |
+| Where am I? | Phase 17 recorded (review remediation); P0 and P1-4…P1-9 landed; Phase 16 `pacman -U` still awaits sudo |
+| Where am I going? | Scheduled queue: P1-10 → P1-12/P1-16 → P1-13/P1-14 → P1-15 → P1-17 (packet-stack restore confirmation, fork + pin) → itemised P2 batch → verification; Phase 8 (dae) last |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package; a full review with five reproduced defects, recorded as Phase 17 |

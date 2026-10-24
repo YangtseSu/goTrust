@@ -348,6 +348,61 @@ func TestClientDataPathIsPerProfile(t *testing.T) {
 	}
 }
 
+// A settings file outside the default directory owns its account material:
+// --config must not read or overwrite the real account's stored ticket. The
+// path follows the file that was loaded, including when that file does not
+// exist yet.
+func TestClientDataFollowsTheLoadedSettingsFile(t *testing.T) {
+	defaultHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", defaultHome)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "custom.toml")
+	if err := SaveFile(path, Default()); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	first, err := cfg.ClientDataPath()
+	if err != nil {
+		t.Fatalf("path: %v", err)
+	}
+	if want := filepath.Join(dir, "client_data.json"); first != want {
+		t.Fatalf("path = %q, want %q", first, want)
+	}
+	if strings.HasPrefix(first, defaultHome) {
+		t.Fatalf("path = %q, the default directory was used", first)
+	}
+
+	if _, err := cfg.AddProfile("工作"); err != nil {
+		t.Fatalf("add profile: %v", err)
+	}
+	work, err := cfg.ClientDataPathFor(cfg.Active())
+	if err != nil {
+		t.Fatalf("path: %v", err)
+	}
+	if filepath.Dir(work) != dir {
+		t.Fatalf("profile path = %q, want it beside %q", work, path)
+	}
+
+	// A first launch with a custom path has no file yet; it still owns a
+	// directory, not the default one.
+	missing, err := LoadFile(filepath.Join(dir, "new.toml"))
+	if err != nil {
+		t.Fatalf("load missing: %v", err)
+	}
+	fresh, err := missing.ClientDataPath()
+	if err != nil {
+		t.Fatalf("path: %v", err)
+	}
+	if want := filepath.Join(dir, "client_data.json"); fresh != want {
+		t.Fatalf("fresh path = %q, want %q", fresh, want)
+	}
+}
+
 func TestIntervalFallsBackOnGarbage(t *testing.T) {
 	cfg := Default()
 	cfg.Profiles[0].Keep.Interval = "not-a-duration"

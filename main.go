@@ -32,7 +32,7 @@ import (
 
 func main() {
 	headless := flag.Bool("no-ui", false, "run without a window; connect, serve the proxies, and exit on SIGINT or SIGTERM")
-	configPath := flag.String("config", "", "TOML settings file (default: the user config directory)")
+	configPath := flag.String("config", "", "TOML settings file (default: the user config directory); the stored account material lives beside it")
 	printResources := flag.Bool("print-resources", false, "print the resources cached by the last login and exit")
 	flag.Parse()
 
@@ -806,6 +806,11 @@ func (a *app) saveSettings() {
 		return
 	}
 
+	// The file now names the profiles the draft describes, so the stored account
+	// material may follow a rename or a delete. Doing this before the save would
+	// move files under a configuration that still names the old profile.
+	a.applyClientDataChanges(cfg, state.ClientDataChanges())
+
 	previous := a.currentConfig()
 	a.applyConfig(cfg)
 
@@ -878,6 +883,58 @@ func (a *app) reconcileProfileSwitch(previous, next config.Config) {
 		a.disconnect()
 		if next.App.AutoConnect {
 			a.async(a.connect)
+		}
+	}
+}
+
+// applyClientDataChanges moves or removes the stored account material the saved
+// draft changed. It runs only after the settings file was written: a window
+// closed without saving must leave every file where the stored profiles still
+// point. A profile with a custom client data path owns that file, so the user's
+// choice is never moved or deleted here.
+func (a *app) applyClientDataChanges(cfg config.Config, changes []gotrustui.ClientDataChange) {
+	for _, change := range changes {
+		if strings.TrimSpace(change.From.Debug.ClientData) != "" ||
+			strings.TrimSpace(change.To.Debug.ClientData) != "" {
+			continue
+		}
+		from, err := cfg.ClientDataPathFor(change.From)
+		if err != nil {
+			a.logf("locate the client data of %q: %v", change.From.Name, err)
+			continue
+		}
+
+		if change.To.Name == "" {
+			if err := os.Remove(from); err != nil && !errors.Is(err, os.ErrNotExist) {
+				a.logf("remove the client data of %q: %v", change.From.Name, err)
+			}
+			continue
+		}
+
+		to, err := cfg.ClientDataPathFor(change.To)
+		if err != nil {
+			a.logf("locate the client data of %q: %v", change.To.Name, err)
+			continue
+		}
+		if from == to {
+			continue
+		}
+		if _, statErr := os.Stat(from); errors.Is(statErr, os.ErrNotExist) {
+			// Nothing was stored for this account yet: a rename has no file to
+			// move, and the next login creates one under the new name.
+			continue
+		}
+		if err := os.Rename(from, to); err != nil {
+			// A file left behind by an earlier profile with the target name
+			// would block the move where rename does not replace; that profile
+			// is gone from the configuration, so its stale material goes.
+			if removeErr := os.Remove(to); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				a.logf("replace the client data of %q: %v", change.To.Name, removeErr)
+				continue
+			}
+			if err := os.Rename(from, to); err != nil {
+				a.logf("move the client data of %q to %q: %v", change.From.Name, change.To.Name, err)
+			}
 		}
 	}
 }
