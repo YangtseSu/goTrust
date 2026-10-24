@@ -314,11 +314,18 @@ func (a *app) cancelCode(cause error) {
 
 // storeTOTPSecret writes the secret into the active profile. The settings file
 // already holds the password with owner-only permissions, so the secret goes
-// to the same place and only after the user ticked the box.
+// to the same place and only after the user ticked the box. A profile that does
+// not store its password stores no secret either: the secret is cleared with
+// the password toggle on every save.
 func (a *app) storeTOTPSecret(secret string) {
 	cfg := a.mutableConfig()
 	index := cfg.ActiveIndex()
 	if index < 0 {
+		return
+	}
+	if !cfg.Profiles[index].Auth.StorePass {
+		a.logf("TOTP secret not stored: the profile does not store its password")
+		a.setStatus("未保存 TOTP 密钥：请先在设置中勾选保存密码", false)
 		return
 	}
 	cfg.Profiles[index].Auth.TOTPSecret = strings.TrimSpace(secret)

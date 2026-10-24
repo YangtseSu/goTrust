@@ -1173,6 +1173,41 @@
 - Next: P2 TOTP (a stored secret is not cleared with 保存密码 and has no removal
   action).
 
+### Phase 17: stored TOTP secret follows the password toggle (P2)
+
+- **Status:** done (one commit); the rest of the P2 batch remains
+- Actions taken:
+  - wrote the checks first and ran them in a throwaway worktree: the pre-fix
+    `cfgForDisk` left an unstored profile's TOTP secret in the file,
+    `storeTOTPSecret` wrote a secret for a profile that stores no password, and
+    the settings window had no way to remove a stored secret
+  - `cfgForDisk` clears `TOTPSecret` together with `Password` when
+    `store_password` is false; the in-memory configuration keeps both for the
+    run, as it already did for the password
+  - `storeTOTPSecret` refuses without the password toggle and says why in the
+    status line and the log, because the same save would drop the secret again
+  - the connection section shows 二次认证密钥 / 已保存 with a 移除 action once a
+    secret exists; the removal edits the draft and takes effect on 保存, like
+    every other field
+  - the store checkbox now reads 保存密码和 TOTP 密钥（文件权限 0600）
+  - README: the settings and TOTP paragraphs, and the TOML comment
+- Results:
+  | Check | Result |
+  |---|---|
+  | Pre-fix: disk copy, prompt store, settings removal | secret kept / written / no action; tests failed |
+  | After: unstored profile, store without toggle, stored profile | cleared / refused with a note / written |
+  | After: 移除 then 保存 | draft and applied config have no secret; the row is gone |
+  | `go test ./...`, `go test -race ./...` | pass |
+  | `go vet ./...`, `gofmt -l .`, `reuse lint` | clean |
+- Note: `TestAFailedPromptSaveLeavesTheSettingsAlone` and
+  `TestTOTPChallengeStoresTheSecret` now tick `store_password` first, which is
+  the real precondition for writing the secret; their original intent (a failed
+  save leaves memory untouched) is unchanged.
+- Files created/modified: `main.go`, `prompt.go`, `prompt_test.go`, `app_test.go`,
+  `ui/settings.go`, `ui/settings_test.go`, `README.md`, planning files
+- Next: P2 persistence (atomic client data, `Sync` on config and cache
+  writes, unknown TOML keys, slug collisions).
+
 ### Phase 18: tray interaction
 
 - **Status:** in_progress (menu item done; double-click blocked on mygo)

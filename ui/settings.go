@@ -574,8 +574,20 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 			ui.TextInput(c, &profile.Auth.Password).Password()
 		})
 		ui.Field(c, "", func() {
-			ui.Checkbox(c, &profile.Auth.StorePass, "保存密码（文件权限 0600）")
+			ui.Checkbox(c, &profile.Auth.StorePass, "保存密码和 TOTP 密钥（文件权限 0600）")
 		})
+		if profile.Auth.TOTPSecret != "" {
+			ui.Field(c, "二次认证密钥", func() {
+				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+					caption(c, "已保存，登录时自动生成验证码")
+					if ui.Button(c, "移除").Clicked() {
+						profile.Auth.TOTPSecret = ""
+						state.Status = "已移除 TOTP 密钥；保存后生效"
+						state.StatusError = false
+					}
+				})
+			})
+		}
 	})
 }
 

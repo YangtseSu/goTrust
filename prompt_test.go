@@ -263,6 +263,7 @@ func TestTOTPChallengeStoresTheSecret(t *testing.T) {
 
 	testApp := promptTestApp()
 	testApp.cfg = config.Default()
+	testApp.cfg.Profiles[0].Auth.StorePass = true
 	testApp.configPath = filepath.Join(t.TempDir(), "config.toml")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -578,6 +579,7 @@ func TestAFailedPromptSaveLeavesTheSettingsAlone(t *testing.T) {
 
 	testApp := promptTestApp()
 	testApp.cfg = config.Default()
+	testApp.cfg.Profiles[0].Auth.StorePass = true
 	testApp.configPath = filepath.Join(blocker, "config.toml")
 
 	testApp.storeAuthChoice(session.AuthMethod{Type: "auth/psw", Domain: "local"})
@@ -588,6 +590,38 @@ func TestAFailedPromptSaveLeavesTheSettingsAlone(t *testing.T) {
 	testApp.storeTOTPSecret("JBSWY3DPEHPK3PXP")
 	if got := testApp.currentConfig().Active().Auth.TOTPSecret; got != "" {
 		t.Fatalf("TOTP secret = %q after a failed save, want it untouched", got)
+	}
+}
+
+// The TOTP secret is a second credential for the same account: it is stored
+// only for a profile that stores its password, and the password toggle removes
+// it from the file.
+func TestATOTPSecretNeedsThePasswordToggle(t *testing.T) {
+	const secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+
+	testApp := promptTestApp()
+	testApp.cfg = config.Default()
+	testApp.configPath = filepath.Join(t.TempDir(), "config.toml")
+
+	testApp.storeTOTPSecret(secret)
+	if got := testApp.currentConfig().Active().Auth.TOTPSecret; got != "" {
+		t.Fatalf("secret = %q without a stored password, want it refused", got)
+	}
+	if _, err := os.Stat(testApp.configPath); !os.IsNotExist(err) {
+		t.Fatalf("the refusal wrote the settings file (stat error: %v)", err)
+	}
+	if !strings.Contains(testApp.view.Status, "TOTP") {
+		t.Fatalf("status = %q, want a note about the refused secret", testApp.view.Status)
+	}
+
+	testApp.cfg.Profiles[0].Auth.StorePass = true
+	testApp.storeTOTPSecret(secret)
+	onDisk, err := config.LoadFile(testApp.configPath)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got := onDisk.Active().Auth.TOTPSecret; got != secret {
+		t.Fatalf("stored secret = %q, want it written once the password is stored", got)
 	}
 }
 

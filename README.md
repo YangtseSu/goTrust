@@ -106,7 +106,8 @@ auth_type = ""
 domain = "local"
 store_password = true
 password = "…"
-# Written only when the user opts in from a TOTP challenge.
+# Written only when the user opts in from a TOTP challenge, and
+# cleared with the password when store_password is false.
 # totp_secret = "…"
 
 [profiles.keepalive]
@@ -146,6 +147,9 @@ page. The groups are:
   `authType`/`loginDomain` pair. 自动 uses the only offered method, asks when
   several are offered, and saves the answer. A stored pair the gateway no
   longer offers fails with the list instead of switching methods silently.
+  A stored TOTP secret is a second credential: it is shown here with an 移除
+  action, follows the store-password box, and the box's removal clears it from
+  the file on the next save.
 * **代理** — SOCKS5 and HTTP bind addresses. These take effect on the next
   connect.
 * **保活** — enable, interval (default 90 s) and manual targets, one per line.
@@ -176,7 +180,9 @@ A one-time code (SMS, TOTP or RADIUS) opens a panel with the gateway's message
 and a code field; 跳过以后的二次认证 is offered only when the gateway allows it.
 A TOTP challenge also offers to store the Base32 secret: once saved (0600, in
 the settings file), goTrust generates the code itself and the panel does not
-appear again.
+appear again. The secret is stored only for a profile whose store-password box
+is ticked; clearing that box removes the secret from the file with the next
+save, and 连接 → 移除 deletes it without waiting for a new challenge.
 
 An external login (CAS or OAuth2) opens the gateway's login page in the system
 browser and asks for the callback URL the browser ends on. The paste is checked

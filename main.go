@@ -1128,13 +1128,16 @@ func (a *app) mutableConfig() config.Config {
 	return a.currentConfig().Clone()
 }
 
-// cfgForDisk clears a password the user chose not to store. The in-memory
-// configuration keeps it for this run.
+// cfgForDisk clears the credentials the user chose not to store. The TOTP
+// secret is a second credential for the same account, so it follows the
+// password toggle: unchecking 保存密码 must not leave it on disk. The in-memory
+// configuration keeps both for this run.
 func cfgForDisk(cfg config.Config) config.Config {
 	disk := cfg.Clone()
 	for index := range disk.Profiles {
 		if !disk.Profiles[index].Auth.StorePass {
 			disk.Profiles[index].Auth.Password = ""
+			disk.Profiles[index].Auth.TOTPSecret = ""
 		}
 	}
 	return disk

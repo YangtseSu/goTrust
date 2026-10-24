@@ -631,3 +631,36 @@ func TestTargetKeyNormalisesThePort(t *testing.T) {
 		t.Fatalf("key = %q, want %q", got, want)
 	}
 }
+
+// A stored TOTP secret is a credential the form cannot show, so the connection
+// section offers a removal action. The removal is a draft edit and takes effect
+// with 保存.
+func TestSettingsRemoveTheStoredTOTPSecret(t *testing.T) {
+	cfg := config.Default()
+	cfg.Profiles[0].Auth.TOTPSecret = "JBSWY3DPEHPK3PXP"
+	state := NewSettingsState(cfg, "/tmp/logs")
+
+	tester := ui.NewTester(SettingsView(state, SettingsActions{}), 560, 1600)
+	if err := tester.Click("移除"); err != nil {
+		t.Fatalf("click 移除: %v", err)
+	}
+	if got := state.Draft.Profiles[0].Auth.TOTPSecret; got != "" {
+		t.Fatalf("draft secret = %q, want it removed", got)
+	}
+	if !strings.Contains(state.Status, "TOTP") {
+		t.Fatalf("status = %q, want the removal confirmed", state.Status)
+	}
+
+	saved, err := state.Apply()
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if got := saved.Active().Auth.TOTPSecret; got != "" {
+		t.Fatalf("applied secret = %q, want none", got)
+	}
+
+	// With the secret gone the row is gone too, so there is nothing to click.
+	if err := ui.NewTester(SettingsView(state, SettingsActions{}), 560, 1600).Click("移除"); err == nil {
+		t.Fatal("the removal action survived its own click")
+	}
+}
