@@ -46,6 +46,19 @@ type SettingsState struct {
 	PasswordBusy   bool
 	PasswordStatus string
 	PasswordError  bool
+	// TrustKnown and Trusted are the portal's answer about this device, read
+	// through the live session. TrustStatus reports a query or change in
+	// progress or the error it returned; TrustBusy disables the buttons.
+	TrustKnown  bool
+	Trusted     bool
+	TrustBusy   bool
+	TrustStatus string
+	TrustError  bool
+	// Terminals is the portal's 终端管理 answer: trusted and temporary
+	// endpoints. TerminalsKnown distinguishes "not loaded yet" from both lists
+	// being empty.
+	Terminals      *session.Terminals
+	TerminalsKnown bool
 	// Methods are the gateway's offered authentication methods, filled by 获取
 	// 认证方式. MethodsFrom is the gateway they belong to, so a reload or a
 	// profile switch only drops them when the target really changed.
@@ -113,6 +126,10 @@ type SettingsActions struct {
 	OpenPassword   func()
 	SubmitPassword func()
 	CancelPassword func()
+	// RefreshTerminals reads both endpoint lists through the live session;
+	// SetTrusted trusts or untrusts this device.
+	RefreshTerminals func()
+	SetTrusted       func(bool)
 }
 
 // NewSettingsState copies cfg into an editable draft and selects the active
@@ -539,6 +556,9 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 						proxySection(c, state)
 						keepAliveSection(c, state, profile, &enabled, index)
 						startupSection(c, state, actions)
+						// The live terminal list is the portal's own view of
+						// this account, so it sits above the advanced fields.
+						terminalSection(c, state, actions)
 						advancedSection(c, state, profile, actions)
 					})
 				})
@@ -788,4 +808,122 @@ func authMethodHint(state *SettingsState) string {
 	default:
 		return fmt.Sprintf("网关提供 %d 种认证方式。固定一种可避免每次登录询问。", len(state.Methods))
 	}
+}
+
+// terminalSection is the live 终端管理 page: the portal lists trusted
+// endpoints separately from the temporary login history. The current device is
+// marked by selfId, exactly as the portal does.
+func terminalSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
+	ui.Fieldset(c, "终端管理", func() {
+		if !state.Online {
+			caption(c, "连接后可读取终端列表")
+			return
+		}
+
+		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+			if state.TerminalsKnown && state.Terminals != nil {
+				ui.Text(c, fmt.Sprintf("授信终端 %d · 临时终端 %d",
+					len(state.Terminals.Trusted), len(state.Terminals.Temporary))).
+					FontSize(c.Theme().FontSize)
+			} else {
+				ui.Text(c, "终端列表尚未读取").FontSize(c.Theme().FontSize)
+			}
+			if ui.Button(c, "刷新").Description("从网关读取终端管理列表").
+				Disabled(state.TrustBusy).Clicked() && actions.RefreshTerminals != nil {
+				actions.RefreshTerminals()
+			}
+			if state.TrustKnown {
+				label := "信任此设备"
+				if state.Trusted {
+					label = "取消信任"
+				}
+				if ui.Button(c, label).Disabled(state.TrustBusy).Clicked() && actions.SetTrusted != nil {
+					actions.SetTrusted(!state.Trusted)
+				}
+			}
+		})
+
+		if state.TerminalsKnown && state.Terminals != nil {
+			terminalList(c, "授信终端", state.Terminals.Trusted, state.Terminals.SelfID)
+			terminalList(c, "临时终端", state.Terminals.Temporary, state.Terminals.SelfID)
+		}
+
+		if state.TrustStatus != "" {
+			line := caption(c, state.TrustStatus)
+			if state.TrustError {
+				line.TextColor(c.Theme().Danger)
+			}
+		}
+	})
+}
+
+func terminalList(c *ui.Context, title string, terminals []session.Terminal, selfID string) {
+	if len(terminals) == 0 {
+		caption(c, title+"：暂无")
+		return
+	}
+	caption(c, fmt.Sprintf("%s（%d）", title, len(terminals)))
+	for _, terminal := range terminals {
+		ui.Column(c).Gap(2).PaddingY(4).Children(func() {
+			name := strings.TrimSpace(terminal.DeviceName)
+			if name == "" {
+				name = "未知设备"
+			}
+			ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
+				ui.Text(c, name).FontSize(c.Theme().FontSize).FontWeight(600)
+				ui.Text(c, terminalState(terminal, selfID)).FontSize(textSize(c, captionScale)).
+					TextColor(c.Theme().TextMuted)
+			})
+			details := terminalDetails(terminal)
+			if details != "" {
+				caption(c, details)
+			}
+		})
+	}
+}
+
+// terminalState uses selfId first, as the portal marks the current device even
+// when the historical row says it is offline.
+func terminalState(terminal session.Terminal, selfID string) string {
+	if terminal.ID != "" && terminal.ID == selfID {
+		return "当前设备"
+	}
+	if terminal.OnlineStatus {
+		return "在线"
+	}
+	return "离线"
+}
+
+func terminalDetails(terminal session.Terminal) string {
+	parts := make([]string, 0, 3)
+	if device := terminalDevice(terminal); device != "" {
+		parts = append(parts, device)
+	}
+	location := strings.TrimSpace(terminal.LastLoginAddress)
+	if location == "LAN" {
+		location = "内网"
+	}
+	if location != "" {
+		if terminal.LastLoginIP != "" {
+			location += "（" + terminal.LastLoginIP + "）"
+		}
+		parts = append(parts, location)
+	}
+	if terminal.LastLoginTime != "" {
+		parts = append(parts, terminal.LastLoginTime)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func terminalDevice(terminal session.Terminal) string {
+	if terminal.DeviceType == "browser" {
+		if terminal.Browser != "" {
+			return terminal.Browser + " 浏览器"
+		}
+		return "浏览器"
+	}
+	if terminal.OS != "" {
+		return strings.TrimSpace(terminal.OS + " " + terminal.OSVersion)
+	}
+	return terminal.DeviceType
 }

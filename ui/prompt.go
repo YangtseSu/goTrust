@@ -80,6 +80,15 @@ type AuthChoice struct {
 	Methods []session.AuthMethod
 }
 
+// DeviceBindPrompt asks whether the portal may bind this installation to the
+// account. Binding is a user decision; a gateway without the step never shows
+// it.
+type DeviceBindPrompt struct {
+	DeviceID string
+	AuthID   string
+	Message  string
+}
+
 // MethodLabel is how a method is named in the chooser and the settings window.
 func MethodLabel(method session.AuthMethod) string {
 	return method.String()
@@ -171,6 +180,41 @@ func externalPanel(c *ui.Context, state *State, actions Actions) {
 			}
 			if ui.Button(c, "取消").Clicked() && actions.CancelExternal != nil {
 				actions.CancelExternal()
+			}
+		})
+	})
+}
+
+// deviceBindPanel confirms a gateway device-binding request. Binding is what
+// puts this installation in 终端管理 as a trusted device, so it is a decision,
+// not a silent answer.
+func deviceBindPanel(c *ui.Context, state *State, actions Actions) {
+	prompt := state.DeviceBind
+
+	ui.Column(c).Gap(sectionGap).Children(func() {
+		ui.Column(c).Gap(6).Children(func() {
+			panelHeading(c, "绑定此设备")
+			caption(c, "网关要求把这台设备绑定到当前账号。确认后，它会出现在终端管理的设备列表中。")
+			if prompt.Message != "" {
+				caption(c, prompt.Message)
+			}
+		})
+
+		ui.Column(c).Gap(rowGap).Children(func() {
+			if prompt.DeviceID != "" {
+				ui.Field(c, "设备 ID", func() {
+					ui.Text(c, prompt.DeviceID).FontSize(textSize(c, captionScale)).
+						TextColor(c.Theme().TextMuted)
+				})
+			}
+		})
+
+		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
+			if ui.PrimaryButton(c, "允许绑定").Clicked() && actions.AllowDeviceBind != nil {
+				actions.AllowDeviceBind()
+			}
+			if ui.Button(c, "取消").Clicked() && actions.CancelDeviceBind != nil {
+				actions.CancelDeviceBind()
 			}
 		})
 	})

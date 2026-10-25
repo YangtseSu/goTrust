@@ -118,6 +118,7 @@ func main() {
 		}
 		sessionOptions.ChooseAuth = application.chooseAuth
 		sessionOptions.ChangePassword = application.changePasswordPrompt
+		sessionOptions.ConfirmDeviceBind = application.confirmDeviceBind
 	}
 	application.manager = session.New(sessionOptions)
 
@@ -166,11 +167,12 @@ type app struct {
 	// captcha is the reply channel of the challenge the window is showing,
 	// nil when no login waits on the user. code, external and choice are the
 	// same for a one-time code, an SSO callback and the method chooser.
-	captcha  chan captchaResult
-	code     chan codeResult
-	external chan externalResult
-	choice   chan choiceResult
-	password chan passwordResult
+	captcha    chan captchaResult
+	code       chan codeResult
+	external   chan externalResult
+	choice     chan choiceResult
+	password   chan passwordResult
+	deviceBind chan deviceBindResult
 	// browser opens a URL; nil uses the desktop's default browser. Tests
 	// replace it because opening a browser is a visible side effect.
 	browser func(string) error
@@ -328,12 +330,14 @@ func (a *app) openSettings() {
 		// GTK window while its own view is still running. Each opening starts
 		// from the saved settings again.
 		a.resetSettingsDraft()
+		a.refreshSettingsTerminals()
 		window.Show()
 		window.Focus()
 		return
 	}
 
 	a.resetSettingsDraft()
+	a.refreshSettingsTerminals()
 
 	window := mygo.NewWindow(mygo.WindowOptions{
 		Title:     "goTrust 设置",
@@ -418,15 +422,19 @@ func (a *app) actions() gotrustui.Actions {
 		SubmitCaptcha:   a.submitCaptcha,
 		CancelCaptcha:   func() { a.cancelCaptcha(errors.New("captcha cancelled")) },
 
-		SubmitCode:     a.submitCode,
-		CancelCode:     func() { a.cancelCode(errors.New("code cancelled")) },
-		OpenExternal:   a.openExternal,
-		SubmitExternal: a.submitExternal,
-		CancelExternal: func() { a.cancelExternal(errors.New("external login cancelled")) },
-		ChooseAuth:     a.chooseAuthIndex,
-		CancelChoice:   func() { a.cancelChoice(errors.New("authentication method cancelled")) },
-		SubmitPassword: a.submitPassword,
-		CancelPassword: func() { a.cancelPassword(errors.New("password change cancelled")) },
+		SubmitCode:      a.submitCode,
+		CancelCode:      func() { a.cancelCode(errors.New("code cancelled")) },
+		OpenExternal:    a.openExternal,
+		SubmitExternal:  a.submitExternal,
+		CancelExternal:  func() { a.cancelExternal(errors.New("external login cancelled")) },
+		ChooseAuth:      a.chooseAuthIndex,
+		CancelChoice:    func() { a.cancelChoice(errors.New("authentication method cancelled")) },
+		SubmitPassword:  a.submitPassword,
+		CancelPassword:  func() { a.cancelPassword(errors.New("password change cancelled")) },
+		AllowDeviceBind: a.allowDeviceBind,
+		CancelDeviceBind: func() {
+			a.cancelDeviceBind(errors.New("device binding cancelled"))
+		},
 
 		OpenResource: a.openResource,
 		CopyResource: a.copyResource,
@@ -495,9 +503,11 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 		SelectAuth: func(index int) {
 			mutate(func(state *gotrustui.SettingsState) { state.SelectAuth(index) })
 		},
-		OpenPassword:   a.openSettingsPassword,
-		SubmitPassword: a.submitSettingsPassword,
-		CancelPassword: a.cancelSettingsPassword,
+		OpenPassword:     a.openSettingsPassword,
+		SubmitPassword:   a.submitSettingsPassword,
+		CancelPassword:   a.cancelSettingsPassword,
+		RefreshTerminals: a.refreshSettingsTerminals,
+		SetTrusted:       a.setSettingsTrusted,
 	}
 }
 
@@ -537,6 +547,99 @@ func (a *app) openSettingsPassword() {
 		}
 		a.mu.Unlock()
 		a.invalidateSettings()
+	}()
+}
+
+// refreshSettingsTerminals reads both 终端管理 lists through the live session.
+// The settings state owns the status line; the call runs off the UI thread
+// because the portal answers over the tunnel.
+func (a *app) refreshSettingsTerminals() {
+	a.mu.Lock()
+	state := a.settings
+	if state == nil || state.TrustBusy || !state.Online || a.manager == nil {
+		a.mu.Unlock()
+		return
+	}
+	state.TrustBusy = true
+	state.TrustStatus = "正在读取终端列表…"
+	state.TrustError = false
+	a.mu.Unlock()
+	a.invalidateSettings()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		terminals, err := a.manager.Terminals(ctx)
+
+		a.mu.Lock()
+		if current := a.settings; current != nil {
+			current.TrustBusy = false
+			if err != nil {
+				current.TrustStatus = "读取终端列表失败: " + err.Error()
+				current.TrustError = true
+			} else {
+				current.Terminals = terminals
+				current.TerminalsKnown = true
+				current.TrustKnown = true
+				current.Trusted = terminals.DeviceTrusted
+				current.TrustStatus = ""
+				current.TrustError = false
+			}
+		}
+		a.mu.Unlock()
+		a.invalidateSettings()
+	}()
+}
+
+// setSettingsTrusted asks the portal to trust or untrust this device. A
+// refusal is the portal's policy, not a UI error: it is shown verbatim.
+func (a *app) setSettingsTrusted(trusted bool) {
+	a.mu.Lock()
+	state := a.settings
+	if state == nil || state.TrustBusy {
+		a.mu.Unlock()
+		return
+	}
+	if !state.Online || a.manager == nil {
+		state.TrustStatus = "连接后才能修改授信状态"
+		state.TrustError = true
+		a.mu.Unlock()
+		a.invalidateSettings()
+		return
+	}
+	state.TrustBusy = true
+	state.TrustStatus = "正在提交…"
+	state.TrustError = false
+	a.mu.Unlock()
+	a.invalidateSettings()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		err := a.manager.SetTrusted(ctx, trusted)
+
+		a.mu.Lock()
+		if current := a.settings; current != nil {
+			current.TrustBusy = false
+			if err != nil {
+				current.TrustStatus = "操作失败: " + err.Error()
+				current.TrustError = true
+			} else {
+				current.TrustKnown = true
+				current.Trusted = trusted
+				if trusted {
+					current.TrustStatus = "已信任此设备"
+				} else {
+					current.TrustStatus = "已取消信任"
+				}
+				current.TrustError = false
+			}
+		}
+		a.mu.Unlock()
+		a.invalidateSettings()
+		if err == nil {
+			go a.refreshSettingsTerminals()
+		}
 	}()
 }
 

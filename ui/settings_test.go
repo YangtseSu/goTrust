@@ -680,3 +680,61 @@ func TestSettingsRemoveTheStoredTOTPSecret(t *testing.T) {
 		t.Fatal("the removal action survived its own click")
 	}
 }
+
+// The terminal controls read the portal through the live session and make the
+// state legible before the action; a disconnected window must not offer it.
+func TestSettingsShowsAndChangesTrust(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	state.Online = true
+	state.TrustKnown = true
+	state.Trusted = true
+	state.TerminalsKnown = true
+	state.Terminals = &session.Terminals{
+		SelfID: "self",
+		Trusted: []session.Terminal{{
+			ID:         "trusted-1",
+			DeviceName: "desk-01",
+			OS:         "Linux",
+			OSVersion:  "7.3.0",
+		}},
+		Temporary: []session.Terminal{{
+			ID:               "self",
+			DeviceName:       "desk-02",
+			OS:               "Linux",
+			OSVersion:        "7.3.0",
+			OnlineStatus:     true,
+			LastLoginAddress: "Example City",
+			LastLoginIP:      "192.0.2.10",
+			LastLoginTime:    "2026-10-25 13:17:59",
+		}},
+	}
+	var changed bool
+	refreshed := 0
+	actions := SettingsActions{
+		SetTrusted:       func(trusted bool) { changed = trusted },
+		RefreshTerminals: func() { refreshed++ },
+	}
+
+	tester := ui.NewTester(SettingsView(state, actions), 560, 1800)
+	tester.Frame()
+	for _, wanted := range []string{"授信终端 1 · 临时终端 1", "desk-01", "desk-02", "当前设备"} {
+		if !tester.HasText(wanted) {
+			t.Fatalf("%q is missing from 终端管理", wanted)
+		}
+	}
+	if err := tester.Click("取消信任"); err != nil {
+		t.Fatalf("click untrust: %v", err)
+	}
+	if changed {
+		t.Fatal("取消信任 asked to trust the device")
+	}
+
+	state.Online = false
+	tester = ui.NewTester(SettingsView(state, actions), 560, 1800)
+	if !tester.HasText("连接后可读取终端列表") {
+		t.Fatal("the offline hint is missing")
+	}
+	if err := tester.Click("刷新"); err == nil && refreshed != 0 {
+		t.Fatal("the refresh button ran while offline")
+	}
+}

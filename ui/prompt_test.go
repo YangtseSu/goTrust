@@ -12,6 +12,39 @@ import (
 	"github.com/YangtseSu/goTrust/session"
 )
 
+// A device-binding request must name the device, explain the consequence and
+// reach both answers; a gateway that does not ask never shows the panel.
+func TestDeviceBindPanelRendersAndAnswers(t *testing.T) {
+	var allowed, cancelled int
+
+	state := State{
+		Session:    session.State{Phase: session.PhaseConnecting, Detail: "binding"},
+		Config:     config.Default(),
+		DeviceBind: &DeviceBindPrompt{DeviceID: "0123456789ABCDEF0123456789ABCDEF"},
+	}
+	actions := Actions{
+		AllowDeviceBind:  func() { allowed++ },
+		CancelDeviceBind: func() { cancelled++ },
+	}
+
+	tester := ui.NewTester(View(&state, actions), 540, 640)
+	tester.Frame()
+	for _, wanted := range []string{"绑定此设备", "0123456789ABCDEF0123456789ABCDEF", "允许绑定"} {
+		if !tester.HasText(wanted) {
+			t.Fatalf("%q is missing from the binding panel", wanted)
+		}
+	}
+	if err := tester.Click("允许绑定"); err != nil {
+		t.Fatalf("click allow: %v", err)
+	}
+	if err := tester.Click("取消"); err != nil {
+		t.Fatalf("click cancel: %v", err)
+	}
+	if allowed != 1 || cancelled != 1 {
+		t.Fatalf("allowed = %d cancelled = %d", allowed, cancelled)
+	}
+}
+
 // The code panel has to carry the gateway's message, offer the skip choice only
 // when the gateway allows it, and reach the submit callback.
 func TestCodePanelRendersAndSubmits(t *testing.T) {

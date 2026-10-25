@@ -43,6 +43,9 @@ type State struct {
 	Code     *CodePrompt
 	External *ExternalLogin
 	Choice   *AuthChoice
+	// DeviceBind is the gateway's device-binding request, shown before the
+	// login continues.
+	DeviceBind *DeviceBindPrompt
 	// Password is the gateway's forced password change, shown in the same slot.
 	Password *PasswordPrompt
 }
@@ -75,6 +78,10 @@ type Actions struct {
 	// ChooseAuth picks one of the offered authentication methods by index.
 	ChooseAuth   func(int)
 	CancelChoice func()
+	// AllowDeviceBind confirms the gateway's device-binding request; cancel
+	// abandons the login.
+	AllowDeviceBind  func()
+	CancelDeviceBind func()
 	// SubmitPassword answers the forced password change; CancelPassword
 	// abandons the login.
 	SubmitPassword func()
@@ -99,6 +106,8 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 				codePanel(c, state, actions)
 			case state.External != nil:
 				externalPanel(c, state, actions)
+			case state.DeviceBind != nil:
+				deviceBindPanel(c, state, actions)
 			case state.Password != nil:
 				passwordPanel(c, state, actions)
 			default:

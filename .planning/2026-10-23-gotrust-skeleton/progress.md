@@ -1545,6 +1545,45 @@
 - Next: live-test the forced change when the gateway first demands it;
   Phase 20 (keyring) remains.
 
+### Phase 21: 终端管理与设备信任
+
+- **Status:** code complete; live acceptance pending
+- Actions taken:
+  - fork (`2e39e25`, on the fork's `dev`): `queryDevice` keeps both status
+    lists and the counts the portal's 终端管理 page shows; `Client.`
+    `QueryTerminals` reads `status=trust` and `status=untrust` in one call and
+    `Client.SetTrusted` reads `selfId` first, so the trust call goes to this
+    device; `LoginOptions`/`SetupOptions` gain `DeviceBindHandler`, and
+    `auth/bindAuthDevice` asks it before answering. An unset handler keeps the
+    automatic answer, so the CLI is unchanged
+  - goTrust: `session.Terminals`/`Terminal`/`DeviceBindChallenge` aliases,
+    `Manager.Terminals`/`SetTrusted`, `Options.ConfirmDeviceBind`, and the
+    login wrapper that marks the attempt as needing a person
+  - settings 终端管理 group above 高级: counts, both lists, 刷新,
+    信任此设备/取消信任, the current device marked by `selfId`; the window reads
+    the lists when it opens and re-reads after a trust change
+  - 绑定此设备 panel in the main window; 取消 aborts the login with the user's
+    answer
+  - the lists are read through the live session, so a disconnected window only
+    says 连接后可读取终端列表
+- Verification:
+  | Check | Result |
+  |-------|--------|
+  | fork `go build ./...`, `go test ./client/atrust/...` | green |
+  | goTrust `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` | green |
+  | `reuse lint` | compliant |
+  | UI: 终端管理 renders the portal answer, marks the current device, hides the actions while offline | `ui.NewTester` test |
+  | UI: 绑定此设备 reaches 允许绑定 and 取消 | `ui.NewTester` test |
+  | Live: lists, trust toggle, binding prompt | pending |
+- Files created/modified:
+  - fork: `client/atrust/auth/device.go`, `device_test.go` (new),
+    `enhanced.go`, `enhanced_test.go`, `auth.go`, `client/atrust/client.go`
+  - goTrust: `session/session.go`, `prompt.go`, `main.go`, `ui/prompt.go`,
+    `ui/prompt_test.go`, `ui/settings.go`, `ui/settings_test.go`, `ui/view.go`,
+    `README.md`, planning files
+  - `go.mod`/`go.sum`: fork pin moves to the commit above
+- Next: live acceptance against the gateway; Phase 20 (keyring) remains open.
+
 ## Error Log
 
 | Timestamp | Error | Attempt | Resolution |

@@ -581,6 +581,24 @@ in `findings.md`.
 - [ ] Tests with a fake store: migration, fallback, locked/absent, rename and
       delete
 
+### Phase 21: 终端管理与设备信任
+
+The portal's 终端管理 page is the account's own view of its endpoints: the
+devices it trusts and the temporary login history. goTrust reads both lists
+through the live session, so the settings window shows what the portal sees
+without a second login.
+
+- [x] read `queryDevice` twice (`status=trust` and `status=untrust`) and keep
+      both lists plus `selfId`/`deviceTrusted` on the client
+- [x] settings 终端管理 group: counts, both lists, 刷新,
+      信任此设备/取消信任, the current device marked by `selfId`
+- [x] confirm `auth/bindAuthDevice` in the window: 允许绑定 continues the
+      login, 取消 aborts it, and a `--no-ui` run keeps the automatic answer
+- [x] tests: the section renders the portal answer, marks the current device
+      and hides its actions while offline; the bind panel reaches both answers
+- [ ] live acceptance: read the lists against the gateway, toggle trust, and
+      take a login through the binding prompt
+
 ## Key Questions
 
 1. Can the resource model carry app names and launch URLs, or only the

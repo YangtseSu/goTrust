@@ -50,6 +50,12 @@ type passwordResult struct {
 	err    error
 }
 
+// deviceBindResult answers a device-binding request.
+type deviceBindResult struct {
+	allowed bool
+	err     error
+}
+
 // uiPrompter renders the click captcha in the main window and waits for the
 // user. The context is the login attempt's: cancelling the login closes the
 // prompt instead of leaving a dialog nobody will answer.
@@ -516,6 +522,73 @@ func (a *app) chooseAuthIndex(index int) {
 	a.invalidate()
 	a.setStatus("认证方式："+gotrustui.MethodLabel(method), true)
 	reply <- choiceResult{method: method}
+}
+
+// confirmDeviceBind is session.Options.ConfirmDeviceBind: it asks the user
+// before the portal binds this installation to the account, and blocks the
+// login goroutine until the window answers or the attempt ends.
+func (a *app) confirmDeviceBind(ctx context.Context, challenge session.DeviceBindChallenge) (bool, error) {
+	reply := make(chan deviceBindResult, 1)
+	a.beginDeviceBind(&gotrustui.DeviceBindPrompt{
+		DeviceID: challenge.DeviceID,
+		AuthID:   challenge.AuthID,
+	}, reply)
+	defer a.endDeviceBind(reply)
+
+	select {
+	case result := <-reply:
+		return result.allowed, result.err
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+}
+
+func (a *app) beginDeviceBind(prompt *gotrustui.DeviceBindPrompt, reply chan deviceBindResult) {
+	a.mu.Lock()
+	a.view.DeviceBind = prompt
+	a.deviceBind = reply
+	a.mu.Unlock()
+
+	a.setStatus("网关要求绑定此设备", false)
+	a.revealWindow()
+	a.invalidate()
+}
+
+func (a *app) endDeviceBind(reply chan deviceBindResult) {
+	a.mu.Lock()
+	if a.deviceBind == reply {
+		a.deviceBind = nil
+		a.view.DeviceBind = nil
+	}
+	a.mu.Unlock()
+
+	a.invalidate()
+}
+
+func (a *app) allowDeviceBind() {
+	a.mu.Lock()
+	reply := a.deviceBind
+	a.deviceBind = nil
+	a.view.DeviceBind = nil
+	a.mu.Unlock()
+
+	a.invalidate()
+	if reply != nil {
+		reply <- deviceBindResult{allowed: true}
+	}
+}
+
+func (a *app) cancelDeviceBind(cause error) {
+	a.mu.Lock()
+	reply := a.deviceBind
+	a.deviceBind = nil
+	a.view.DeviceBind = nil
+	a.mu.Unlock()
+
+	a.invalidate()
+	if reply != nil {
+		reply <- deviceBindResult{err: cause}
+	}
 }
 
 // changePasswordPrompt is session.Options.ChangePassword: it shows the

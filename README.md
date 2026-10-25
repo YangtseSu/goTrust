@@ -157,6 +157,11 @@ page. The groups are:
   Also next connect.
 * **启动** — start at login, auto-connect, start hidden and auto-reconnect
   (1/2/4/8/16 s, five attempts at most).
+* **终端管理** — the portal's own list of endpoints: trusted devices and the
+  temporary login history, read through the live session. It shows the counts,
+  both lists and the current device, offers 刷新 and 信任此设备/取消信任, and
+  reads the lists whenever the window opens. Before a login it says so instead
+  of showing an empty list.
 * **高级** — verbose logging, the log directory with an open button, and the
   per-profile client-data path.
 
@@ -189,6 +194,11 @@ An external login (CAS or OAuth2) opens the gateway's login page in the system
 browser and asks for the callback URL the browser ends on. The paste is checked
 against the portal's path and its `ticket` (CAS) or `code` (OAuth2) before it is
 sent, so a wrong window fails in the panel with a reason.
+
+If the gateway asks to bind this installation to the account, a 绑定此设备 panel
+names the device and waits for 允许绑定 or 取消. Allowing continues the login and
+puts the device in 终端管理; cancelling abandons the login instead of answering
+for the user. `--no-ui` keeps the automatic answer, as the CLI has always sent.
 
 Every prompt belongs to the login attempt: 断开, the attempt's five-minute
 deadline or a cancelled login releases it instead of leaving a dialog open.

@@ -82,6 +82,39 @@ type State struct {
 // ErrNotOnline reports a dial attempt while no session exists.
 var ErrNotOnline = errors.New("the session is not online")
 
+// DeviceBindChallenge is the portal's request to bind this installation to
+// the account.
+type DeviceBindChallenge = auth.DeviceBindChallenge
+
+// Terminal is one row of the portal's 终端管理 lists.
+type Terminal = auth.TerminalInfo
+
+// Terminals is the trusted and temporary endpoint lists.
+type Terminals = auth.Terminals
+
+// Terminals reads both endpoint lists from the live session.
+func (m *Manager) Terminals(ctx context.Context) (*Terminals, error) {
+	m.mu.RLock()
+	client := m.client
+	m.mu.RUnlock()
+	if client == nil {
+		return nil, ErrNotOnline
+	}
+	return client.QueryTerminals(ctx)
+}
+
+// SetTrusted trusts or untrusts this device through the live session. The
+// portal re-checks the request; this only asks.
+func (m *Manager) SetTrusted(ctx context.Context, trusted bool) error {
+	m.mu.RLock()
+	client := m.client
+	m.mu.RUnlock()
+	if client == nil {
+		return ErrNotOnline
+	}
+	return client.SetTrusted(ctx, trusted)
+}
+
 // Prompter asks the user for whatever the login needs beyond a password: a
 // one-time code, a captcha answer, or a URL to open in a browser.
 //
@@ -111,6 +144,9 @@ type Options struct {
 	// fails the login with the gateway's message instead of hanging on a
 	// question nobody can see.
 	ChangePassword func(ctx context.Context, challenge PasswordChangeChallenge) (PasswordChangeAnswer, error)
+	// ConfirmDeviceBind confirms auth/bindAuthDevice. Nil keeps the automatic
+	// answer; a UI supplies a panel so binding is a user decision.
+	ConfirmDeviceBind func(ctx context.Context, challenge DeviceBindChallenge) (bool, error)
 	// OnPasswordChanged receives the profile name and the new password once the
 	// portal accepted a forced change, so the caller can replace the stored
 	// credential before the next login.
@@ -359,6 +395,17 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 		})
 	}
 
+	// Binding is a user decision, so the login waits for the panel like it
+	// waits for a captcha or a forced password change.
+	var deviceBindHandler auth.DeviceBindHandler
+	if m.options.ConfirmDeviceBind != nil {
+		answer := m.options.ConfirmDeviceBind
+		deviceBindHandler = func(challenge auth.DeviceBindChallenge) (bool, error) {
+			m.challenge.Store(true)
+			return answer(ctx, challenge)
+		}
+	}
+
 	if _, err := client.SetupContext(ctx, atrust.SetupOptions{
 		ServerAddress:         profile.ServerAddress(),
 		ServerPort:            profile.Server.Port,
@@ -366,6 +413,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 		TOTPSecret:            profile.Auth.TOTPSecret,
 		ClientData:            clientData,
 		ChallengeHandler:      prompt,
+		DeviceBindHandler:     deviceBindHandler,
 		PasswordChangeHandler: passwordHandler,
 		OnPasswordChanged: func(newPassword string) {
 			if m.options.OnPasswordChanged != nil {
