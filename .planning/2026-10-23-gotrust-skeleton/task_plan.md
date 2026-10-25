@@ -602,6 +602,26 @@ without a second login.
 - [x] live acceptance: the operator read the lists against the gateway,
       toggled trust and took a login through the binding prompt
 
+### Phase 22: Install identity and endpoint reporting
+
+The portal lists one row per login unless the client presents a stable device
+identity. goTrust keeps one identity per installation, in `[identity]`, and
+seeds it into every profile before the login.
+
+- [x] `[identity] device_id`: generated once (32 uppercase hex), persisted
+      0600 beside the settings, adopted from an existing profile's stored
+      device id instead of minting a second device, refused at startup when
+      hand-edited into a form the portal cannot read
+- [x] seeded into each profile's client data before the login, so switching
+      accounts does not look like a second device
+- [x] settings 高级 shows the id read-only and opens the file for hand edits
+- [ ] live acceptance of the seeded id: log in, check 终端管理 keeps one row
+- [ ] UA and tunnel process block from the identity; needs the client library
+      to take a per-session UA and a process block (local branch)
+- [ ] native endpoint reporting: the host/OS/MAC fields the portal shows for a
+      native registration, behind a switch that stays off while the gateway
+      rejects the native session
+
 ## Key Questions
 
 1. Can the resource model carry app names and launch URLs, or only the

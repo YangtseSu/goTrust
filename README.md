@@ -162,11 +162,16 @@ page. The groups are:
   both lists and the current device, offers 刷新 and 信任此设备/取消信任, and
   reads the lists whenever the window opens. Before a login it says so instead
   of showing an empty list.
-* **高级** — verbose logging, the log directory with an open button, and the
-  per-profile client-data path.
+* **高级** — verbose logging, the log directory with an open button, the
+  per-profile client-data path, and the install's device ID with 打开配置文件.
+  The ID is generated once and written to `[identity]`; it is seeded into every
+  profile's client data before a login, so switching accounts does not look
+  like a second device. Editing it by hand is supported (32 hex characters) and
+  a value the portal cannot read is refused at startup.
 
 The settings file has no JSON parser and no schema surprises: an omitted field
-takes its default. 关闭 hides the window and discards the draft; reopening it
+takes its default. `[identity]` holds the device identity; the rest of the file
+is the profiles, the listeners and the app behaviour. 关闭 hides the window and discards the draft; reopening it
 loads the saved settings again.
 
 ## Logging in

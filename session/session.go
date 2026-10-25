@@ -339,6 +339,10 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	if err != nil {
 		return fail("read the stored session", err)
 	}
+	clientData, err = seedDeviceID(clientData, m.settings().Identity.DeviceID)
+	if err != nil {
+		return fail("prepare the stored session", err)
+	}
 
 	// The gateway decides which pair is valid; a saved pair that it no longer
 	// offers has to be a visible error, not a silent fallback. An empty list

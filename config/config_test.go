@@ -554,3 +554,83 @@ func TestProfileSlugSurvivesCaseInsensitiveFilesystems(t *testing.T) {
 		t.Fatalf("lowercase stem = %q, want the plain name", base)
 	}
 }
+
+func TestInstallIdentityIsGeneratedOnce(t *testing.T) {
+	cfg := Default()
+	if !cfg.EnsureIdentity() {
+		t.Fatal("a fresh identity reported no changes")
+	}
+	id := cfg.Identity.DeviceID
+	if len(id) != 32 || strings.ToUpper(id) != id {
+		t.Fatalf("device id %q is not 32 uppercase hex", id)
+	}
+	if cfg.EnsureIdentity() {
+		t.Fatal("a second call replaced the stored id")
+	}
+	if cfg.Identity.DeviceID != id {
+		t.Fatalf("device id = %q, want it stable", cfg.Identity.DeviceID)
+	}
+}
+
+func TestIdentityHandEditsWin(t *testing.T) {
+	cfg := Default()
+	cfg.Identity.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	if cfg.EnsureIdentity() {
+		t.Fatal("a hand-edited id was replaced")
+	}
+	if cfg.Identity.DeviceID != "0123456789ABCDEF0123456789ABCDEF" {
+		t.Fatalf("device id = %q", cfg.Identity.DeviceID)
+	}
+}
+
+func TestIdentityRoundTripPersistsTheID(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	cfg := Default()
+	cfg.path = path
+	cfg.EnsureIdentity()
+	if err := SaveFile(path, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if loaded.Identity.DeviceID != cfg.Identity.DeviceID {
+		t.Fatalf("device id = %q, want %q", loaded.Identity.DeviceID, cfg.Identity.DeviceID)
+	}
+}
+
+func TestValidateRejectsAMalformedDeviceID(t *testing.T) {
+	for _, bad := range []string{"not-hex", "0123456789ABCDEF", "0123456789ABCDEF0123456789ABCDE"} {
+		if err := (IdentityConfig{DeviceID: bad}).validate(); err == nil {
+			t.Fatalf("device id %q was accepted", bad)
+		}
+	}
+	if err := (IdentityConfig{DeviceID: "0123456789abcdef0123456789abcdef"}).validate(); err != nil {
+		t.Fatalf("a lowercase hex id was refused: %v", err)
+	}
+	if err := (IdentityConfig{}).validate(); err != nil {
+		t.Fatalf("an empty id was refused: %v", err)
+	}
+}
+
+func TestEnsureIdentityAdoptsTheStoredProfileDevice(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Default()
+	cfg.path = filepath.Join(dir, "config.toml")
+	clientData, err := cfg.ClientDataPathFor(cfg.Active())
+	if err != nil {
+		t.Fatalf("client data path: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(clientData), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(clientData, []byte(`{"device_id":"0123456789ABCDEF0123456789ABCDEF","cookies":[]}`), 0o600); err != nil {
+		t.Fatalf("write client data: %v", err)
+	}
+	cfg.EnsureIdentity()
+	if cfg.Identity.DeviceID != "0123456789ABCDEF0123456789ABCDEF" {
+		t.Fatalf("device id = %q, want the stored profile's", cfg.Identity.DeviceID)
+	}
+}

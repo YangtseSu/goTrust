@@ -13,6 +13,9 @@ package config
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -44,12 +47,13 @@ const (
 
 // Config is the on-disk settings file.
 type Config struct {
-	Version       int           `toml:"version"`
-	ActiveProfile string        `toml:"active_profile"`
-	App           AppConfig     `toml:"app"`
-	Proxy         ProxyConfig   `toml:"proxy"`
-	Logging       LoggingConfig `toml:"logging"`
-	Profiles      []Profile     `toml:"profiles"`
+	Version       int            `toml:"version"`
+	ActiveProfile string         `toml:"active_profile"`
+	App           AppConfig      `toml:"app"`
+	Proxy         ProxyConfig    `toml:"proxy"`
+	Logging       LoggingConfig  `toml:"logging"`
+	Identity      IdentityConfig `toml:"identity"`
+	Profiles      []Profile      `toml:"profiles"`
 
 	// path is the settings file this configuration was read from, empty for a
 	// configuration that was never loaded. It is not encoded: the profiles'
@@ -81,6 +85,90 @@ type AppConfig struct {
 // LoggingConfig is global: one log file serves every profile.
 type LoggingConfig struct {
 	Verbose bool `toml:"verbose"`
+}
+
+// IdentityConfig is what the portal learns about this installation. It is one
+// identity per install, not per profile: switching accounts must not look like
+// a second device.
+//
+// The value is hand-edited only; the settings window shows it read-only and can
+// open the file.
+type IdentityConfig struct {
+	// DeviceID is the 32-hex id the portal sees as deviceId. It is generated
+	// once and seeded into every profile's client data.
+	DeviceID string `toml:"device_id"`
+}
+
+// EnsureIdentity fills the install-stable halves and reports whether anything
+// changed. The caller persists the file, so the same id survives every launch.
+// A hand-edited value wins: an existing non-empty id is never replaced.
+func (c *Config) EnsureIdentity() bool {
+	if strings.TrimSpace(c.Identity.DeviceID) != "" {
+		return false
+	}
+	// A profile that logged in before this setting existed already has a
+	// device the portal knows. Adopt it instead of minting a second device, so
+	// the first run after the upgrade does not invalidate the stored session
+	// material.
+	if stored := c.storedDeviceID(); stored != "" {
+		c.Identity.DeviceID = stored
+		return true
+	}
+	c.Identity.DeviceID = randomHexID()
+	return true
+}
+
+// storedDeviceID returns the device id an existing profile already reported,
+// or an empty string. The client data file is written by the session, not by
+// this package, so the read is deliberately tolerant: a missing or malformed
+// file just means "no previous device".
+func (c *Config) storedDeviceID() string {
+	if c.path == "" || len(c.Profiles) == 0 {
+		return ""
+	}
+	path, err := c.ClientDataPathFor(c.Active())
+	if err != nil {
+		return ""
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var record struct {
+		DeviceID string `json:"device_id"`
+	}
+	if err := json.Unmarshal(raw, &record); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(record.DeviceID)
+}
+
+// validate refuses a hand-edited device id the portal cannot read: it is the
+// 32-hex form the protocol uses.
+func (i IdentityConfig) validate() error {
+	id := strings.TrimSpace(i.DeviceID)
+	if id == "" {
+		return nil
+	}
+	if len(id) != 32 {
+		return fmt.Errorf("identity device_id %q is not 32 hex characters", id)
+	}
+	if _, err := hex.DecodeString(id); err != nil {
+		return fmt.Errorf("identity device_id %q is not hexadecimal", id)
+	}
+	return nil
+}
+
+// randomHexID returns the 32-uppercase-hex form the protocol uses for
+// deviceId.
+func randomHexID() string {
+	buffer := make([]byte, 16)
+	if _, err := rand.Read(buffer); err != nil {
+		// A failing entropy source is fatal for a login client; prefer a
+		// panic over an identity that silently repeats on every launch.
+		panic(fmt.Sprintf("generate an identity id: %v", err))
+	}
+	return strings.ToUpper(hex.EncodeToString(buffer))
 }
 
 // ProxyConfig is the pair of local listeners. An empty bind disables that
@@ -483,6 +571,9 @@ func (c Config) ProxyAddresses() (socks5, http string) {
 
 // Validate reports settings that cannot log in, before anything is dialled.
 func (c Config) Validate() error {
+	if err := c.Identity.validate(); err != nil {
+		return err
+	}
 	if err := c.Active().Validate(); err != nil {
 		return err
 	}

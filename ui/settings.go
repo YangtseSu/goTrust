@@ -130,6 +130,9 @@ type SettingsActions struct {
 	// SetTrusted trusts or untrusts this device.
 	RefreshTerminals func()
 	SetTrusted       func(bool)
+	// OpenConfig opens the settings file so the [identity] section can be
+	// edited by hand; the window never writes it.
+	OpenConfig func()
 }
 
 // NewSettingsState copies cfg into an editable draft and selects the active
@@ -742,6 +745,20 @@ func advancedSection(c *ui.Context, state *SettingsState, profile *config.Profil
 		})
 		ui.Field(c, "客户端数据", func() {
 			ui.TextInput(c, &profile.Debug.ClientData).Placeholder("留空则按配置名存放")
+		})
+		// The device identity is hand-edited only: a wrong id is a support
+		// problem, so the window shows the value in effect and opens the file.
+		ui.Field(c, "设备 ID", func() {
+			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
+				deviceID := state.Draft.Identity.DeviceID
+				if deviceID == "" {
+					deviceID = "尚未生成"
+				}
+				ui.Text(c, deviceID).FontSize(c.Theme().FontSize).TextColor(c.Theme().TextMuted)
+				if ui.Button(c, "打开配置文件").Description("编辑 [identity] 后重启生效").Clicked() && actions.OpenConfig != nil {
+					actions.OpenConfig()
+				}
+			})
 		})
 	})
 }

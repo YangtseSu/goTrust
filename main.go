@@ -199,16 +199,29 @@ type attemptCancel struct {
 }
 
 func loadConfig(path string) (config.Config, string, error) {
+	var (
+		cfg config.Config
+		err error
+	)
 	if path != "" {
-		cfg, err := config.LoadFile(path)
-		return cfg, path, err
+		cfg, err = config.LoadFile(path)
+	} else {
+		cfg, err = config.Load()
+		if err == nil {
+			path, err = config.Path()
+		}
 	}
-	cfg, err := config.Load()
 	if err != nil {
-		return config.Config{}, "", err
+		return config.Config{}, path, err
 	}
-	defaultPath, err := config.Path()
-	return cfg, defaultPath, err
+	// The install identity is generated once and written back, so the portal
+	// sees the same device id after a restart. A hand-edited value stays.
+	if cfg.EnsureIdentity() {
+		if err := config.SaveFile(path, cfg); err != nil {
+			return config.Config{}, path, fmt.Errorf("save the install identity: %w", err)
+		}
+	}
+	return cfg, path, nil
 }
 
 func (a *app) runHeadless(ctx context.Context) {
@@ -499,6 +512,7 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 		SetAutostart: a.setAutostart,
 		SetVerbose:   a.setVerbose,
 		OpenLogs:     a.openLogs,
+		OpenConfig:   a.openConfig,
 		DiscoverAuth: a.discoverAuth,
 		SelectAuth: func(index int) {
 			mutate(func(state *gotrustui.SettingsState) { state.SelectAuth(index) })
@@ -508,6 +522,31 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 		CancelPassword:   a.cancelSettingsPassword,
 		RefreshTerminals: a.refreshSettingsTerminals,
 		SetTrusted:       a.setSettingsTrusted,
+	}
+}
+
+// openConfig hands the settings file to the desktop so the [identity] section
+// can be edited by hand; the window itself never writes it.
+func (a *app) openConfig() {
+	a.mu.RLock()
+	state := a.settings
+	path := a.configPath
+	a.mu.RUnlock()
+	if path == "" {
+		if state != nil {
+			state.Status = "配置文件路径不可用"
+			state.StatusError = true
+			a.invalidateSettings()
+		}
+		return
+	}
+	if err := mygo.Shell.OpenPath(path); err != nil {
+		if state != nil {
+			state.Status = "打开配置文件失败: " + err.Error()
+			state.StatusError = true
+			a.invalidateSettings()
+		}
+		a.logf("open config: %v", err)
 	}
 }
 
