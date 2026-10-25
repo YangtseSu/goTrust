@@ -581,7 +581,7 @@ in `findings.md`.
 - [ ] Tests with a fake store: migration, fallback, locked/absent, rename and
       delete
 
-### Phase 21: 终端管理与设备信任
+### Phase 21: 终端管理与设备信任 (complete)
 
 The portal's 终端管理 page is the account's own view of its endpoints: the
 devices it trusts and the temporary login history. goTrust reads both lists
@@ -596,8 +596,8 @@ without a second login.
       login, 取消 aborts it, and a `--no-ui` run keeps the automatic answer
 - [x] tests: the section renders the portal answer, marks the current device
       and hides its actions while offline; the bind panel reaches both answers
-- [ ] live acceptance: read the lists against the gateway, toggle trust, and
-      take a login through the binding prompt
+- [x] live acceptance: the operator read the lists against the gateway,
+      toggled trust and took a login through the binding prompt
 
 ## Key Questions
 

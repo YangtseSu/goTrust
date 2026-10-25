@@ -1547,7 +1547,7 @@
 
 ### Phase 21: 终端管理与设备信任
 
-- **Status:** code complete; live acceptance pending
+- **Status:** complete
 - Actions taken:
   - fork (`2e39e25`, on the fork's `dev`): `queryDevice` keeps both status
     lists and the counts the portal's 终端管理 page shows; `Client.`
@@ -1574,7 +1574,7 @@
   | `reuse lint` | compliant |
   | UI: 终端管理 renders the portal answer, marks the current device, hides the actions while offline | `ui.NewTester` test |
   | UI: 绑定此设备 reaches 允许绑定 and 取消 | `ui.NewTester` test |
-  | Live: lists, trust toggle, binding prompt | pending |
+  | Live: lists, trust toggle, binding prompt | accepted by the operator |
 - Files created/modified:
   - fork: `client/atrust/auth/device.go`, `device_test.go` (new),
     `enhanced.go`, `enhanced_test.go`, `auth.go`, `client/atrust/client.go`
@@ -1582,7 +1582,7 @@
     `ui/prompt_test.go`, `ui/settings.go`, `ui/settings_test.go`, `ui/view.go`,
     `README.md`, planning files
   - `go.mod`/`go.sum`: fork pin moves to the commit above
-- Next: live acceptance against the gateway; Phase 20 (keyring) remains open.
+- Next: Phase 20 (keyring) remains open.
 
 ## Error Log
 
@@ -1596,8 +1596,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 19 is complete: the gateway forced the change on a new account's first login (the same flow as the 90-day policy), the change and credential rewrite ran live, the re-login and weak-probe fixes are in `r50`/`r51`, and the race suite, `reuse lint` and the native panel smoke are green |
+| Where am I? | Phase 21 is complete: the settings window reads the portal's 终端管理 lists and changes this device's trust, the main window confirms a device binding, the live acceptance passed, and `r56` carries both |
 | Where am I going? | Keyring storage (Phase 20) is next. Phase 8 (dae) stays deferred and Phase 18's double-click waits on mygo. Phase 16 is closed: `gotrust-git` is installed |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
-| What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package, and the forced/voluntary password change; a full review with five reproduced defects, recorded as Phase 17 |
+| What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package, the forced/voluntary password change, and the portal terminal list with device trust; a full review with five reproduced defects, recorded as Phase 17 |
