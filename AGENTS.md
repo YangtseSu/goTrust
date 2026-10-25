@@ -42,3 +42,22 @@ The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
   answered.
 - UI smoke tests on this machine: `docs/agent-ui-testing.md`. Never move the
   pointer to the top-left corner (GNOME Activities).
+
+## Branch policy
+
+- Only `main` is published: `git push origin main`. Never `git push --all`,
+  `--mirror`, or push a `devel/*` ref.
+- `devel/next` in this repository and in the `zju-connect` fork is local-only.
+  Treat it as generic new-feature development; its notes are not part of the
+  public record.
+- Never mention `devel/next`, its B-items, or their research in commits, code,
+  comments, docs or tests that reach `main`. Describe released behaviour and
+  interfaces only.
+- A B-item enters `main` only when all of these hold:
+  1. its code builds against the published fork pin, with no local `replace`;
+  2. its notes are rewritten to behaviour/interface level and moved into
+     `task_plan.md` as the next numbered phase, without the B number;
+  3. no local paths, real addresses, upstream artifact names or third-party
+     identifiers remain;
+  4. `go build ./...`, `go test ./...` and `reuse lint` pass, and the commits
+     are signed.
