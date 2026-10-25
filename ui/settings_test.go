@@ -738,3 +738,18 @@ func TestSettingsShowsAndChangesTrust(t *testing.T) {
 		t.Fatal("the refresh button ran while offline")
 	}
 }
+
+func TestIdentitySummaryOmitsTheEmptyProcess(t *testing.T) {
+	got := identitySummary(config.IdentityConfig{OSFamily: config.IdentityOSUOS, ClientVersion: "2.5.16.41"})
+	if got != "UOS · 2.5.16.41" {
+		t.Fatalf("summary = %q", got)
+	}
+	withProcess := identitySummary(config.IdentityConfig{
+		OSFamily:      config.IdentityOSWindows,
+		ClientVersion: "2.5.16.41",
+		ProcessName:   "agent",
+	})
+	if withProcess != "Windows · 2.5.16.41 · agent" {
+		t.Fatalf("summary = %q", withProcess)
+	}
+}

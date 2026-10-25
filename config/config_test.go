@@ -575,11 +575,15 @@ func TestInstallIdentityIsGeneratedOnce(t *testing.T) {
 func TestIdentityHandEditsWin(t *testing.T) {
 	cfg := Default()
 	cfg.Identity.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
-	if cfg.EnsureIdentity() {
-		t.Fatal("a hand-edited id was replaced")
-	}
+	cfg.EnsureIdentity()
 	if cfg.Identity.DeviceID != "0123456789ABCDEF0123456789ABCDEF" {
-		t.Fatalf("device id = %q", cfg.Identity.DeviceID)
+		t.Fatalf("device id = %q, want the hand-edited value", cfg.Identity.DeviceID)
+	}
+	cfg.Identity.ClientVersion = "9.9.9.9"
+	cfg.Identity.OSFamily = IdentityOSWindows
+	cfg.EnsureIdentity()
+	if cfg.Identity.ClientVersion != "9.9.9.9" || cfg.Identity.OSFamily != IdentityOSWindows {
+		t.Fatalf("identity = %+v, want the hand-edited values", cfg.Identity)
 	}
 }
 
@@ -632,5 +636,53 @@ func TestEnsureIdentityAdoptsTheStoredProfileDevice(t *testing.T) {
 	cfg.EnsureIdentity()
 	if cfg.Identity.DeviceID != "0123456789ABCDEF0123456789ABCDEF" {
 		t.Fatalf("device id = %q, want the stored profile's", cfg.Identity.DeviceID)
+	}
+}
+
+func TestUserAgentFollowsTheIdentity(t *testing.T) {
+	id := IdentityConfig{ClientVersion: "2.5.16.41", OSFamily: IdentityOSUOS, OSArch: "x86_64"}
+	ua := id.UserAgentString()
+	if !strings.Contains(ua, "aTrustTray/2.5.16.41") ||
+		!strings.Contains(ua, "aTrustTray-Linux-Plat-UOS-x64") ||
+		!strings.Contains(ua, "SPCClientType") {
+		t.Fatalf("UA %q is not the UOS form", ua)
+	}
+
+	id.OSFamily = IdentityOSWindows
+	ua = id.UserAgentString()
+	if !strings.Contains(ua, "Windows NT 10.0") ||
+		!strings.Contains(ua, "aTrustTray-Windows-Plat-Windows10-x64") {
+		t.Fatalf("UA %q is not the Windows form", ua)
+	}
+
+	id.UserAgent = "custom-ua"
+	if got := id.UserAgentString(); got != "custom-ua" {
+		t.Fatalf("UA = %q, want the explicit override", got)
+	}
+}
+
+func TestEnsureIdentityFillsTheDerivedFields(t *testing.T) {
+	cfg := Default()
+	cfg.Identity.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	cfg.Identity.ClientVersion = ""
+	cfg.Identity.OSFamily = ""
+	cfg.Identity.OSArch = ""
+	if !cfg.EnsureIdentity() {
+		t.Fatal("an empty derived identity reported no change")
+	}
+	if cfg.Identity.ClientVersion == "" || cfg.Identity.OSFamily != IdentityOSUOS || cfg.Identity.OSArch == "" {
+		t.Fatalf("identity = %+v", cfg.Identity)
+	}
+	if cfg.Identity.ProcessName != "" || cfg.Identity.ProcessPath != "" {
+		t.Fatalf("a process block was invented: %+v", cfg.Identity)
+	}
+}
+
+func TestValidateRejectsAnUnknownIdentityFamily(t *testing.T) {
+	if err := (IdentityConfig{OSFamily: "beos"}).validate(); err == nil {
+		t.Fatal("an unknown os_family was accepted")
+	}
+	if err := (IdentityConfig{OSFamily: IdentityOSWindows}).validate(); err != nil {
+		t.Fatalf("a known family was refused: %v", err)
 	}
 }

@@ -339,7 +339,8 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	if err != nil {
 		return fail("read the stored session", err)
 	}
-	clientData, err = seedDeviceID(clientData, m.settings().Identity.DeviceID)
+	identity := m.settings().Identity
+	clientData, err = seedDeviceID(clientData, identity.DeviceID)
 	if err != nil {
 		return fail("prepare the stored session", err)
 	}
@@ -419,6 +420,12 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 		ChallengeHandler:      prompt,
 		DeviceBindHandler:     deviceBindHandler,
 		PasswordChangeHandler: passwordHandler,
+		UserAgent:             identity.UserAgentString(),
+		TunnelProcess: &atrust.TunnelProcess{
+			Name:    identity.ProcessName,
+			Path:    identity.ProcessPath,
+			Version: identity.ProcessVersion,
+		},
 		OnPasswordChanged: func(newPassword string) {
 			if m.options.OnPasswordChanged != nil {
 				m.options.OnPasswordChanged(profile.Name, newPassword)

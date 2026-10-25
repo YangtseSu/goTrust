@@ -616,8 +616,9 @@ seeds it into every profile before the login.
       accounts does not look like a second device
 - [x] settings 高级 shows the id read-only and opens the file for hand edits
 - [ ] live acceptance of the seeded id: log in, check 终端管理 keeps one row
-- [ ] UA and tunnel process block from the identity; needs the client library
-      to take a per-session UA and a process block (local branch)
+- [x] UA and tunnel process block from the identity: the client library takes
+      a per-session UA and a process block, and `[identity]` supplies both; an
+      empty process block keeps the client's own
 - [ ] native endpoint reporting: the host/OS/MAC fields the portal shows for a
       native registration, behind a switch that stays off while the gateway
       rejects the native session

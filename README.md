@@ -163,11 +163,14 @@ page. The groups are:
   reads the lists whenever the window opens. Before a login it says so instead
   of showing an empty list.
 * **高级** — verbose logging, the log directory with an open button, the
-  per-profile client-data path, and the install's device ID with 打开配置文件.
-  The ID is generated once and written to `[identity]`; it is seeded into every
-  profile's client data before a login, so switching accounts does not look
-  like a second device. Editing it by hand is supported (32 hex characters) and
-  a value the portal cannot read is refused at startup.
+  per-profile client-data path, and the install identity with 打开配置文件.
+  `[identity]` holds a device id, the client version, the OS family and an
+  optional process name/path/version. The id is generated once and seeded into
+  every profile's client data before a login, so switching accounts does not
+  look like a second device; the UA follows the version, family and
+  architecture unless `user_agent` overrides it. An empty process block keeps
+  the client's own, and the file is edited by hand: a device id the portal
+  cannot read is refused at startup.
 
 The settings file has no JSON parser and no schema surprises: an omitted field
 takes its default. `[identity]` holds the device identity; the rest of the file

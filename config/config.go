@@ -21,6 +21,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -97,25 +98,75 @@ type IdentityConfig struct {
 	// DeviceID is the 32-hex id the portal sees as deviceId. It is generated
 	// once and seeded into every profile's client data.
 	DeviceID string `toml:"device_id"`
+	// ClientVersion is the aTrust client version the UA reports. Empty takes
+	// the default the build was written against.
+	ClientVersion string `toml:"client_version"`
+	// OSFamily selects the vocabulary the UA uses: "uos" reports Linux/UOS,
+	// "windows" reports Windows.
+	OSFamily string `toml:"os_family"`
+	// OSArch is the uname -m spelling the UA carries.
+	OSArch string `toml:"os_arch"`
+	// UserAgent overrides the derived UA. Empty derives it from
+	// ClientVersion, OSFamily and OSArch, so a version bump needs one edit.
+	UserAgent string `toml:"user_agent,omitempty"`
+	// ProcessName, ProcessPath and ProcessVersion replace the tunnel process
+	// block the client would otherwise report. Empty keeps the client's own
+	// block, which is what a build without this setting sends.
+	ProcessName    string `toml:"process_name"`
+	ProcessPath    string `toml:"process_path"`
+	ProcessVersion string `toml:"process_version"`
+}
+
+// Identity families. The family selects the UA vocabulary.
+const (
+	IdentityOSUOS     = "uos"
+	IdentityOSWindows = "windows"
+)
+
+// defaultClientVersion is the aTrust client version the UA reports until a
+// hand edit says otherwise.
+const defaultClientVersion = "2.5.16.41"
+
+// NewIdentity returns the derived part of a fresh identity. The random half
+// (the device id) is filled by EnsureIdentity so that a file without it is
+// only generated once, when the caller can persist it.
+func NewIdentity() IdentityConfig {
+	return IdentityConfig{
+		ClientVersion: defaultClientVersion,
+		OSFamily:      IdentityOSUOS,
+		OSArch:        archName(),
+	}
 }
 
 // EnsureIdentity fills the install-stable halves and reports whether anything
 // changed. The caller persists the file, so the same id survives every launch.
 // A hand-edited value wins: an existing non-empty id is never replaced.
 func (c *Config) EnsureIdentity() bool {
-	if strings.TrimSpace(c.Identity.DeviceID) != "" {
-		return false
+	changed := false
+	fill := func(field *string, value string) {
+		if strings.TrimSpace(*field) == "" {
+			*field = value
+			changed = true
+		}
 	}
-	// A profile that logged in before this setting existed already has a
-	// device the portal knows. Adopt it instead of minting a second device, so
-	// the first run after the upgrade does not invalidate the stored session
-	// material.
-	if stored := c.storedDeviceID(); stored != "" {
-		c.Identity.DeviceID = stored
-		return true
+	defaults := NewIdentity()
+	fill(&c.Identity.ClientVersion, defaults.ClientVersion)
+	fill(&c.Identity.OSFamily, defaults.OSFamily)
+	fill(&c.Identity.OSArch, defaults.OSArch)
+
+	if strings.TrimSpace(c.Identity.DeviceID) == "" {
+		// A profile that logged in before this setting existed already has a
+		// device the portal knows. Adopt it instead of minting a second
+		// device, so the first run after the upgrade does not invalidate the
+		// stored session material.
+		if stored := c.storedDeviceID(); stored != "" {
+			c.Identity.DeviceID = stored
+		} else {
+			c.Identity.DeviceID = randomHexID()
+		}
+		changed = true
 	}
-	c.Identity.DeviceID = randomHexID()
-	return true
+	return changed
 }
 
 // storedDeviceID returns the device id an existing profile already reported,
@@ -147,16 +198,72 @@ func (c *Config) storedDeviceID() string {
 // 32-hex form the protocol uses.
 func (i IdentityConfig) validate() error {
 	id := strings.TrimSpace(i.DeviceID)
-	if id == "" {
-		return nil
+	if id != "" {
+		if len(id) != 32 {
+			return fmt.Errorf("identity device_id %q is not 32 hex characters", id)
+		}
+		if _, err := hex.DecodeString(id); err != nil {
+			return fmt.Errorf("identity device_id %q is not hexadecimal", id)
+		}
 	}
-	if len(id) != 32 {
-		return fmt.Errorf("identity device_id %q is not 32 hex characters", id)
-	}
-	if _, err := hex.DecodeString(id); err != nil {
-		return fmt.Errorf("identity device_id %q is not hexadecimal", id)
+	switch i.OSFamily {
+	case "", IdentityOSUOS, IdentityOSWindows:
+	default:
+		return fmt.Errorf("identity os_family %q is neither %q nor %q",
+			i.OSFamily, IdentityOSUOS, IdentityOSWindows)
 	}
 	return nil
+}
+
+// UserAgentString is the UA the portal sees. An explicit user_agent wins;
+// otherwise the string follows the reported client version, OS family and
+// architecture.
+func (i IdentityConfig) UserAgentString() string {
+	if strings.TrimSpace(i.UserAgent) != "" {
+		return i.UserAgent
+	}
+	version := i.ClientVersion
+	if version == "" {
+		version = defaultClientVersion
+	}
+	arch := i.OSArch
+	if arch == "" {
+		arch = archName()
+	}
+	switch i.OSFamily {
+	case IdentityOSWindows:
+		return fmt.Sprintf("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-Windows-Plat-Windows10-%s SPCClientType",
+			version, uaArch(arch))
+	default:
+		return fmt.Sprintf("Mozilla/5.0 (X11; Linux %s) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-Linux-Plat-UOS-%s SPCClientType",
+			arch, version, uaArch(arch))
+	}
+}
+
+// uaArch is the short architecture suffix the UA uses.
+func uaArch(arch string) string {
+	switch arch {
+	case "x86_64", "amd64":
+		return "x64"
+	case "aarch64", "arm64":
+		return "arm64"
+	default:
+		return arch
+	}
+}
+
+// archName is the uname -m spelling the protocol expects, not GOARCH.
+func archName() string {
+	switch runtime.GOARCH {
+	case "amd64":
+		return "x86_64"
+	case "arm64":
+		return "aarch64"
+	case "386":
+		return "i686"
+	default:
+		return runtime.GOARCH
+	}
 }
 
 // randomHexID returns the 32-uppercase-hex form the protocol uses for

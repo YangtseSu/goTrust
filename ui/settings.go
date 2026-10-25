@@ -747,7 +747,7 @@ func advancedSection(c *ui.Context, state *SettingsState, profile *config.Profil
 			ui.TextInput(c, &profile.Debug.ClientData).Placeholder("留空则按配置名存放")
 		})
 		// The device identity is hand-edited only: a wrong id is a support
-		// problem, so the window shows the value in effect and opens the file.
+		// problem, so the window shows the values in effect and opens the file.
 		ui.Field(c, "设备 ID", func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 				deviceID := state.Draft.Identity.DeviceID
@@ -760,7 +760,30 @@ func advancedSection(c *ui.Context, state *SettingsState, profile *config.Profil
 				}
 			})
 		})
+		ui.Field(c, "客户端标识", func() {
+			ui.Text(c, identitySummary(state.Draft.Identity)).FontSize(c.Theme().FontSize).
+				TextColor(c.Theme().TextMuted)
+		})
 	})
+}
+
+// identitySummary is the one-line description of the identity in effect: the
+// values that change what the portal is told, without the long id or the UA.
+func identitySummary(identity config.IdentityConfig) string {
+	osName := "UOS"
+	if identity.OSFamily == config.IdentityOSWindows {
+		osName = "Windows"
+	}
+	parts := make([]string, 0, 3)
+	add := func(value string) {
+		if strings.TrimSpace(value) != "" {
+			parts = append(parts, value)
+		}
+	}
+	add(osName)
+	add(identity.ClientVersion)
+	add(identity.ProcessName)
+	return strings.Join(parts, " · ")
 }
 
 func indexOf(values []string, value string) int {
