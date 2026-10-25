@@ -1584,6 +1584,35 @@
   - `go.mod`/`go.sum`: fork pin moves to the commit above
 - Next: Phase 20 (keyring) remains open.
 
+### 2026-10-26: mygo 0.6.4 and tray activation
+
+- **Status:** complete
+- Actions taken:
+  - mygo v0.6.3 → v0.6.4, which raises the `go` directive to 1.27.3 (Arch's
+    `go` is 1.27.3, so no toolchain download). v0.6.4 carries PR #706 (Linux
+    `AppIndicator::activate` reaches `Tray.OnClick`, carried from #705), so the
+    tray's `OnClick(showWindow)` opens the main window on the panel's
+    double-click and the menu stays on the secondary click
+  - the frame workarounds stay: 0.6.4's PR #674 defers only `Close` (destroy),
+    not `Hide`, and issue #680 (a second window without a current GL context)
+    is still open. Creating 设置 and hiding it therefore still hop through
+    `mygo.RunOnMain`, and the settings epoch still claims the queued hide
+  - docs: the quirk rule in `AGENTS.md`, the window rules and the session-bus
+    note in `docs/agent-ui-testing.md`, the README tray line, Phase 18 and the
+    tray findings
+- Verification:
+  | Check | Result |
+  |-------|--------|
+  | `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` | green |
+  | `reuse lint` | compliant |
+  | Headless X11 smoke: 设置, 关闭, reopen, 退出 | window renders, exit 0 (X11 only) |
+  | Operator's GNOME Wayland: 设置 → 关闭 → 退出 | SIGSEGV in `gtk_main`, `addr=0x40`, twice in the journal; the frame hops are why this does not happen with them |
+  | Operator's GNOME Wayland: 断开 during an online session | crashed; the trace is on the launching terminal. Re-test after the hops are back |
+- Files created/modified: `go.mod`, `go.sum`, `README.md`, `AGENTS.md`,
+  `docs/agent-ui-testing.md`, planning files
+- Next: operator check of the tray activation on the real panel, and of 断开
+  with the restored hops.
+
 ## Error Log
 
 | Timestamp | Error | Attempt | Resolution |
@@ -1597,7 +1626,7 @@
 | Question | Answer |
 |----------|--------|
 | Where am I? | Phase 21 is complete: the settings window reads the portal's 终端管理 lists and changes this device's trust, the main window confirms a device binding, the live acceptance passed, and `r56` carries both |
-| Where am I going? | Keyring storage (Phase 20) is next. Phase 8 (dae) stays deferred and Phase 18's double-click waits on mygo. Phase 16 is closed: `gotrust-git` is installed |
+| Where am I going? | Keyring storage (Phase 20) is next. Phase 8 (dae) stays deferred; Phase 18's activation landed with mygo v0.6.4 and only the upstream glib backend remains. Phase 16 is closed: `gotrust-git` is installed |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
 | What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package, the forced/voluntary password change, and the portal terminal list with device trust; a full review with five reproduced defects, recorded as Phase 17 |

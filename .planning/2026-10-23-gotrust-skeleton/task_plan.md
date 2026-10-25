@@ -472,19 +472,22 @@ test except where noted):
       granted application (the same value the resource row shows) with the
       desktop's default browser; the item is disabled when the grant has no
       URL
-- [ ] Double-click opens the main window: blocked by mygo v0.6.3, whose Linux
-      backend never reports clicks and lets the panel take the primary click
-      for the menu; needs an upstream activation backend, not a fake
-- [ ] Upstream mygo issue/PR: activation callbacks plus a
-      `libayatana-appindicator-glib` backend (GMenu/GAction, `activate_event`),
-      keeping the GTK3 backend as the fallback; draft is in `findings.md`
-- [ ] After mygo ships it: bump the pin, add the `-glib` package dependency,
-      re-run the native tray smoke; keep the legacy dependency for the
-      fallback
-- **Status:** in_progress
+- [x] Activating the tray icon opens the main window: mygo v0.6.4 answers the
+      panel's `Activate` with `Tray.OnClick` (upstream PR #706, carried from
+      #705), and the tray already registers the handler
+- [x] Upstream mygo PR: the activation half landed as PR #705/#706
+- [ ] Upstream glib backend: v0.6.4 still binds `libayatana-appindicator3` and
+      the deprecation warning stays. A `libayatana-appindicator-glib` backend
+      (GMenu/GAction, `activate_event`) keeps the legacy one as the fallback
+      when a release ships it
+- **Status:** complete (activation and menu); the glib backend is upstream work
+- **Note:** mygo 0.6.4 defers only a destroy in frame (PR #674), not `Hide`, and
+  issue #680 is still open, so the create/hide hops stay in `main.go`.
 - **Note:** the `libayatana-appindicator-WARNING` line comes from the legacy
   backend. The `.so` is not a drop-in: GMenu vs GtkMenu, and no
   `app_indicator_set_icon_full`. Do not swap the package dependency alone.
+  With a click listener the panel activates the icon (double click in GNOME);
+  the menu opens on the secondary click.
 
 ### Phase 19: Password change and forced reset (full)
 

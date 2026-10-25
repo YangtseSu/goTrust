@@ -31,9 +31,11 @@ The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
 
 - Views are pure: no network, no global state; render them in tests.
 - mygo quirk: create and hide windows outside their own frame
-  (`go func() { mygo.RunOnMain(fn) }()`). Creating or hiding a native window
-  inside a view frame can leave it without a GL context or segfault in GTK.
-  See `docs/agent-ui-testing.md`.
+  (`go func() { mygo.RunOnMain(fn) }()`). 0.6.4 defers a destroy that happens
+  during a frame (upstream PR #674), but it does not defer `Hide`, and a window
+  created in a frame can still come up without a GL context (issue #680). Both
+  crash GTK on the operator's Wayland session. See
+  `docs/agent-ui-testing.md`.
 - Never put real gateways, accounts, intranet addresses or client data in code,
   tests, commits or screenshots. Use `192.0.2.0/24`, `203.0.113.0/24`,
   `example.com`.

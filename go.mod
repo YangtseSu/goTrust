@@ -1,10 +1,10 @@
 module github.com/YangtseSu/goTrust
 
-go 1.27.1
+go 1.27.3
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/egoist/mygo v0.6.3
+	github.com/egoist/mygo v0.6.4
 	github.com/mythologyli/zju-connect v1.3.2-0.20261024152456-347753428ab2
 	github.com/pquerna/otp v1.5.0
 	github.com/things-go/go-socks5 v0.1.1

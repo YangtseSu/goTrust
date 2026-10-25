@@ -133,13 +133,22 @@ on stderr is expected.
 
 - Open and hide windows outside their own frame:
   `go func() { mygo.RunOnMain(fn) }()`.
-- Creating a native window inside a frame can leave it without a GL context
-  (`OpenGL 0.0 is too old`, `native UI shows nothing: no current context`).
-- Hiding or destroying one inside its own action can crash GTK:
-  `SIGSEGV` in `linux.(*Backend).Run` through a `purego` callback. That is a
-  crash, not a clean exit; read stderr. Upstream: mygo PR #674 (close in
-  frame), issue #680 (blank second window).
+- mygo 0.6.4 defers a destroy that happens during a frame (upstream PR #674),
+  but not `Hide`, and a window created inside a frame can still come up without
+  a GL context (issue #680, open). On the operator's GNOME Wayland session that
+  is a SIGSEGV in `gtk_main` (`addr=0x40`, "signal arrived during cgo
+  execution") on 关闭 and on 退出 after it.
+- The headless X11 session below does **not** reproduce it: the GL context
+  works there, so the frame rules cannot be validated by this smoke alone.
+- Creating a native window inside a frame can leave it without a GL context:
+  read stderr for `OpenGL 0.0 is too old` or
+  `native UI shows nothing: no current context`.
 - The settings window hides on close; reopening reloads the saved draft.
+- The headless mutter needs a session bus: without
+  `DBUS_SESSION_BUS_ADDRESS` it aborts with
+  `assertion failed: (session_bus)`. Start a private one with
+  `eval $(dbus-launch --sh-syntax)` or wrap the smoke in
+  `dbus-run-session`.
 
 ## Autostart smoke
 

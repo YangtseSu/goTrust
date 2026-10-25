@@ -548,7 +548,7 @@ application URL with the default browser.
   (`mygo.Shell.OpenExternal`). The item is disabled while the grant has no URL.
   Tests: `TestTrayMenuOpensTheDefaultApp`,
   `TestTrayMenuDefaultAppIsDisabledWithoutAURL`.
-- **Double-click is not implementable with the pinned mygo v0.6.3 on Linux.**
+- **Double-click is not implementable with mygo v0.6.3 on Linux; resolved in v0.6.4 (upstream PRs #705/#706).**
   Its backend creates an AppIndicator and installs the menu
   (`internal/linux/menu.go:455-500`); `TrayHandler.Clicked/RightClicked` are
   only called on darwin and windows (`internal/darwin/menu.go:296-298`,

@@ -355,9 +355,9 @@ func (a *app) openSettings() {
 		}),
 	})
 	a.settingsWindow.Store(window)
-	// A close hides the window, as it does for the main window. Destroying a
-	// window from its own button action crashes GTK through mygo's callbacks;
-	// hiding also lets reopening show a fresh draft.
+	// A close hides the window, as it does for the main window, so reopening
+	// starts from the saved settings again. The hide itself runs after the
+	// frame (see hideSettings), not from this handler's GTK callback.
 	window.OnClose(func(event *mygo.CloseEvent) {
 		a.mu.RLock()
 		quitting := a.quitting
@@ -748,15 +748,15 @@ func (a *app) closeSettings() {
 	a.mu.Unlock()
 }
 
-// hideSettings hides the settings window after the current frame. Hiding it
-// from the button action itself runs surface callbacks while the frame still
-// builds, which crashed GTK's GL teardown.
+// hideSettings hides the settings window after the current frame, then discards
+// its draft so reopening loads the saved settings again. Hiding it from the
+// button action itself runs GTK calls while the frame still builds, which
+// crashed GTK's GL teardown; mygo's deferred destroy (PR #674) covers Close,
+// not Hide.
 //
 // The epoch check belongs on the main thread with the hide, because openSettings
 // bumps the epoch there: a reopen either runs before the claim (and the queued
-// hide is stale) or after the hide (and shows the window again). Checking in
-// this goroutine and hiding afterwards was a gap where a reopened window
-// disappeared under the queued hide.
+// hide is stale) or after the hide (and shows the window again).
 func (a *app) hideSettings(window *mygo.Window) {
 	epoch := a.bumpSettingsEpoch()
 
