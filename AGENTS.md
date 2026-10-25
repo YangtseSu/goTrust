@@ -53,6 +53,8 @@ The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
 - Never mention `devel/next`, its B-items, or their research in commits, code,
   comments, docs or tests that reach `main`. Describe released behaviour and
   interfaces only.
+- Never merge `devel/next` into `main`: its ancestry predates the public
+  rewrite. Move one B-item at a time (rewrite, rebase/cherry-pick, new phase).
 - A B-item enters `main` only when all of these hold:
   1. its code builds against the published fork pin, with no local `replace`;
   2. its notes are rewritten to behaviour/interface level and moved into
