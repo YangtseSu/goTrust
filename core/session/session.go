@@ -533,7 +533,7 @@ func (m *Manager) runPacketStack(run func()) {
 	run()
 }
 
-// cacheResources stores the last grant beside the settings, so
+// cacheResources stores the last grant beside the settings, so gotrust-cli
 // --print-resources works without another login. A cache that cannot be
 // written is a convenience lost, not a login failure.
 func (m *Manager) cacheResources(profile config.Profile, gateway, tunnelIP string, resources Resources) {

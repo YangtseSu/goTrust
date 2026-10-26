@@ -16,11 +16,12 @@ It is deliberately narrow:
 ## Status
 
 The session layer, the local proxy listeners, the tray, the in-window click
-captcha, the settings window, profiles, file logging, autostart and the granted
-resource list are implemented. The protocol path was verified against a real
-gateway in Phase 9; the settings/profile/startup/resource paths are verified by
-tests and headless smoke runs. A final live pass over the settings window is the
-remaining step; see `.planning/` for the current phase.
+captcha, the settings window, profiles, file logging, autostart, the granted
+resource list and the headless `gotrust-cli` front-end are implemented. The
+protocol path was verified against a real gateway in Phase 9; the
+settings/profile/startup/resource paths are verified by tests and headless smoke
+runs. A final live pass over the settings window is the remaining step; see
+`.planning/` for the current phase.
 
 ## Why a new project rather than a fork
 
