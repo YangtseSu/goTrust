@@ -16,38 +16,41 @@ the gateway has already accepted.
 
 ## Next Step
 
-No phase has started. Begin with Phase 1, the name inventory and the `core/`
-move, because every later phase writes imports to their final home and a second
-pass over the same files would double the review.
+Phase 2: import the protocol layer from the published commit into `core/atrust/`
+and drop the packages this app does not run. The tree now has a stable
+`core/` home, so the import writes its final paths once.
 
 ## Current Phase
 
-None started. `../2026-10-23-gotrust-skeleton/` built the app and closed with a
-working tray client; this plan moves that app behind a stable core and makes
-the repository publishable.
+Phase 1 is complete: the application packages live under `core/`, the technical
+names are lowercase, the installed directories were migrated and the live login
+works against the migrated config. `../2026-10-23-gotrust-skeleton/` built the
+app; this plan moves it behind a stable core and makes the repository
+publishable.
 
 ## Phases
 
 ### Phase 1: Names and layout (mechanical)
 
-- [ ] Inventory every case-sensitive name: module path, binary, XDG directories,
+- [x] Inventory every case-sensitive name: module path, binary, XDG directories,
       log file, desktop entry, icons, PKGBUILD fields and the client identity
       string
-- [ ] Keep `goTrust` for the module path and repository name, the README title,
+- [x] Keep `goTrust` for the module path and repository name, the README title,
       the desktop entry's `Name=` and every window/tray/string a user reads
-- [ ] Lowercase the rest: `gotrust` and `gotrust-cli` binaries, `cmd/`
-      directories, `~/.config/gotrust`, `~/.local/state/gotrust/gotrust.log`,
-      `gotrust.desktop`, `gotrust.svg`, `gotrust-symbolic.svg`, the PKGBUILD
-      install target
-- [ ] Leave the client identity string alone: it is sent to the gateway and is
+- [x] Lowercase the rest: `gotrust` binary, `~/.config/gotrust`,
+      `~/.local/state/gotrust/gotrust.log`, `gotrust.desktop`, `gotrust.svg`,
+      `gotrust-symbolic.svg`, the PKGBUILD install target
+- [x] Leave the client identity string alone: it is sent to the gateway and is
       not a display name, so changing it is a behaviour change, not a rename
-- [ ] Move `config`, `session`, `proxy` and `logging` under `core/`; leave `ui/`
+- [x] Move `config`, `session`, `proxy` and `logging` under `core/`; leave `ui/`
       and the GUI entry point at the top level
-- [ ] Migrate the config and log directories once, by hand; no migration code
+- [x] Migrate the config and log directories once, by hand; no migration code
       in the binary
 - **Gates:** `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .`,
   `reuse lint`, the `gotrust-git` package builds, a login works after the
   directory move, UI smoke per `docs/agent-ui-testing.md`
+- **Status:** complete. The core-move and lowercase-names commits. The `cmd/`
+  directories belong to Phase 3, where both entry points are created in one step.
 
 ### Phase 2: Protocol layer in-tree
 
@@ -120,6 +123,9 @@ the repository publishable.
   running the GUI on one account and the CLI on another.
 - Where does the lock live on Windows and macOS? Behind a small `core` package
   with one implementation per platform, so no front-end owns it.
+- Does the process name reported on the tunnel block follow the binary name? It
+  stays `goTrust` for now: it is a wire identity, and Phase 1 changes no bytes
+  the gateway sees.
 
 ## Decisions Made
 

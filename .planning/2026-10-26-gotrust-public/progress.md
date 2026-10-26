@@ -25,7 +25,42 @@
 
 ### Phase 1: Names and layout (mechanical)
 
-- **Status:** pending
+- **Status:** complete
+- **Started:** 2026-10-26
+- Actions taken:
+  - moved `config`, `session`, `proxy` and `logging` under `core/` as a pure
+    import-path rewrite, then confirmed with
+    `go list -deps ./core/...` that the guard is empty
+  - lowercased the binary, the XDG config and log directories, the log file
+    name, the desktop entry and both icons. The desktop `Name=`,
+    the window and tray text, the client identity string and the reported
+    process name keep `goTrust`
+  - updated `README.md`, `docs/agent-ui-testing.md` and the packaging recipe
+  - migrated `~/.config/goTrust` and `~/.local/state/goTrust` by hand while the
+    app was stopped: six config files and one log file moved, permissions kept
+  - removed a stale 19 MB build artifact from the repository root; the renamed
+    ignore rule no longer covered it and `reuse lint` saw it as unlicensed
+- Gates:
+  - `go build ./...`, `go test ./...`, `go vet ./...` clean, `gofmt -l .` empty,
+    `reuse lint` 57/57
+  - `makepkg -fC` built `gotrust-git r67`; the payload is
+    `/usr/bin/gotrust`, `gotrust.desktop` and both `gotrust` icons
+  - nested headless UI smoke: ready line, the window renders with its `goTrust`
+    heading, SIGTERM exits 0, no processes left behind
+  - headless live login against the migrated config: session online, two
+    granted resources, SOCKS5 and HTTP listeners up, keep-alive answered 200
+- Follow-ups:
+  - the installed package is still `gotrust-next-git`, which owns
+    `/usr/bin/goTrust`; installing `gotrust-git` replaces both the binary and
+    the desktop entry
+  - the old `goTrust.log` in the state directory stays as history; new runs
+    write `gotrust.log`
+  - the reported tunnel process name still reads `goTrust` (see the plan's Key
+    Questions)
+- Files created/modified:
+  - `core/**` (moved), `data/gotrust.desktop`, `data/icons/**`, `README.md`,
+    `docs/agent-ui-testing.md`, `AGENTS.md`, `.gitignore`, `icon.go`,
+    `core/config/config.go`, `core/logging/logging.go` and their tests
 
 ### Phase 2: Protocol layer in-tree
 

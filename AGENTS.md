@@ -19,11 +19,13 @@ The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
 
 ## Layout
 
-- `config/`: TOML v2, profiles, atomic 0600 writes.
-- `session/`: aTrust client, state, prompter, per-profile client data.
-- `proxy/`: SOCKS5 and HTTP listeners over an injected dialer.
+- `core/`: the application packages. Nothing here imports mygo or purego, so a
+  second front-end can be built against them without the GUI toolkit.
+- `core/config/`: TOML v2, profiles, atomic 0600 writes.
+- `core/session/`: aTrust client, state, prompter, per-profile client data.
+- `core/proxy/`: SOCKS5 and HTTP listeners over an injected dialer.
+- `core/logging/`: rotating, redacted line log.
 - `ui/`: pure view functions and the testable `ui.NewTester` views.
-- `logging/`: rotating, redacted line log.
 - `main.go`: wiring, tray, settings window, startup.
 - Plan and history: `.planning/2026-10-23-gotrust-skeleton/` (the app) and
   `.planning/2026-10-26-gotrust-public/` (the restructure to a self-contained
