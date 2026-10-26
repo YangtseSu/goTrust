@@ -426,6 +426,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 			Path:    identity.ProcessPath,
 			Version: identity.ProcessVersion,
 		},
+		ClientProcess: clientProcess(),
 		OnPasswordChanged: func(newPassword string) {
 			if m.options.OnPasswordChanged != nil {
 				m.options.OnPasswordChanged(profile.Name, newPassword)
@@ -659,6 +660,17 @@ func (m *Manager) tunnelDNS(client clientpkg.Client) (remote, secondary string, 
 		secondary = servers[1]
 	}
 	return remote, secondary, true
+}
+
+// clientProcess is the process block the L3 environment reports for this
+// client: its own name and binary. The tunnel carries traffic for arbitrary
+// local applications, so the client itself is the only process it can name.
+func clientProcess() *atrust.TunnelProcess {
+	path, err := os.Executable()
+	if err != nil {
+		path = ""
+	}
+	return &atrust.TunnelProcess{Name: "goTrust", Path: path}
 }
 
 // runKeepAlive holds the session open with real application traffic. Without a

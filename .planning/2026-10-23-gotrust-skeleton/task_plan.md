@@ -625,6 +625,8 @@ seeds it into every profile before the login.
 - [x] the default identity states what the client is (`goTrust …`, family
       `linux`); the `uos`/`windows` presets are only used when the file
       asks for them
+- [x] the L3 environment reports goTrust's own binary in its process block; the
+      TCP destination request keeps its per-port requester default
 - [ ] native endpoint reporting: the host/OS/MAC fields the portal shows for a
       native registration, behind a switch that stays off while the gateway
       rejects the native session

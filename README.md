@@ -165,7 +165,8 @@ page. The groups are:
 * **高级** — verbose logging, the log directory with an open button, the
   per-profile client-data path, and the install identity with 打开配置文件.
   `[identity]` holds a device id, the OS family, an optional client version and
-  an optional process name/path/version. The id is generated once and seeded
+  an optional process name/path/version for the TCP destination request. The
+  L3 environment reports goTrust's own binary instead of a preset one. The id is generated once and seeded
   into every profile's client data before a login, so switching accounts does
   not look like a second device. The default UA states what the client is
   (`goTrust (aTrust client; Linux x86_64)`); `os_family = "uos"` or `"windows"`

@@ -5,6 +5,7 @@ package session
 
 import (
 	"encoding/json"
+	"path"
 	"testing"
 )
 
@@ -60,5 +61,16 @@ func TestSeedDeviceIDWithoutAnIdentity(t *testing.T) {
 	}
 	if _, err := seedDeviceID([]byte("not json"), testDeviceID); err == nil {
 		t.Fatal("a corrupt stored session was accepted")
+	}
+}
+
+// The L3 environment names this client, not the upstream library's default.
+func TestClientProcessNamesTheRunningBinary(t *testing.T) {
+	process := clientProcess()
+	if process.Name != "goTrust" {
+		t.Fatalf("name = %q", process.Name)
+	}
+	if process.Path == "" || !path.IsAbs(process.Path) {
+		t.Fatalf("path = %q, want the running binary's absolute path", process.Path)
 	}
 }
