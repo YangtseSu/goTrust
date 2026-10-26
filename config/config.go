@@ -117,14 +117,17 @@ type IdentityConfig struct {
 	ProcessVersion string `toml:"process_version"`
 }
 
-// Identity families. The family selects the UA vocabulary.
+// Identity families. The family selects the UA vocabulary. The default,
+// "linux", is the truthful one; "uos" and "windows" carry the vocabulary those
+// platforms expect and are only used when the file asks for them.
 const (
+	IdentityOSLinux   = "linux"
 	IdentityOSUOS     = "uos"
 	IdentityOSWindows = "windows"
 )
 
-// defaultClientVersion is the aTrust client version the UA reports until a
-// hand edit says otherwise.
+// defaultClientVersion is the version the alternate presets report when
+// client_version is empty. The truthful family carries no version.
 const defaultClientVersion = "2.5.16.41"
 
 // NewIdentity returns the derived part of a fresh identity. The random half
@@ -132,9 +135,8 @@ const defaultClientVersion = "2.5.16.41"
 // only generated once, when the caller can persist it.
 func NewIdentity() IdentityConfig {
 	return IdentityConfig{
-		ClientVersion: defaultClientVersion,
-		OSFamily:      IdentityOSUOS,
-		OSArch:        archName(),
+		OSFamily: IdentityOSLinux,
+		OSArch:   archName(),
 	}
 }
 
@@ -150,7 +152,6 @@ func (c *Config) EnsureIdentity() bool {
 		}
 	}
 	defaults := NewIdentity()
-	fill(&c.Identity.ClientVersion, defaults.ClientVersion)
 	fill(&c.Identity.OSFamily, defaults.OSFamily)
 	fill(&c.Identity.OSArch, defaults.OSArch)
 
@@ -207,24 +208,21 @@ func (i IdentityConfig) validate() error {
 		}
 	}
 	switch i.OSFamily {
-	case "", IdentityOSUOS, IdentityOSWindows:
+	case "", IdentityOSLinux, IdentityOSUOS, IdentityOSWindows:
 	default:
-		return fmt.Errorf("identity os_family %q is neither %q nor %q",
-			i.OSFamily, IdentityOSUOS, IdentityOSWindows)
+		return fmt.Errorf("identity os_family %q is not one of %q, %q or %q",
+			i.OSFamily, IdentityOSLinux, IdentityOSUOS, IdentityOSWindows)
 	}
 	return nil
 }
 
-// UserAgentString is the UA the portal sees. An explicit user_agent wins;
-// otherwise the string follows the reported client version, OS family and
-// architecture.
+// UserAgentString is the UA the portal sees. An explicit user_agent wins.
+// Otherwise the default family states what the client is; the uos and windows
+// presets send the vocabulary those platforms use, only when the file selects
+// them.
 func (i IdentityConfig) UserAgentString() string {
 	if strings.TrimSpace(i.UserAgent) != "" {
 		return i.UserAgent
-	}
-	version := i.ClientVersion
-	if version == "" {
-		version = defaultClientVersion
 	}
 	arch := i.OSArch
 	if arch == "" {
@@ -232,11 +230,24 @@ func (i IdentityConfig) UserAgentString() string {
 	}
 	switch i.OSFamily {
 	case IdentityOSWindows:
+		version := i.ClientVersion
+		if version == "" {
+			version = defaultClientVersion
+		}
 		return fmt.Sprintf("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-Windows-Plat-Windows10-%s SPCClientType",
 			version, uaArch(arch))
-	default:
+	case IdentityOSUOS:
+		version := i.ClientVersion
+		if version == "" {
+			version = defaultClientVersion
+		}
 		return fmt.Sprintf("Mozilla/5.0 (X11; Linux %s) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-Linux-Plat-UOS-%s SPCClientType",
 			arch, version, uaArch(arch))
+	default:
+		if strings.TrimSpace(i.ClientVersion) != "" {
+			return fmt.Sprintf("goTrust/%s (aTrust client; Linux %s)", i.ClientVersion, arch)
+		}
+		return fmt.Sprintf("goTrust (aTrust client; Linux %s)", arch)
 	}
 }
 

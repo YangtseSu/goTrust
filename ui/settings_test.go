@@ -740,8 +740,8 @@ func TestSettingsShowsAndChangesTrust(t *testing.T) {
 }
 
 func TestIdentitySummaryOmitsTheEmptyProcess(t *testing.T) {
-	got := identitySummary(config.IdentityConfig{OSFamily: config.IdentityOSUOS, ClientVersion: "2.5.16.41"})
-	if got != "UOS · 2.5.16.41" {
+	got := identitySummary(config.IdentityConfig{OSFamily: config.IdentityOSLinux, ClientVersion: "2.5.16.41"})
+	if got != "Linux · 2.5.16.41" {
 		t.Fatalf("summary = %q", got)
 	}
 	withProcess := identitySummary(config.IdentityConfig{

@@ -164,13 +164,14 @@ page. The groups are:
   of showing an empty list.
 * **高级** — verbose logging, the log directory with an open button, the
   per-profile client-data path, and the install identity with 打开配置文件.
-  `[identity]` holds a device id, the client version, the OS family and an
-  optional process name/path/version. The id is generated once and seeded into
-  every profile's client data before a login, so switching accounts does not
-  look like a second device; the UA follows the version, family and
-  architecture unless `user_agent` overrides it. An empty process block keeps
-  the client's own, and the file is edited by hand: a device id the portal
-  cannot read is refused at startup.
+  `[identity]` holds a device id, the OS family, an optional client version and
+  an optional process name/path/version. The id is generated once and seeded
+  into every profile's client data before a login, so switching accounts does
+  not look like a second device. The default UA states what the client is
+  (`goTrust (aTrust client; Linux x86_64)`); `os_family = "uos"` or `"windows"`
+  sends the vocabulary those platforms use, and `user_agent` overrides the field outright. An empty process
+  block keeps the client's own, and the file is edited by hand: a device id the
+  portal cannot read is refused at startup.
 
 The settings file has no JSON parser and no schema surprises: an omitted field
 takes its default. `[identity]` holds the device identity; the rest of the file

@@ -615,10 +615,17 @@ seeds it into every profile before the login.
 - [x] seeded into each profile's client data before the login, so switching
       accounts does not look like a second device
 - [x] settings 高级 shows the id read-only and opens the file for hand edits
-- [ ] live acceptance of the seeded id: log in, check 终端管理 keeps one row
+- [x] live acceptance of the seeded id: two accounts logged in, both reported
+      the same device id
+- [ ] live acceptance of the honest default UA: log in with family `linux` and
+      no client version; the connection must stay up and the portal must not
+      reject the client
 - [x] UA and tunnel process block from the identity: the client library takes
       a per-session UA and a process block, and `[identity]` supplies both; an
       empty process block keeps the client's own
+- [x] the default identity states what the client is (`goTrust …`, family
+      `linux`); the `uos`/`windows` presets are only used when the file
+      asks for them
 - [ ] native endpoint reporting: the host/OS/MAC fields the portal shows for a
       native registration, behind a switch that stays off while the gateway
       rejects the native session

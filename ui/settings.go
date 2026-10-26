@@ -770,9 +770,12 @@ func advancedSection(c *ui.Context, state *SettingsState, profile *config.Profil
 // identitySummary is the one-line description of the identity in effect: the
 // values that change what the portal is told, without the long id or the UA.
 func identitySummary(identity config.IdentityConfig) string {
-	osName := "UOS"
-	if identity.OSFamily == config.IdentityOSWindows {
+	osName := "Linux"
+	switch identity.OSFamily {
+	case config.IdentityOSWindows:
 		osName = "Windows"
+	case config.IdentityOSUOS:
+		osName = "UOS"
 	}
 	parts := make([]string, 0, 3)
 	add := func(value string) {

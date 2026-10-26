@@ -639,25 +639,35 @@ func TestEnsureIdentityAdoptsTheStoredProfileDevice(t *testing.T) {
 	}
 }
 
-func TestUserAgentFollowsTheIdentity(t *testing.T) {
-	id := IdentityConfig{ClientVersion: "2.5.16.41", OSFamily: IdentityOSUOS, OSArch: "x86_64"}
+func TestUserAgentDefaultIsTruthful(t *testing.T) {
+	id := IdentityConfig{}
 	ua := id.UserAgentString()
-	if !strings.Contains(ua, "aTrustTray/2.5.16.41") ||
-		!strings.Contains(ua, "aTrustTray-Linux-Plat-UOS-x64") ||
-		!strings.Contains(ua, "SPCClientType") {
-		t.Fatalf("UA %q is not the UOS form", ua)
+	if ua != "goTrust (aTrust client; Linux "+archName()+")" {
+		t.Fatalf("UA = %q, want the truthful default", ua)
 	}
-
-	id.OSFamily = IdentityOSWindows
-	ua = id.UserAgentString()
-	if !strings.Contains(ua, "Windows NT 10.0") ||
-		!strings.Contains(ua, "aTrustTray-Windows-Plat-Windows10-x64") {
-		t.Fatalf("UA %q is not the Windows form", ua)
+	if strings.Contains(ua, "aTrustTray") || strings.Contains(ua, "UOS") {
+		t.Fatalf("UA %q is not the truthful default", ua)
 	}
-
+	id.ClientVersion = "1.2.3"
+	if !strings.Contains(id.UserAgentString(), "goTrust/1.2.3") {
+		t.Fatalf("UA %q does not carry the version", id.UserAgentString())
+	}
 	id.UserAgent = "custom-ua"
 	if got := id.UserAgentString(); got != "custom-ua" {
 		t.Fatalf("UA = %q, want the explicit override", got)
+	}
+}
+
+func TestUserAgentPresetsAreExplicit(t *testing.T) {
+	uos := IdentityConfig{OSFamily: IdentityOSUOS, OSArch: "x86_64"}
+	if ua := uos.UserAgentString(); !strings.Contains(ua, "aTrustTray/"+defaultClientVersion) ||
+		!strings.Contains(ua, "aTrustTray-Linux-Plat-UOS-x64") {
+		t.Fatalf("UOS preset UA = %q", ua)
+	}
+	windows := IdentityConfig{OSFamily: IdentityOSWindows, OSArch: "x86_64"}
+	if ua := windows.UserAgentString(); !strings.Contains(ua, "Windows NT 10.0") ||
+		!strings.Contains(ua, "aTrustTray-Windows-Plat-Windows10-x64") {
+		t.Fatalf("Windows preset UA = %q", ua)
 	}
 }
 
@@ -670,8 +680,11 @@ func TestEnsureIdentityFillsTheDerivedFields(t *testing.T) {
 	if !cfg.EnsureIdentity() {
 		t.Fatal("an empty derived identity reported no change")
 	}
-	if cfg.Identity.ClientVersion == "" || cfg.Identity.OSFamily != IdentityOSUOS || cfg.Identity.OSArch == "" {
+	if cfg.Identity.OSFamily != IdentityOSLinux || cfg.Identity.OSArch == "" {
 		t.Fatalf("identity = %+v", cfg.Identity)
+	}
+	if cfg.Identity.ClientVersion != "" {
+		t.Fatalf("a client version was invented: %q", cfg.Identity.ClientVersion)
 	}
 	if cfg.Identity.ProcessName != "" || cfg.Identity.ProcessPath != "" {
 		t.Fatalf("a process block was invented: %+v", cfg.Identity)
