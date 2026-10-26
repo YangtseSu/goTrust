@@ -260,3 +260,46 @@ func TestFailedLoginLeavesAFreeProfileForTheNextRun(t *testing.T) {
 		t.Fatalf("status exit code = %d, want %d", code, ExitNotRunning)
 	}
 }
+
+// The live run's --json output is a machine contract: a deployment reads the
+// grant from it instead of scraping the text rows.
+func TestLiveGrantJSON(t *testing.T) {
+	grant := liveGrant{
+		Profile:  config.DefaultProfileName,
+		Gateway:  "vpn.example.com:443",
+		TunnelIP: "192.0.2.10",
+		Resources: session.Resources{
+			IPs: []session.IPRule{{
+				From:     "192.0.2.20",
+				To:       "192.0.2.20",
+				PortMin:  443,
+				PortMax:  443,
+				Protocol: "tcp",
+			}},
+		},
+	}
+
+	var out bytes.Buffer
+	printGrant(&out, grant, true)
+
+	var decoded struct {
+		Profile   string `json:"profile"`
+		Gateway   string `json:"gateway"`
+		TunnelIP  string `json:"tunnel_ip"`
+		Resources struct {
+			IPs []struct {
+				From     string `json:"from"`
+				Protocol string `json:"protocol"`
+			} `json:"ips"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode the grant: %v (output %q)", err, out.String())
+	}
+	if decoded.Profile != config.DefaultProfileName || decoded.Gateway != "vpn.example.com:443" || decoded.TunnelIP != "192.0.2.10" {
+		t.Fatalf("grant = %+v", decoded)
+	}
+	if len(decoded.Resources.IPs) != 1 || decoded.Resources.IPs[0].From != "192.0.2.20" || decoded.Resources.IPs[0].Protocol != "tcp" {
+		t.Fatalf("resources = %+v", decoded.Resources)
+	}
+}
