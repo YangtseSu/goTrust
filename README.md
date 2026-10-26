@@ -27,20 +27,25 @@ remaining step; see `.planning/` for the current phase.
 The protocol implementation comes from
 [`zju-connect`](https://github.com/Mythologyli/zju-connect), which already
 speaks aTrust, including the session-lifecycle and keep-alive fixes this app
-needs. goTrust imports those packages and supplies its own wiring, because the
-upstream `main` is a CLI: it parses flags, reads a TOML config and exits on
-signals, none of which a tray app wants.
+needs. goTrust keeps that layer in the tree, under `core/atrust/`, and supplies
+its own wiring, because the upstream `main` is a CLI: it parses flags, reads a
+TOML config and exits on signals, none of which a tray app wants.
 
-The dependency is pinned to a fork (`YangtseSu/zju-connect`, branch `dev`)
-through a `replace` directive, so the protocol layer can move independently of
-the application.
+The layer is imported once, at a recorded commit, and dropped packages that only
+served that CLI. `core/atrust/PROVENANCE.md` names the source and lists what was
+imported and what was left out. Keeping it in the tree means a protocol change
+and its consumer land in one commit instead of a pin bump per change.
 
 ## Licence
 
-**AGPL-3.0-or-later.** goTrust links `zju-connect`, which is AGPL-3.0; a
-statically linked Go binary is a single combined work, so the combination is
-AGPL. GPLv3 §13 permits combining a GPL work with an AGPL one, never the
-reverse, so a copyleft-only licence is not available here.
+**AGPL-3.0-or-later** for goTrust's own code, **AGPL-3.0** for the protocol
+layer under `core/atrust/` it was imported from. A statically linked Go binary
+is a single combined work, so every released binary is AGPL-3.0. GPLv3 §13
+permits combining a GPL work with an AGPL one, never the reverse, so a
+copyleft-only licence is not available here either.
+
+`internal/ping` inside the imported layer is MIT-licensed third-party code; the
+`REUSE.toml` annotations record both cases, and `reuse lint` keeps them honest.
 
 If you run a modified goTrust as a network service, AGPL §13 requires you to
 offer its source to the users of that service.
@@ -286,11 +291,10 @@ failure (`会话已过期，需要重新登录`) that brings the window forward.
 
 A session belongs to its connection and cannot be reused. A stored sid ticket
 is device material, not a login: after 断开, or after the portal ends the
-session, the next connection logs in again. Both atrust-quadlet and
-zju-connect tried to revive a session from the stored ticket, and the portal
-ended it anyway; the attempt only delayed the login. For the same reason
-启动后自动连接 requires a saved password — stored client data alone is not
-enough.
+session, the next connection logs in again. Reviving a session from the stored
+ticket was tried and the portal ended it anyway; the attempt only delayed the
+login. For the same reason 启动后自动连接 requires a saved password — stored
+client data alone is not enough.
 
 The main window and the tray tooltip show the last keep-alive probe: target,
 HTTP status, transport error, or the DNS fallback. A `https://` target is

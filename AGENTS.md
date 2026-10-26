@@ -1,7 +1,8 @@
 # AGENTS.md
 
-goTrust: an AGPL-3.0-or-later aTrust tray client. Go 1.27, mygo UI,
-zju-connect fork. No TUN, no system proxy, no elevation.
+goTrust: an AGPL-3.0-or-later aTrust tray client. Go 1.27, mygo UI, the aTrust
+protocol layer in the tree under `core/atrust/`. No TUN, no system proxy, no
+elevation.
 
 ## Build and checks
 
@@ -13,7 +14,9 @@ gofmt -l .
 reuse lint
 ```
 
-`reuse lint` must stay clean; every new Go file starts with the SPDX header.
+`reuse lint` must stay clean; every new Go file starts with the SPDX header,
+except in the imported tree, which is annotated in `REUSE.toml` instead of being
+edited.
 The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
 `makepkg -fC`.
 
@@ -21,6 +24,10 @@ The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
 
 - `core/`: the application packages. Nothing here imports mygo or purego, so a
   second front-end can be built against them without the GUI toolkit.
+- `core/atrust/`: the aTrust protocol layer, imported from zju-connect and owned
+  here now. `core/atrust/PROVENANCE.md` records the source commit and what was
+  left out; do not edit the imported files for style, and keep the relative
+  layout so a diff against the source still reads.
 - `core/config/`: TOML v2, profiles, atomic 0600 writes.
 - `core/session/`: aTrust client, state, prompter, per-profile client data.
 - `core/proxy/`: SOCKS5 and HTTP listeners over an injected dialer.
