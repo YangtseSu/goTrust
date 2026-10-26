@@ -25,7 +25,9 @@ The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
 - `ui/`: pure view functions and the testable `ui.NewTester` views.
 - `logging/`: rotating, redacted line log.
 - `main.go`: wiring, tray, settings window, startup.
-- Plan and history: `.planning/2026-10-23-gotrust-skeleton/`.
+- Plan and history: `.planning/2026-10-23-gotrust-skeleton/` (the app) and
+  `.planning/2026-10-26-gotrust-public/` (the restructure to a self-contained
+  core and a public repository).
 
 ## Rules
 
