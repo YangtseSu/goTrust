@@ -27,7 +27,7 @@ import (
 const (
 	DefaultMaxBytes = 5 << 20
 	DefaultBackups  = 3
-	fileName        = "goTrust.log"
+	fileName        = "gotrust.log"
 )
 
 // Options configure New.
@@ -66,7 +66,7 @@ type Logger struct {
 // Linux and the platform's log location elsewhere.
 func Dir() (string, error) {
 	if state := os.Getenv("XDG_STATE_HOME"); state != "" {
-		return filepath.Join(state, "goTrust"), nil
+		return filepath.Join(state, "gotrust"), nil
 	}
 	switch runtime.GOOS {
 	case "darwin":
@@ -74,19 +74,19 @@ func Dir() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return filepath.Join(home, "Library", "Logs", "goTrust"), nil
+		return filepath.Join(home, "Library", "Logs", "gotrust"), nil
 	case "windows":
 		base := os.Getenv("LOCALAPPDATA")
 		if base == "" {
 			return "", fmt.Errorf("LOCALAPPDATA is not set")
 		}
-		return filepath.Join(base, "goTrust", "logs"), nil
+		return filepath.Join(base, "gotrust", "logs"), nil
 	default:
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", err
 		}
-		return filepath.Join(home, ".local", "state", "goTrust"), nil
+		return filepath.Join(home, ".local", "state", "gotrust"), nil
 	}
 }
 

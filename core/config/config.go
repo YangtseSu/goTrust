@@ -387,7 +387,7 @@ func Dir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("locate the user config directory: %w", err)
 	}
-	return filepath.Join(base, "goTrust"), nil
+	return filepath.Join(base, "gotrust"), nil
 }
 
 // Path is the default settings file location.

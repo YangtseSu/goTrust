@@ -48,7 +48,7 @@ offer its source to the users of that service.
 ## Build
 
 ```sh
-go build -o goTrust .
+go build -o gotrust .
 go test ./...
 reuse lint
 ```
@@ -59,8 +59,8 @@ is REUSE-compliant (AGPL-3.0-or-later); `reuse lint` must stay clean.
 ## Configuration
 
 Settings live in `config.toml` under the user config directory:
-`~/.config/goTrust/config.toml` on Linux (`$XDG_CONFIG_HOME` honoured),
-`~/Library/Application Support/goTrust` on macOS, and `%AppData%\goTrust` on
+`~/.config/gotrust/config.toml` on Linux (`$XDG_CONFIG_HOME` honoured),
+`~/Library/Application Support/gotrust` on macOS, and `%AppData%\gotrust` on
 Windows. The file is written with owner-only permissions, because it can hold a
 password.
 
@@ -260,8 +260,8 @@ failing silently. A captcha or a missing credential always reveals the window.
 
 ### Desktop integration
 
-`data/goTrust.desktop` and the two hicolor icons (`goTrust.svg`,
-`goTrust-symbolic.svg`) ship with the source tree and are installed by the
+`data/gotrust.desktop` and the two hicolor icons (`gotrust.svg`,
+`gotrust-symbolic.svg`) ship with the source tree and are installed by the
 package, so the application menu, the dock and the tray show the same mark: a
 blue tile with a white shield and a downward arrow. The tray gets a PNG embedded
 in the binary (`data/icons/tray-64.png`, 64×64 for HiDPI panels) rendered from
@@ -270,7 +270,7 @@ it. After editing the SVG, regenerate the PNG and rebuild:
 
 ```sh
 go generate ./...   # needs rsvg-convert
-go build -o goTrust .
+go build -o gotrust .
 ```
 
 ## Reliability
@@ -301,9 +301,9 @@ targets are probed first, derived candidates after them. The interval has a
 
 ## Logs
 
-The application writes a line log to `$XDG_STATE_HOME/goTrust/goTrust.log`
-(`~/.local/state/goTrust/goTrust.log` by default; `~/Library/Logs/goTrust` on
-macOS, `%LocalAppData%\goTrust\logs` on Windows). The file is 0600, rotates at
+The application writes a line log to `$XDG_STATE_HOME/gotrust/gotrust.log`
+(`~/.local/state/gotrust/gotrust.log` by default; `~/Library/Logs/gotrust` on
+macOS, `%LocalAppData%\gotrust\logs` on Windows). The file is 0600, rotates at
 5 MiB and keeps three older files. Passwords, cookies, session tokens and
 captcha data are redacted before a line reaches the disk. The upstream aTrust
 client logs through Go's standard logger, which is bridged to the same writer.
@@ -328,7 +328,7 @@ snapshot and exits without logging in, starting with when it was saved, for
 which profile and through which gateway:
 
 ```sh
-goTrust --print-resources
+gotrust --print-resources
 ```
 
 A `--no-ui` run prints the list it just fetched to stdout after connecting, so a

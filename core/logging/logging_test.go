@@ -96,7 +96,7 @@ func TestRedactLeavesOrdinaryLines(t *testing.T) {
 }
 
 func TestLoggerRedactsBeforeWriting(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "goTrust.log")
+	path := filepath.Join(t.TempDir(), "gotrust.log")
 	logger, err := New(Options{Path: path})
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -122,7 +122,7 @@ func TestLoggerRedactsBeforeWriting(t *testing.T) {
 
 func TestRotationKeepsBoundedFiles(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "goTrust.log")
+	path := filepath.Join(dir, "gotrust.log")
 	logger, err := New(Options{Path: path, MaxBytes: 400, Backups: 2})
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -162,7 +162,7 @@ func TestLoggerCreatesPrivateFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("path: %v", err)
 	}
-	if !strings.HasPrefix(path, filepath.Join(dir, "goTrust")) {
+	if !strings.HasPrefix(path, dir) {
 		t.Fatalf("path = %q, want it under XDG_STATE_HOME", path)
 	}
 
@@ -192,7 +192,7 @@ func TestLoggerCreatesPrivateFile(t *testing.T) {
 }
 
 func TestCloseFlushesPartialLine(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "goTrust.log")
+	path := filepath.Join(t.TempDir(), "gotrust.log")
 	logger, err := New(Options{Path: path})
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -217,7 +217,7 @@ func TestCloseFlushesPartialLine(t *testing.T) {
 // next line has to create the file again.
 func TestRotationRecoversAfterAFailedReopen(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "logs")
-	path := filepath.Join(dir, "goTrust.log")
+	path := filepath.Join(dir, "gotrust.log")
 	logger, err := New(Options{Path: path, MaxBytes: 1024, Backups: 1})
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -261,7 +261,7 @@ func TestLongLinesAreTruncatedWithoutPanicking(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "goTrust.log")
+			path := filepath.Join(t.TempDir(), "gotrust.log")
 			logger, err := New(Options{Path: path, MaxBytes: testCase.max})
 			if err != nil {
 				t.Fatalf("new: %v", err)

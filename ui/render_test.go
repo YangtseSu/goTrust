@@ -189,12 +189,12 @@ func TestRenderEveryState(t *testing.T) {
 	}
 
 	t.Run("settings", func(t *testing.T) {
-		state := NewSettingsState(cfg, "/home/user/.local/state/goTrust")
+		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
 		save("settings", ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760))
 	})
 
 	t.Run("settings-full", func(t *testing.T) {
-		state := NewSettingsState(cfg, "/home/user/.local/state/goTrust")
+		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
 		save("settings-full", ui.NewTester(SettingsView(state, SettingsActions{}), 600, 1500))
 	})
 
@@ -219,7 +219,7 @@ func TestRenderEveryState(t *testing.T) {
 	})
 
 	t.Run("settings-small", func(t *testing.T) {
-		state := NewSettingsState(cfg, "/home/user/.local/state/goTrust")
+		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
 		save("settings-small", ui.NewTester(SettingsView(state, SettingsActions{}), 560, 440))
 	})
 
@@ -239,14 +239,14 @@ func TestRenderEveryState(t *testing.T) {
 	})
 
 	t.Run("settings-password", func(t *testing.T) {
-		state := NewSettingsState(cfg, "/home/user/.local/state/goTrust")
+		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
 		state.Online = true
 		state.Password = &PasswordPrompt{Username: "alice", Strategy: passwordTestStrategy()}
 		save("settings-password", ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760))
 	})
 
 	t.Run("settings-dark", func(t *testing.T) {
-		state := NewSettingsState(cfg, "/home/user/.local/state/goTrust")
+		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
 		tester := ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760)
 		tester.SetDark(true)
 		save("settings-dark", tester)

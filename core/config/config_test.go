@@ -191,7 +191,7 @@ enabled = false
 func TestVersionOneJSONIsIgnored(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", home)
-	dir := filepath.Join(home, "goTrust")
+	dir := filepath.Join(home, "gotrust")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

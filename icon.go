@@ -11,7 +11,7 @@ import _ "embed"
 //
 //	go generate ./...
 //
-//go:generate rsvg-convert -w 64 -h 64 data/icons/hicolor/scalable/apps/goTrust.svg -o data/icons/tray-64.png
+//go:generate rsvg-convert -w 64 -h 64 data/icons/hicolor/scalable/apps/gotrust.svg -o data/icons/tray-64.png
 //go:embed data/icons/tray-64.png
 var iconPNG []byte
 

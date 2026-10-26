@@ -33,7 +33,7 @@ XDG_RUNTIME_DIR="$root/runtime" mutter --headless --no-x11 \
 XDG_RUNTIME_DIR="$root/runtime" WAYLAND_DISPLAY=wayland-gt Xwayland :99 &
 sleep 2
 DISPLAY=:99 GDK_BACKEND=x11 XDG_CONFIG_HOME="$root/config" \
-  XDG_STATE_HOME="$root/state" ./goTrust --config "$root/config/config.toml" &
+  XDG_STATE_HOME="$root/state" ./gotrust --config "$root/config/config.toml" &
 ```
 
 - Capture with `import -display :99 -window root "$root/shot.png"`: only the
@@ -117,16 +117,16 @@ Only inspect the cropped app area. Delete every screenshot after use.
 ```sh
 tmp=$(mktemp -d)
 mkdir -p "$tmp/config" "$tmp/state"
-XDG_CONFIG_HOME="$tmp/config" XDG_STATE_HOME="$tmp/state" ./goTrust \
+XDG_CONFIG_HOME="$tmp/config" XDG_STATE_HOME="$tmp/state" ./gotrust \
   >"$tmp/stderr.log" 2>&1 &
 pid=$!
 # wait for the ready line
-grep -q 'goTrust ready' "$tmp/state/goTrust/goTrust.log"
+grep -q 'goTrust ready' "$tmp/state/gotrust/gotrust.log"
 kill -TERM "$pid"
 wait "$pid"               # expect 0
 ```
 
-The packaged binary is `/usr/bin/goTrust`. The appindicator deprecation warning
+The packaged binary is `/usr/bin/gotrust`. The appindicator deprecation warning
 on stderr is expected.
 
 ## mygo window rules

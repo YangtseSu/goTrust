@@ -271,7 +271,7 @@ func TestEditingTheGatewayDropsTheDiscoveredMethods(t *testing.T) {
 
 func TestSettingsViewRendersAndCallsActions(t *testing.T) {
 	var saved, closed, created, autostart, verbose int
-	state := NewSettingsState(config.Default(), "/var/log/goTrust")
+	state := NewSettingsState(config.Default(), "/var/log/gotrust")
 	state.Draft.Profiles[0].Auth.Password = "hunter2"
 
 	actions := SettingsActions{
@@ -301,7 +301,7 @@ func TestSettingsViewRendersAndCallsActions(t *testing.T) {
 	if tester.HasText("hunter2") {
 		t.Fatal("the password is painted as readable text")
 	}
-	if tester.HasText("/var/log/goTrust") == false {
+	if tester.HasText("/var/log/gotrust") == false {
 		t.Fatal("the log directory is missing")
 	}
 
