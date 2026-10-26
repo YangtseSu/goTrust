@@ -38,7 +38,7 @@ type Options struct {
 	MaxBytes int64
 	// Backups is how many rotated files to keep. Zero means 3.
 	Backups int
-	// Mirror receives the same lines, for --no-ui runs where stderr is the
+	// Mirror receives the same lines, for a headless run where stderr is the
 	// terminal. Nil discards nothing else: the file is always written.
 	Mirror io.Writer
 	// Verbose starts with debug logging enabled.

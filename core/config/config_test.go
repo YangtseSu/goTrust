@@ -699,3 +699,29 @@ func TestValidateRejectsAnUnknownIdentityFamily(t *testing.T) {
 		t.Fatalf("a known family was refused: %v", err)
 	}
 }
+
+func TestLoadOrCreatePersistsTheIdentityOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+
+	first, got, err := LoadOrCreate(path)
+	if err != nil {
+		t.Fatalf("LoadOrCreate() error = %v", err)
+	}
+	if got != path {
+		t.Fatalf("path = %q, want %q", got, path)
+	}
+	if first.Identity.DeviceID == "" {
+		t.Fatal("the install identity was not generated")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the settings file was not written: %v", err)
+	}
+
+	second, _, err := LoadOrCreate(path)
+	if err != nil {
+		t.Fatalf("second LoadOrCreate() error = %v", err)
+	}
+	if second.Identity.DeviceID != first.Identity.DeviceID {
+		t.Fatalf("device id = %q, want the stored %q", second.Identity.DeviceID, first.Identity.DeviceID)
+	}
+}

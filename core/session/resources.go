@@ -476,7 +476,7 @@ func FormatResources(resources Resources) string {
 const resourceCacheVersion = 1
 
 // ResourceSnapshot is the last grant, plus enough context to tell a user whose
-// grant it was when --print-resources runs without a login.
+// grant it was when gotrust-cli --print-resources runs without a login.
 type ResourceSnapshot struct {
 	Version   int       `json:"version"`
 	SavedAt   time.Time `json:"saved_at"`
@@ -487,7 +487,8 @@ type ResourceSnapshot struct {
 }
 
 // ReadResourceCache loads the snapshot the last login wrote. A missing file is
-// reported as a normal error: --print-resources has nothing to print yet.
+// reported as a normal error: gotrust-cli --print-resources has nothing to
+// print yet.
 func ReadResourceCache(path string) (ResourceSnapshot, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -509,8 +510,8 @@ func ReadResourceCache(path string) (ResourceSnapshot, error) {
 
 // WriteResourceCache stores the snapshot beside the settings. The file lists
 // intranet addresses, so it is 0600 like the client data, and the rename keeps
-// a crash from leaving a half-written file that the next --print-resources
-// would parse.
+// a crash from leaving a half-written file that the next gotrust-cli
+// --print-resources would parse.
 func WriteResourceCache(path string, snapshot ResourceSnapshot) error {
 	if path == "" {
 		return errors.New("no resource cache path")

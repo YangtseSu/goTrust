@@ -14,6 +14,11 @@ gofmt -l .
 reuse lint
 ```
 
+Two binaries: `gotrust` (the tray app, built from the repository root) and
+`gotrust-cli` (`cmd/gotrust-cli`, the headless front-end). `go test ./...`
+includes `internal/guards`, which fails if a core package reaches mygo or
+purego, if the CLI reaches `ui/`, or if the tray app reaches `internal/cli`.
+
 `reuse lint` must stay clean; every new Go file starts with the SPDX header,
 except in the imported tree, which is annotated in `REUSE.toml` instead of being
 edited.
@@ -32,6 +37,9 @@ The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
 - `core/session/`: aTrust client, state, prompter, per-profile client data.
 - `core/proxy/`: SOCKS5 and HTTP listeners over an injected dialer.
 - `core/logging/`: rotating, redacted line log.
+- `core/profilelock/`: the per-profile instance lock both front-ends take.
+- `internal/cli/`: the headless front-end; imports `core/*` only.
+- `cmd/gotrust-cli/`: its entry point.
 - `ui/`: pure view functions and the testable `ui.NewTester` views.
 - `main.go`: wiring, tray, settings window, startup.
 - Plan and history: `.planning/2026-10-23-gotrust-skeleton/` (the app) and

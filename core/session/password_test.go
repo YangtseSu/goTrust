@@ -74,12 +74,12 @@ func TestRetryAfterReauth(t *testing.T) {
 
 // A headless login that meets a forced change must say what it needs instead of
 // failing with the client's generic message.
-func TestPasswordChangeUnavailableExplainsTheWindow(t *testing.T) {
+func TestPasswordChangeUnavailableKeepsTheReason(t *testing.T) {
 	required := &auth.PasswordChangeRequiredError{Challenge: auth.PasswordChangeChallenge{
 		Message: "密码已过期，请修改",
 	}}
 	err := passwordChangeUnavailable(required)
-	if err == nil || !strings.Contains(err.Error(), "密码已过期") || !strings.Contains(err.Error(), "window") {
+	if err == nil || !strings.Contains(err.Error(), "密码已过期") {
 		t.Fatalf("message = %v", err)
 	}
 

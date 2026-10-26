@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# The checks AGENTS.md names, plus the build-graph guards. The guards are tests
+# in internal/guards, so `go test ./...` fails if a core package grows a toolkit
+# dependency or one front-end reaches the other.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: build
+        run: go build ./...
+
+      - name: vet
+        run: go vet ./...
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted" >&2
+            exit 1
+          fi
+
+      - name: test, including the dependency guards
+        run: go test ./...
+
+      # The per-profile lock is the only platform-specific file pair, and it
+      # links neither cgo nor a toolkit.
+      - name: cross-build the other platforms
+        run: |
+          GOOS=darwin go build ./...
+          GOOS=windows go build ./...
+
+      - name: reuse
+        run: pipx run reuse lint

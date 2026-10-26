@@ -154,7 +154,7 @@ type Options struct {
 	// Logf receives progress lines. Nil discards them.
 	Logf func(format string, args ...any)
 	// ResourceCachePath is where the last granted resources are cached for
-	// --print-resources. Empty disables the cache.
+	// gotrust-cli --print-resources. Empty disables the cache.
 	ResourceCachePath string
 	// OnState is called on every transition, from the goroutine that caused it.
 	OnState func(State)

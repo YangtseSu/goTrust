@@ -8,7 +8,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	neturl "net/url"
 	"os"
@@ -26,39 +25,19 @@ import (
 
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/logging"
+	"github.com/YangtseSu/goTrust/core/profilelock"
 	gotrustproxy "github.com/YangtseSu/goTrust/core/proxy"
 	"github.com/YangtseSu/goTrust/core/session"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
 )
 
 func main() {
-	headless := flag.Bool("no-ui", false, "run without a window; connect, serve the proxies, and exit on SIGINT or SIGTERM")
 	configPath := flag.String("config", "", "TOML settings file (default: the user config directory); the stored account material lives beside it")
-	printResources := flag.Bool("print-resources", false, "print the resources cached by the last login and exit")
 	flag.Parse()
 
-	cfg, path, err := loadConfig(*configPath)
+	cfg, path, err := config.LoadOrCreate(*configPath)
 	if err != nil {
 		log.Fatalf("settings: %v", err)
-	}
-
-	if *printResources {
-		snapshot, err := session.ReadResourceCache(config.ResourcesPath(path))
-		if err != nil {
-			log.Fatalf("resources: %v", err)
-		}
-		// A cached snapshot may be days old and --print-resources runs without
-		// a login, so say whose grant this is before the rows.
-		if !snapshot.SavedAt.IsZero() {
-			fmt.Printf("saved %s by profile %s via %s",
-				snapshot.SavedAt.Format(time.RFC3339), snapshot.Profile, snapshot.Gateway)
-			if snapshot.TunnelIP != "" {
-				fmt.Printf(", tunnel %s", snapshot.TunnelIP)
-			}
-			fmt.Println()
-		}
-		fmt.Println(session.FormatResources(snapshot.Resources))
-		return
 	}
 
 	application := &app{
@@ -67,13 +46,8 @@ func main() {
 		view:       gotrustui.State{Config: cfg},
 	}
 
-	var mirror io.Writer
-	if *headless {
-		mirror = os.Stderr
-	}
 	fileLog, logErr := logging.New(logging.Options{
 		Verbose: cfg.Logging.Verbose,
-		Mirror:  mirror,
 	})
 	if logErr != nil {
 		// A tray app with no log file is still better than no app.
@@ -95,40 +69,27 @@ func main() {
 		}
 	}
 
-	// A headless run cannot show a captcha, a code dialog or the method
-	// chooser, so it fails with a message instead of waiting for a window.
+	// The prompts belong to the window: a click captcha needs an image, an SSO
+	// login needs a pasted callback URL. The headless front-end lives in
+	// cmd/gotrust-cli, so this binary has exactly one set of answers.
 	sessionOptions := session.Options{
 		Config:            application.currentConfig,
 		Logf:              application.logf,
 		OnState:           application.onSessionState,
 		ResourceCachePath: config.ResourcesPath(path),
+		Prompt: func(ctx context.Context) session.Prompter {
+			return &uiPrompter{app: application, ctx: ctx}
+		},
+		ChooseAuth:        application.chooseAuth,
+		ChangePassword:    application.changePasswordPrompt,
+		ConfirmDeviceBind: application.confirmDeviceBind,
 	}
 	sessionOptions.OnPasswordChanged = application.storeChangedPassword
-	if *headless {
-		sessionOptions.Prompt = func(context.Context) session.Prompter {
-			return cliPrompter{}
-		}
-		sessionOptions.ChangePassword = func(context.Context, session.PasswordChangeChallenge) (session.PasswordChangeAnswer, error) {
-			return session.PasswordChangeAnswer{}, errors.New(
-				"the gateway requires a password change, which needs the window; leave --no-ui off and log in again")
-		}
-	} else {
-		sessionOptions.Prompt = func(ctx context.Context) session.Prompter {
-			return &uiPrompter{app: application, ctx: ctx}
-		}
-		sessionOptions.ChooseAuth = application.chooseAuth
-		sessionOptions.ChangePassword = application.changePasswordPrompt
-		sessionOptions.ConfirmDeviceBind = application.confirmDeviceBind
-	}
 	application.manager = session.New(sessionOptions)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if *headless {
-		application.runHeadless(ctx)
-		return
-	}
 	application.runUI(ctx)
 }
 
@@ -148,8 +109,12 @@ type app struct {
 	// settings is the settings window's draft, nil while the window is closed.
 	settings *gotrustui.SettingsState
 
-	proxy  *gotrustproxy.Server
-	window atomicWindow
+	proxy *gotrustproxy.Server
+	// profileLock is the live login's claim on its profile. The CLI takes the
+	// same lock, so two processes cannot share one profile's client data and
+	// tunnel identity.
+	profileLock *profilelock.Lock
+	window      atomicWindow
 	// settingsWindow is the separate settings window; the main window stays a
 	// status and connection page.
 	settingsWindow atomicWindow
@@ -196,41 +161,6 @@ type app struct {
 // goroutine cannot clear a newer attempt's cancel.
 type attemptCancel struct {
 	cancel context.CancelFunc
-}
-
-func loadConfig(path string) (config.Config, string, error) {
-	var (
-		cfg config.Config
-		err error
-	)
-	if path != "" {
-		cfg, err = config.LoadFile(path)
-	} else {
-		cfg, err = config.Load()
-		if err == nil {
-			path, err = config.Path()
-		}
-	}
-	if err != nil {
-		return config.Config{}, path, err
-	}
-	// The install identity is generated once and written back, so the portal
-	// sees the same device id after a restart. A hand-edited value stays.
-	if cfg.EnsureIdentity() {
-		if err := config.SaveFile(path, cfg); err != nil {
-			return config.Config{}, path, fmt.Errorf("save the install identity: %w", err)
-		}
-	}
-	return cfg, path, nil
-}
-
-func (a *app) runHeadless(ctx context.Context) {
-	if err := a.connect(ctx); err != nil {
-		a.logger.Fatalf("connect: %v", err)
-	}
-	fmt.Println(session.FormatResources(a.manager.State().Resources))
-	<-ctx.Done()
-	a.disconnectNow()
 }
 
 func (a *app) runUI(ctx context.Context) {
@@ -878,11 +808,16 @@ func (a *app) connect(ctx context.Context) error {
 	if err := a.waitForLogout(ctx); err != nil {
 		return err
 	}
+	if err := a.acquireProfileLock(); err != nil {
+		return err
+	}
 	if err := a.manager.Login(ctx); err != nil {
+		a.releaseProfileLock()
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		a.manager.Logout()
+		a.releaseProfileLock()
 		return err
 	}
 
@@ -890,9 +825,48 @@ func (a *app) connect(ctx context.Context) error {
 	// returns. The listeners must live until the session ends.
 	if err := a.restartProxy(); err != nil {
 		a.manager.Logout()
+		a.releaseProfileLock()
 		return err
 	}
 	return nil
+}
+
+// acquireProfileLock reserves the active profile for this process. The CLI
+// takes the same lock before its login: one profile has one client data file
+// and one tunnel identity, so a second live login would overwrite the session
+// the first one stored.
+func (a *app) acquireProfileLock() error {
+	cfg := a.currentConfig()
+	lock, err := profilelock.Acquire(a.configPath, cfg.ActiveProfile)
+	if err != nil {
+		return err
+	}
+
+	a.mu.Lock()
+	if a.profileLock != nil {
+		a.mu.Unlock()
+		_ = lock.Release()
+		return fmt.Errorf("profile %q is already held by this instance", cfg.ActiveProfile)
+	}
+	a.profileLock = lock
+	a.mu.Unlock()
+	return nil
+}
+
+// releaseProfileLock gives the profile back. It runs after Manager.Logout
+// finished, so the next instance cannot start a login against a client that is
+// still being torn down.
+func (a *app) releaseProfileLock() {
+	a.mu.Lock()
+	lock := a.profileLock
+	a.profileLock = nil
+	a.mu.Unlock()
+	if lock == nil {
+		return
+	}
+	if err := lock.Release(); err != nil {
+		a.logf("release the profile lock: %v", err)
+	}
 }
 
 // onSessionState mirrors the session into the view and refreshes what is on
@@ -911,6 +885,7 @@ func (a *app) onSessionState(state session.State) {
 	// from inside the ladder.
 	if state.Phase == session.PhaseFailed && state.Attention && !stopping {
 		a.releaseProxy()
+		a.releaseProfileLock()
 	}
 
 	a.mu.Lock()
@@ -1050,11 +1025,12 @@ func (a *app) disconnect() {
 }
 
 // disconnectNow is the final teardown, run when no frame waits on the main
-// loop: --no-ui, or after App.Run returned. onMain drops its callbacks then, so
-// joining the session here cannot deadlock.
+// loop: after App.Run returned. onMain drops its callbacks then, so joining the
+// session here cannot deadlock.
 func (a *app) disconnectNow() {
 	a.stopSession()
 	a.logoutSession()
+	a.releaseProfileLock()
 
 	a.mu.Lock()
 	a.stopping = false
@@ -1105,6 +1081,10 @@ func (a *app) beginLogout() <-chan struct{} {
 
 	go func() {
 		a.logoutSession()
+		// The profile is free only after the client is gone: a new login that
+		// started earlier would otherwise share the file this logout is still
+		// closing.
+		a.releaseProfileLock()
 
 		a.mu.Lock()
 		a.logoutPending = nil

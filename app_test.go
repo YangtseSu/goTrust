@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/profilelock"
 	gotrustproxy "github.com/YangtseSu/goTrust/core/proxy"
 	"github.com/YangtseSu/goTrust/core/session"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
@@ -663,4 +664,32 @@ func TestAStoppedAttemptReportsCancelled(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func TestProfileLockIsHeldForOneLiveLogin(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	application := &app{
+		cfg:        config.Default(),
+		configPath: path,
+		logf:       func(string, ...any) {},
+	}
+
+	if err := application.acquireProfileLock(); err != nil {
+		t.Fatalf("acquireProfileLock() error = %v", err)
+	}
+	// The CLI takes the same lock in its own process; a second holder in this
+	// one sees exactly what the other process would.
+	if _, err := profilelock.Acquire(path, application.cfg.ActiveProfile); !errors.Is(err, profilelock.ErrBusy) {
+		t.Fatalf("a second holder was not refused: %v", err)
+	}
+	// A second connect in this process reuses the claim instead of failing.
+	if err := application.acquireProfileLock(); err == nil {
+		t.Fatal("a second acquireProfileLock() in one process succeeded")
+	}
+
+	application.releaseProfileLock()
+	if err := application.acquireProfileLock(); err != nil {
+		t.Fatalf("acquireProfileLock() after release error = %v", err)
+	}
+	application.releaseProfileLock()
 }

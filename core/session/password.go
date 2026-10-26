@@ -63,7 +63,7 @@ func passwordChangeUnavailable(required *auth.PasswordChangeRequiredError) error
 	if reason == "" {
 		reason = "the account's password has to be changed"
 	}
-	return fmt.Errorf("%s; setting a new password needs the window, so leave --no-ui off and log in again", reason)
+	return fmt.Errorf("%s; setting a new password needs an interactive client", reason)
 }
 
 // LiveProfile returns the profile the live session belongs to, empty when no

@@ -53,13 +53,16 @@ offer its source to the users of that service.
 ## Build
 
 ```sh
-go build -o gotrust .
+go build -o gotrust .                     # the tray app
+go build -o gotrust-cli ./cmd/gotrust-cli # the headless front-end
 go test ./...
 reuse lint
 ```
 
-Development needs Go 1.27 or later. The resulting binary needs no cgo. The tree
-is REUSE-compliant (AGPL-3.0-or-later); `reuse lint` must stay clean.
+Development needs Go 1.27 or later. Neither binary needs cgo. The tray app loads
+GTK through purego at runtime; the CLI has no toolkit in its dependency graph,
+which a build-time test (`internal/guards`) enforces. The tree is
+REUSE-compliant (AGPL-3.0-or-later); `reuse lint` must stay clean.
 
 ## Configuration
 
@@ -213,12 +216,12 @@ sent, so a wrong window fails in the panel with a reason.
 If the gateway asks to bind this installation to the account, a 绑定此设备 panel
 names the device and waits for 允许绑定 or 取消. Allowing continues the login and
 puts the device in 终端管理; cancelling abandons the login instead of answering
-for the user. `--no-ui` keeps the automatic answer, as the CLI has always sent.
+for the user. A headless run keeps the automatic answer.
 
 Every prompt belongs to the login attempt: 断开, the attempt's five-minute
 deadline or a cancelled login releases it instead of leaving a dialog open.
-`--no-ui` cannot ask any of these questions and reports which one the gateway
-wanted.
+`gotrust-cli` cannot ask any of these questions and reports which one the
+gateway wanted.
 
 **Not tested live:** the verified account has no second factor beyond the click
 captcha and no SSO endpoint, so the SMS, TOTP, RADIUS and CAS/OAuth2 paths are
@@ -312,7 +315,7 @@ macOS, `%LocalAppData%\gotrust\logs` on Windows). The file is 0600, rotates at
 captcha data are redacted before a line reaches the disk. The upstream aTrust
 client logs through Go's standard logger, which is bridged to the same writer.
 
-`--no-ui` mirrors the log to stderr, which is where a headless run's operator
+`gotrust-cli` mirrors the log to stderr, which is where a headless run's operator
 looks. 高级 → 打开 opens the log directory from the settings window.
 
 ## Granted resources
@@ -327,16 +330,16 @@ opened, so a portal-supplied `file:` or custom scheme cannot launch a local
 application.
 
 The last snapshot is cached at `resources.json` beside `config.toml` (0600). It
-holds intranet addresses but no credentials. `--print-resources` prints that
-snapshot and exits without logging in, starting with when it was saved, for
-which profile and through which gateway:
+holds intranet addresses but no credentials. `gotrust-cli --print-resources`
+prints that snapshot and exits without logging in, starting with when it was
+saved, for which profile and through which gateway:
 
 ```sh
-gotrust --print-resources
+gotrust-cli --print-resources
 ```
 
-A `--no-ui` run prints the list it just fetched to stdout after connecting, so a
-headless deployment can publish what the account was granted.
+A `gotrust-cli` run prints the list it just fetched to stdout after connecting,
+so a headless deployment can publish what the account was granted.
 
 ## Using it
 
@@ -345,3 +348,36 @@ Point a browser or an application at `127.0.0.1:1081` (HTTP) or
 hijacking and fake-IP are unnecessary. Names the portal did not map go to the
 DNS server the gateway named, over the packet stack; a TCP-only gateway has no
 UDP path and uses the system resolver for them instead.
+
+## Command line
+
+`gotrust-cli` is the second front-end, for hosts without a display. It loads the
+same settings file, logs in, serves the same listeners and reports through
+stdout and the log file; it links no toolkit, so it builds and runs on a server.
+
+```sh
+gotrust-cli [--config FILE]                 # log in and serve until SIGINT/SIGTERM
+gotrust-cli [--config FILE] --status        # is an instance using the profile?
+gotrust-cli [--config FILE] --print-resources
+```
+
+A plain run prints the granted resources to stdout once the listeners are up,
+or the grant as JSON with `--json`, and stays up until SIGINT or SIGTERM. A
+failure nobody watching the process can answer — a captcha, a forced password
+change, a session that expired and cannot recover — ends the run with exit
+status 1 and the reason on stderr, so a service manager decides whether to try
+again.
+
+| Exit code | Meaning |
+|---:|---|
+| 0 | the run finished cleanly; with `--status`, an instance holds the profile |
+| 1 | settings, login, listeners, or the session failed |
+| 2 | the command line was not understood |
+| 3 | `--status` found no instance on the profile |
+
+Only one process may use a profile at a time. Both front-ends take a lock beside
+the settings file before a login and release it after the logout, so the tray
+app on one account and the CLI on another can run side by side, while two logins
+on one profile cannot share its client data file or clone its tunnel identity.
+The lock is keyed by the settings file and the profile name, so `--config` keeps
+a scratch configuration separate.

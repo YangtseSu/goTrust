@@ -60,7 +60,6 @@ type deviceBindResult struct {
 // user. The context is the login attempt's: cancelling the login closes the
 // prompt instead of leaving a dialog nobody will answer.
 type uiPrompter struct {
-	cliPrompter
 	app *app
 	ctx context.Context
 }
@@ -137,6 +136,14 @@ func (p *uiPrompter) HandleClickCaptcha(challenge authchallenge.ClickCaptchaChal
 	case <-p.ctx.Done():
 		return authchallenge.ClickCaptchaResponse{}, p.ctx.Err()
 	}
+}
+
+// HandleTextCaptcha refuses the one challenge the window cannot render: a text
+// captcha has no image and no click coordinates, and the protocol offers no way
+// to type the answer.
+func (p *uiPrompter) HandleTextCaptcha(authchallenge.TextCaptchaChallenge) (authchallenge.TextCaptchaResponse, error) {
+	return authchallenge.TextCaptchaResponse{}, errors.New(
+		"this gateway asked for a text captcha, which goTrust does not support")
 }
 
 // beginCaptcha publishes the pending challenge. The login goroutine then
@@ -751,29 +758,4 @@ func (a *app) openBrowser(url string) error {
 		return a.browser(url)
 	}
 	return mygo.Shell.OpenExternal(url)
-}
-
-// cliPrompter answers the login prompts a window would show. It is used by
-// --no-ui, where refusing with a clear message beats blocking on a window that
-// will never open.
-type cliPrompter struct{}
-
-func (p cliPrompter) HandleCodeChallenge(challenge authchallenge.CodeChallenge) (authchallenge.CodeResponse, error) {
-	return authchallenge.CodeResponse{}, fmt.Errorf(
-		"this login needs a %s one-time code, which requires the window; run again without --no-ui",
-		challenge.Kind)
-}
-
-func (p cliPrompter) HandleTextCaptcha(authchallenge.TextCaptchaChallenge) (authchallenge.TextCaptchaResponse, error) {
-	return authchallenge.TextCaptchaResponse{}, errors.New("this gateway asked for a text captcha, which goTrust does not support")
-}
-
-func (p cliPrompter) HandleClickCaptcha(authchallenge.ClickCaptchaChallenge) (authchallenge.ClickCaptchaResponse, error) {
-	return authchallenge.ClickCaptchaResponse{}, errors.New("this gateway asked for a click captcha, which needs the window; leave --no-ui off and log in again")
-}
-
-func (p cliPrompter) HandleExternalLogin(challenge authchallenge.ExternalLoginChallenge) (authchallenge.ExternalLoginResponse, error) {
-	return authchallenge.ExternalLoginResponse{}, fmt.Errorf(
-		"this login needs a browser at %s and a pasted callback URL, which requires the window; run again without --no-ui",
-		challenge.LoginURL)
 }

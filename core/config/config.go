@@ -454,6 +454,34 @@ func LoadFile(path string) (Config, error) {
 	return cfg, nil
 }
 
+// LoadOrCreate loads the settings at path, or the default location when path is
+// empty, and returns them together with the file they came from. The install
+// identity is generated once and written back, so the portal sees the same
+// device id after a restart; a hand-edited value stays.
+func LoadOrCreate(path string) (Config, string, error) {
+	var (
+		cfg Config
+		err error
+	)
+	if path != "" {
+		cfg, err = LoadFile(path)
+	} else {
+		cfg, err = Load()
+		if err == nil {
+			path, err = Path()
+		}
+	}
+	if err != nil {
+		return Config{}, path, err
+	}
+	if cfg.EnsureIdentity() {
+		if err := SaveFile(path, cfg); err != nil {
+			return Config{}, path, fmt.Errorf("save the install identity: %w", err)
+		}
+	}
+	return cfg, path, nil
+}
+
 // Save writes the settings file with owner-only permissions: it can hold a
 // password, and a world-readable settings file has leaked far too often.
 func Save(cfg Config) error {

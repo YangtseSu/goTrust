@@ -1,5 +1,6 @@
 # build output
 /gotrust
+/gotrust-cli
 /dist/
 /build/
 
@@ -18,3 +19,6 @@
 # local agent tooling: installed skills and their lockfile
 .agents/
 skills-lock.json
+
+# per-profile instance locks created beside a settings file
+.*.lock
