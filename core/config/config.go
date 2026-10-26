@@ -556,6 +556,21 @@ func (c Config) Clone() Config {
 	return clone
 }
 
+// ForDisk returns a copy that the settings file may carry. The TOTP secret is
+// a second credential for the same account, so it follows the password toggle:
+// unchecking 保存密码 must not leave it on disk. The in-memory configuration
+// keeps both for the run that wrote it, which is why this is a copy.
+func (c Config) ForDisk() Config {
+	disk := c.Clone()
+	for index := range disk.Profiles {
+		if !disk.Profiles[index].Auth.StorePass {
+			disk.Profiles[index].Auth.Password = ""
+			disk.Profiles[index].Auth.TOTPSecret = ""
+		}
+	}
+	return disk
+}
+
 // ProfileIndex reports where name sits in Profiles, or -1.
 func (c Config) ProfileIndex(name string) int {
 	for index := range c.Profiles {

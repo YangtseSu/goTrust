@@ -16,20 +16,20 @@ the gateway has already accepted.
 
 ## Next Step
 
-Phase 4: a web prompt for the interactive steps. `core/prompt/web` serves one
-`127.0.0.1` page per challenge with a single-use token, and the CLI gets
-`--print-url` for hosts where no browser can be started; the click captcha is
-the first challenge to carry through, since the CLI refuses it today.
+Phase 5: the GUI becomes `internal/gui` and the repository goes public.
+`app` keeps the windows, the tray, the event loop and the state mapping, and
+every business call goes through `core/session`; CI adds the five checks, the
+dependency guards; the repository flips to public and
+the PKGBUILD source switches to `git+https://`.
 
 ## Current Phase
 
-Phase 3 is complete: `cmd/gotrust-cli` is the only headless implementation,
-`internal/cli` imports `core/*` only, the per-profile lock refuses a second live
-login on one account, and the dependency guards are tests, so they run with
-`go test ./...`. Phase 2 put the protocol layer in the tree and removed the fork
-dependency; Phase 1 moved the application packages under `core/` and lowercased
-the technical names. `../2026-10-23-gotrust-skeleton/` built the app; this plan
-moves it behind a stable core and makes the repository publishable.
+Phase 4 is complete: `core/prompt/web` serves every interactive login step as
+one page on `127.0.0.1` under a single-use token, the CLI opens it (or prints it
+with `--print-url`), and a live login that needed a click captcha finished
+through the page. Phase 3 gave the CLI its own binary and a per-profile lock;
+Phase 2 put the protocol layer in the tree; Phase 1 moved the application
+packages under `core/`. `../2026-10-23-gotrust-skeleton/` built the app.
 
 ## Phases
 
@@ -132,16 +132,30 @@ moves it behind a stable core and makes the repository publishable.
 
 ### Phase 4: Web prompt for interactive steps
 
-- [ ] `core/prompt/web`: one `127.0.0.1` page per challenge, a single-use token
+- [x] `core/prompt/web`: one `127.0.0.1` page per challenge, a single-use token
       in the path, blocking on the login attempt's context
-- [ ] One-time codes, click captcha (image served as-is, natural-size
+- [x] One-time codes, click captcha (image served as-is, natural-size
       coordinates), external SSO (link plus pasted callback URL), forced
       password change, device-bind confirmation, auth-method choice
-- [ ] Rules are rendered as hints only; validation stays in `core/session`
-- [ ] `--print-url` for hosts where no browser can be started
-- [ ] `httptest` coverage of every challenge type
+- [x] Rules are rendered as hints only; validation stays in `core/session`
+- [x] `--print-url` for hosts where no browser can be started
+- [x] `httptest` coverage of every challenge type
 - **Gates:** a live login that needs a click captcha completes through the page;
   no code, password or callback secret appears in the log
+- **Status:** complete. `core/prompt/web` binds a listener on `127.0.0.1` per
+  question and serves one page under 128 bits of token randomness; the page
+  answers once, rejects a request whose `Host` is not a loopback name, and
+  closes with the attempt's context. The CLI uses it for the prompter, the
+  authentication-method chooser, the forced password change and the device
+  binding, prints the URL to stderr, and only tries the browser without
+  `--print-url`; a changed password reaches the retry's credential and the file
+  through `config.ForDisk`. The imported text handler and its temporary browser
+  page are gone, and a caller with no prompt now gets `UnsupportedHandler`.
+  The live login was asked for a click captcha on a scratch configuration; the
+  page served the image, the posted points entered the protocol, and the login
+  reached online after the gateway accepted the answer. The log held no token,
+  coordinate, code or callback value (only `prompt: <url>` went to stderr, never
+  to the file), `go test ./...` covers every page, and `reuse lint` is clean.
 
 ### Phase 5: GUI refactor and publication
 
@@ -177,6 +191,11 @@ moves it behind a stable core and makes the repository publishable.
 | Lock by (settings file, profile), file beside the settings | One profile owns one client data file and one tunnel identity; a config-wide lock would forbid the tray app on one account and the CLI on another, and `--config` keeps a scratch file apart |
 | Try-lock instead of a pid file | `flock`/`LockFileEx` is released by the kernel when the process ends, so a crash cannot leave a stale claim; the holder's pid is written for the refusal message |
 | `--status` exits 3 when no instance holds the profile | A supervisor needs the distinction, and `systemctl is-active` uses the same code |
+| One listener per question, not one per attempt | A page owns its listener and token and closes when it answers, so a finished or abandoned question cannot be reloaded and no prompt state outlives the wait; the cost is a fresh ephemeral port per question, which a person never sees |
+| A page only accepts loopback `Host` names | A hostile page cannot reach a prompt through DNS rebinding, and an SSH port forward that keeps `127.0.0.1`/`localhost` still works |
+| Password rules are hints in the page | The portal re-checks every rule; a local verdict on the policy database, the history or keyboard runs would refuse a password the portal accepts |
+| Answers never reach the log, the URL does | A code, a password or a callback ticket is a credential; the URL is how a host without a display finds the page, and it dies with the question |
+| A forced change updates the in-memory credential before the file | The retry runs with the new password even when the settings file cannot be written; the file still follows `ForDisk`, so an unstored password stays in memory only |
 
 ## Errors Encountered
 

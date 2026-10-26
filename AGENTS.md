@@ -35,6 +35,8 @@ The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
   layout so a diff against the source still reads.
 - `core/config/`: TOML v2, profiles, atomic 0600 writes.
 - `core/session/`: aTrust client, state, prompter, per-profile client data.
+- `core/prompt/web/`: the interactive login steps as single-use pages on
+  `127.0.0.1`; the CLI's prompter, no toolkit.
 - `core/proxy/`: SOCKS5 and HTTP listeners over an injected dialer.
 - `core/logging/`: rotating, redacted line log.
 - `core/profilelock/`: the per-profile instance lock both front-ends take.
@@ -49,6 +51,8 @@ The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
 ## Rules
 
 - Views are pure: no network, no global state; render them in tests.
+- A prompt page lives on the loopback interface only, under a single-use token,
+  and never logs what was typed into it.
 - mygo quirk: create and hide windows outside their own frame
   (`go func() { mygo.RunOnMain(fn) }()`). 0.6.4 defers a destroy that happens
   during a frame (upstream PR #674), but it does not defer `Hide`, and a window

@@ -15,13 +15,13 @@ It is deliberately narrow:
 
 ## Status
 
-The session layer, the local proxy listeners, the tray, the in-window click
-captcha, the settings window, profiles, file logging, autostart, the granted
-resource list and the headless `gotrust-cli` front-end are implemented. The
-protocol path was verified against a real gateway in Phase 9; the
-settings/profile/startup/resource paths are verified by tests and headless smoke
-runs. A final live pass over the settings window is the remaining step; see
-`.planning/` for the current phase.
+The session layer, the local proxy listeners, the tray, the in-window prompts,
+the CLI's loopback prompt pages, the settings window, profiles, file logging,
+autostart, the granted resource list and the headless `gotrust-cli` front-end are
+implemented. The protocol path was verified against a real gateway in Phase 9;
+the settings/profile/startup/resource paths are verified by tests and headless
+smoke runs. A final live pass over the settings window is the remaining step;
+see `.planning/` for the current phase.
 
 ## Why a new project rather than a fork
 
@@ -217,12 +217,20 @@ sent, so a wrong window fails in the panel with a reason.
 If the gateway asks to bind this installation to the account, a 绑定此设备 panel
 names the device and waits for 允许绑定 or 取消. Allowing continues the login and
 puts the device in 终端管理; cancelling abandons the login instead of answering
-for the user. A headless run keeps the automatic answer.
+for the user.
 
 Every prompt belongs to the login attempt: 断开, the attempt's five-minute
 deadline or a cancelled login releases it instead of leaving a dialog open.
-`gotrust-cli` cannot ask any of these questions and reports which one the
-gateway wanted.
+
+`gotrust-cli` asks the same questions through `core/prompt/web`, because a
+terminal cannot carry an image, a click coordinate or a browser redirect. Each
+question is one page under a fresh single-use token on `127.0.0.1`, served only
+while the login waits: the URL is printed to stderr, the system browser is
+opened when there is one, and `--print-url` prints it alone for a host where no
+browser can be started. The page works over SSH port forwarding. It accepts an
+answer once, rejects a request that did not address the loopback interface by
+name, and loads nothing from the network. Nothing typed into a page — a code, a
+password, a callback URL — is written to the log; only the URL is.
 
 **Not tested live:** the verified account has no second factor beyond the click
 captcha and no SSO endpoint, so the SMS, TOTP, RADIUS and CAS/OAuth2 paths are
@@ -360,14 +368,20 @@ stdout and the log file; it links no toolkit, so it builds and runs on a server.
 gotrust-cli [--config FILE]                 # log in and serve until SIGINT/SIGTERM
 gotrust-cli [--config FILE] --status        # is an instance using the profile?
 gotrust-cli [--config FILE] --print-resources
+gotrust-cli [--config FILE] --print-url     # print prompt URLs, open no browser
 ```
 
 A plain run prints the granted resources to stdout once the listeners are up,
-or the grant as JSON with `--json`, and stays up until SIGINT or SIGTERM. A
-failure nobody watching the process can answer — a captcha, a forced password
-change, a session that expired and cannot recover — ends the run with exit
-status 1 and the reason on stderr, so a service manager decides whether to try
-again.
+or the grant as JSON with `--json`, and stays up until SIGINT or SIGTERM.
+
+A login that needs a person asks through a page on `127.0.0.1`: the URL is
+printed, the system browser is opened unless `--print-url` is given, and the
+login blocks until the page is answered or five minutes pass. A page that is
+never answered, a session that expired and cannot recover, and a login the
+gateway refuses all end the run with exit status 1 and the reason on stderr, so
+a service manager decides whether to try again. A forced password change is
+stored before the retry, in the settings file only when the profile stores
+passwords.
 
 | Exit code | Meaning |
 |---:|---|

@@ -6,6 +6,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"os"
 
 	"path/filepath"
 	"strings"
@@ -258,6 +260,56 @@ func TestFailedLoginLeavesAFreeProfileForTheNextRun(t *testing.T) {
 	}
 	if code, _, _ := run(t, "-config", path, "-status"); code != ExitNotRunning {
 		t.Fatalf("status exit code = %d, want %d", code, ExitNotRunning)
+	}
+}
+
+// A forced change has to reach the retry's credential even when the file
+// cannot be written, and the file must respect a profile that stores no
+// password.
+func TestSaveChangedPassword(t *testing.T) {
+	var logged []string
+	logf := func(format string, args ...any) {
+		logged = append(logged, fmt.Sprintf(format, args...))
+	}
+
+	cfg := config.Default()
+	cfg.Profiles[0].Auth.StorePass = false
+	cfg.Profiles[0].Auth.Password = "old"
+	path := filepath.Join(t.TempDir(), "config.toml")
+
+	saveChangedPassword(&cfg, path, cfg.ActiveProfile, "new", logf)
+	if cfg.Profiles[0].Auth.Password != "new" {
+		t.Fatalf("in-memory password = %q, want the changed one", cfg.Profiles[0].Auth.Password)
+	}
+	loaded, err := config.LoadFile(path)
+	if err != nil {
+		t.Fatalf("load the saved settings: %v", err)
+	}
+	if loaded.Profiles[0].Auth.Password != "" {
+		t.Fatalf("file password = %q, want it cleared for a profile that stores none", loaded.Profiles[0].Auth.Password)
+	}
+
+	cfg.Profiles[0].Auth.StorePass = true
+	saveChangedPassword(&cfg, path, cfg.ActiveProfile, "changed", logf)
+	loaded, err = config.LoadFile(path)
+	if err != nil {
+		t.Fatalf("load the saved settings: %v", err)
+	}
+	if loaded.Profiles[0].Auth.Password != "changed" {
+		t.Fatalf("file password = %q, want the changed one", loaded.Profiles[0].Auth.Password)
+	}
+
+	// A file that cannot be written must not cost the retry its credential.
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatalf("create the blocker: %v", err)
+	}
+	saveChangedPassword(&cfg, filepath.Join(blocker, "config.toml"), cfg.ActiveProfile, "retry", logf)
+	if cfg.Profiles[0].Auth.Password != "retry" {
+		t.Fatalf("in-memory password = %q, want it kept after a failed save", cfg.Profiles[0].Auth.Password)
+	}
+	if !strings.Contains(strings.Join(logged, "\n"), "save the changed password") {
+		t.Fatalf("log = %q, want the save failure", logged)
 	}
 }
 

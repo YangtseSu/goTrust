@@ -229,7 +229,7 @@ func TestStoreChangedPasswordWritesTheCredential(t *testing.T) {
 	// Without 保存密码 the file must not carry the new credential, but the
 	// running configuration still needs it for the next login.
 	cfg.Profiles[0].Auth.StorePass = false
-	if err := config.SaveFile(path, cfgForDisk(cfg)); err != nil {
+	if err := config.SaveFile(path, cfg.ForDisk()); err != nil {
 		t.Fatalf("save the test config: %v", err)
 	}
 	testApp.cfg = cfg

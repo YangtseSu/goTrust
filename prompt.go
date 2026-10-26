@@ -343,7 +343,7 @@ func (a *app) storeChangedPassword(profileName, newPassword string) {
 	}
 	name := cfg.Profiles[index].Name
 	cfg.Profiles[index].Auth.Password = newPassword
-	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
 		a.logf("save the changed password: %v", err)
 		a.setStatusError("保存新密码失败: " + err.Error())
 		return
@@ -380,7 +380,7 @@ func (a *app) storeTOTPSecret(secret string) {
 		return
 	}
 	cfg.Profiles[index].Auth.TOTPSecret = strings.TrimSpace(secret)
-	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
 		a.logf("save the TOTP secret: %v", err)
 		a.setStatusError("保存 TOTP 密钥失败: " + err.Error())
 		return
@@ -725,7 +725,7 @@ func (a *app) storeAuthChoice(method session.AuthMethod) {
 	}
 	cfg.Profiles[index].Auth.AuthType = method.Type
 	cfg.Profiles[index].Auth.Domain = method.Domain
-	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
 		a.logf("save the authentication method: %v", err)
 		return
 	}

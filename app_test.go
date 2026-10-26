@@ -91,30 +91,6 @@ func TestDecideAutoConnect(t *testing.T) {
 	}
 }
 
-func TestCfgForDiskClearsUnstoredPasswords(t *testing.T) {
-	cfg := config.Default()
-	cfg.Profiles[0].Auth.StorePass = true
-	cfg.Profiles[0].Auth.Password = "stored"
-	cfg.Profiles[0].Auth.TOTPSecret = "stored-secret"
-	if _, err := cfg.AddProfile("工作"); err != nil {
-		t.Fatalf("add profile: %v", err)
-	}
-	cfg.Profiles[1].Auth.StorePass = false
-	cfg.Profiles[1].Auth.Password = "memory-only"
-	cfg.Profiles[1].Auth.TOTPSecret = "memory-only-secret"
-
-	disk := cfgForDisk(cfg)
-	if disk.Profiles[0].Auth.Password != "stored" || disk.Profiles[0].Auth.TOTPSecret != "stored-secret" {
-		t.Fatal("a stored credential was cleared from the file")
-	}
-	if disk.Profiles[1].Auth.Password != "" || disk.Profiles[1].Auth.TOTPSecret != "" {
-		t.Fatal("an unstored credential reached the file")
-	}
-	if cfg.Profiles[1].Auth.Password != "memory-only" || cfg.Profiles[1].Auth.TOTPSecret != "memory-only-secret" {
-		t.Fatal("the in-memory credential was cleared")
-	}
-}
-
 func TestActiveProfileFeedsTheSession(t *testing.T) {
 	cfg := config.Default()
 	cfg.Profiles[0].Server.Address = "first.example.com"

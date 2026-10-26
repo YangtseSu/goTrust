@@ -45,6 +45,7 @@ separately.
 | `main.go`, `init.go`, `configs` | The source project's CLI entry point, its flag parsing and its config type. goTrust wires the layer from `core/session`. |
 | `service` listeners | The SOCKS5, HTTP, TCP/UDP forwarding and shadowsocks servers. `core/proxy` owns the listeners, and the imported `service` package keeps only the DNS server and the keep-alive. |
 | `internal/hook_func` initial hooks | The start-up checks belonged to the CLI, and one of them named operator-specific DNS suffixes. The package keeps the terminal hooks the stacks call. |
+| `client/authchallenge` terminal handler | The stdin handler and the temporary browser page it started duplicated what the front-ends own. Every interactive step now comes from `core/prompt/web`, and a caller without a prompt gets `UnsupportedHandler` instead of a read from a terminal that may not exist. |
 | `mobile`, `docs`, `Dockerfile`, `docker-compose.yml`, the property list, the READMEs | Packaging and documentation of the source project. |
 | `go.mod`, `go.sum` | goTrust is one module; the layer's dependencies are recorded in the root `go.mod`. |
 
@@ -61,6 +62,10 @@ Beyond the module prefix and the drops above:
 - Test fixtures use the documentation ranges (`192.0.2.0/24`,
   `198.51.100.0/24`, `203.0.113.0/24`, `example.com`) rather than the hosts the
   source project happened to use.
+- `auth.Session.Login` answers a challenge without a handler with
+  `authchallenge.UnsupportedHandler`, which fails with the reason. The source
+  fell back to its terminal handler; goTrust's front-ends always supply their
+  own prompt.
 
 ## Client version literals
 

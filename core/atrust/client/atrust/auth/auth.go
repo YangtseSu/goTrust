@@ -451,7 +451,9 @@ func (s *Session) Login(method LoginMethod, opts LoginOptions) (LoginResult, err
 	s.onPasswordChanged = opts.OnPasswordChanged
 	s.stateMu.Unlock()
 	if s.challengeHandler == nil {
-		s.challengeHandler = authchallenge.NewCLIHandler(authchallenge.CLIOptions{})
+		// A caller without a prompt must fail with the reason instead of
+		// reading a terminal that may not exist.
+		s.challengeHandler = authchallenge.UnsupportedHandler{}
 	}
 	s.env = base64.StdEncoding.EncodeToString([]byte(`{"deviceId":"` + opts.DeviceID + `"}`))
 

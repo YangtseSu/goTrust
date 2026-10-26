@@ -22,6 +22,7 @@ import (
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/logging"
 	"github.com/YangtseSu/goTrust/core/profilelock"
+	"github.com/YangtseSu/goTrust/core/prompt/web"
 	gotrustproxy "github.com/YangtseSu/goTrust/core/proxy"
 	"github.com/YangtseSu/goTrust/core/session"
 )
@@ -49,6 +50,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	printResources := flags.Bool("print-resources", false,
 		"print the grant cached by the last login, then exit")
 	asJSON := flags.Bool("json", false, "encode the reported grant and status as JSON")
+	printURL := flags.Bool("print-url", false,
+		"print the URL of an interactive login step instead of opening a browser")
 
 	switch err := flags.Parse(args); {
 	case errors.Is(err, flag.ErrHelp):
@@ -76,13 +79,13 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	case *printResources:
 		return reportCachedGrant(stdout, stderr, path, *asJSON)
 	default:
-		return runSession(stdout, stderr, cfg, path, *asJSON)
+		return runSession(stdout, stderr, cfg, path, *asJSON, *printURL)
 	}
 }
 
 // runSession is the long-running command: log in, publish the listeners, print
 // the grant, and stay up until a signal or a failure that needs a person.
-func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, asJSON bool) int {
+func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, asJSON, printURL bool) int {
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(stderr, "settings: %v\n", err)
 		return ExitFailure
@@ -106,10 +109,30 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 	}()
 
 	failures := make(chan string, 1)
+	// The URL goes to stderr, not to the log file: it is the one line a person
+	// on a host without a display has to read, and it stays out of the history.
+	promptOptions := web.Options{
+		Print: func(link string) { fmt.Fprintf(stderr, "prompt: %s\n", link) },
+		Logf:  logf,
+	}
+	if !printURL {
+		promptOptions.Open = web.OpenBrowser
+	}
+	prompter := web.New(promptOptions)
+
 	manager := session.New(session.Options{
-		Config: func() config.Config { return cfg },
-		Logf:   logf,
-		Prompt: func(context.Context) session.Prompter { return refusingPrompter{} },
+		Config:            func() config.Config { return cfg },
+		Logf:              logf,
+		Prompt:            prompter.Handler,
+		ChooseAuth:        prompter.ChooseAuth,
+		ChangePassword:    prompter.ChangePassword,
+		ConfirmDeviceBind: prompter.ConfirmDeviceBind,
+		// A forced change leaves the pending login unusable, so the manager
+		// retries with this credential. The retry reads Config, which is why
+		// the new password is stored before it runs.
+		OnPasswordChanged: func(profile, newPassword string) {
+			saveChangedPassword(&cfg, configPath, profile, newPassword, logf)
+		},
 		// The reconnect ladder retries a transient loss itself. A failure that
 		// needs a person cannot recover in a process nobody is watching, so it
 		// ends the run with the reason instead of waiting forever.
@@ -176,6 +199,28 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 		fmt.Fprintf(stderr, "session failed: %s\n", detail)
 		return ExitFailure
 	}
+}
+
+// saveChangedPassword replaces the credential a forced change accepted. The
+// in-memory settings are updated even when the file cannot be written: the
+// manager retries the login with them, and a read-only settings file must not
+// turn an accepted change into a failed login. The file gets the copy ForDisk
+// allows, so a profile that does not store passwords keeps the new one only for
+// this run.
+func saveChangedPassword(cfg *config.Config, configPath, profile, newPassword string, logf func(string, ...any)) {
+	next := cfg.Clone()
+	index := next.ProfileIndex(profile)
+	if index < 0 {
+		logf("changed password for unknown profile %q; not stored", profile)
+		return
+	}
+	next.Profiles[index].Auth.Password = newPassword
+	*cfg = next
+	if err := config.SaveFile(configPath, next.ForDisk()); err != nil {
+		logf("save the changed password: %v", err)
+		return
+	}
+	logf("stored the changed password for profile %s", profile)
 }
 
 // openLog opens the log file and mirrors it to stderr, which is where a

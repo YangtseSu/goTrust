@@ -212,7 +212,70 @@
 
 ### Phase 4: Web prompt for interactive steps
 
-- **Status:** pending
+- **Status:** complete
+- **Started:** 2026-10-27
+- Actions taken:
+  - `core/prompt/web` serves each question as one page: it binds
+    `127.0.0.1:0` per question, writes 128 random bits into the path, prints the
+    URL, opens the system browser through `OpenBrowser` unless the caller asks
+    for print-only, and blocks on the answer, the attempt's context or the
+    per-page timeout. The answer channel takes one value, so a second
+    submission is a conflict, and the listener shuts down with the response
+    flushed so the person sees the confirmation page.
+  - one page each for a one-time code (SMS/TOTP/RADIUS, with the portal's skip
+    offer), a text captcha, a click captcha (image served byte-for-byte, clicks
+    mapped back to natural pixels in the page's own script), an external SSO
+    login (the browser is sent to the gateway's login page, the page carries
+    the link and the paste box, and `session.ValidateCallbackURL` checks the
+    paste), a forced password change (policy lines as hints, skip only when the
+    portal offered it), a device binding (allow/deny), and the
+    authentication-method chooser.
+  - `internal/cli` wires the prompter into `session.Options` (`Prompt`,
+    `ChooseAuth`, `ChangePassword`, `ConfirmDeviceBind`), prints `prompt: <url>`
+    to stderr only, and adds `--print-url` to skip the browser launch. The URL
+    never goes to the log file, and nothing typed into a page is logged.
+  - `config.ForDisk` moved from the tray app into `core/config`, so both
+    front-ends clear an unstored password and the TOTP secret by the same rule;
+    the CLI uses it after a forced change. The in-memory credential is updated
+    even when the file cannot be written, because the manager retries the login
+    with it.
+  - dropped the imported `client/authchallenge` terminal handler and its
+    temporary browser page, and made `auth.Session.Login`'s no-handler fallback
+    `UnsupportedHandler`; `PROVENANCE.md` records the drop and the edit.
+  - deleted `internal/cli/prompt.go`: no front-end refuses these questions now.
+  - README, AGENTS.md and `PROVENANCE.md` describe the behaviour and the new
+    package.
+- Gates:
+  - `go build ./...`, `go test ./...`, `go vet ./...` clean, `gofmt -l .` empty,
+    `reuse lint` 190/190
+  - `httptest` coverage of every page type: token path, headers, image bytes,
+    each form's rejection and answer, the single-use conflict, the loopback
+    host check, the timeout, cancellation, and a check that no printed or logged
+    line contains a submitted code
+  - live run on a scratch settings copy: the gateway asked for a click captcha,
+    the CLI printed the page URL, the page served the image, and the points
+    posted to the page reached the portal through the normal protocol path. The
+    login reached online once the gateway accepted an answer (2 resources, both
+    listeners, keep-alive 200), and SIGTERM left nothing behind. Earlier answers
+    were rejected; they were clicked from the same image 69-104 seconds after it
+    was served, while the accepted one was 33 seconds old, so either accuracy or
+    the captcha's short validity explains it. A rejected answer makes the
+    gateway serve a new page, which the prompter does.
+  - the run's log file contains no page token, coordinate, code or callback
+    value; `prompt:` lines only ever reached stderr
+  - `makepkg -fC` built the package with both binaries
+- Follow-ups:
+  - the GUI still owns its in-window prompts; Phase 5 moves it behind the same
+    session interface, and the web package stays the headless front-end.
+  - the CLI does not remember an authentication-method choice, so a gateway
+    that offers several asks on every run. The tray app stores the pair; the
+    CLI would need the same write, which this phase did not ask for.
+- Files created/modified:
+  - `core/prompt/web/{web,page,pages,challenges,open}.go`, its test,
+    `internal/cli/{cli.go,cli_test.go}`, `core/config/config.go` and its test,
+    `core/atrust/client/atrust/auth/auth.go` (fallback),
+    `core/atrust/PROVENANCE.md`, `main.go`, `prompt.go`, `app_test.go`,
+    `password_test.go`, `README.md`, `AGENTS.md`
 
 ### Phase 5: GUI refactor and publication
 

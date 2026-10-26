@@ -1133,7 +1133,7 @@ func (a *app) saveSettings() {
 		a.invalidateSettings()
 		return
 	}
-	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
 		state.Status = "保存失败: " + err.Error()
 		state.StatusError = true
 		a.invalidateSettings()
@@ -1180,7 +1180,7 @@ func (a *app) selectProfile(name string) {
 	a.mu.RUnlock()
 
 	cfg.ActiveProfile = name
-	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
 		a.setStatusError("切换配置失败: " + err.Error())
 		a.logf("switch profile: %v", err)
 		return
@@ -1313,7 +1313,7 @@ func (a *app) setVerbose(on bool) {
 func (a *app) persistFlag(mutate func(*config.Config)) {
 	cfg := a.currentConfig()
 	mutate(&cfg)
-	if err := config.SaveFile(a.configPath, cfgForDisk(cfg)); err != nil {
+	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
 		a.setStatusError("保存设置失败: " + err.Error())
 		a.logf("save settings: %v", err)
 		return
@@ -1430,21 +1430,6 @@ func (a *app) currentConfig() config.Config {
 // failed save.
 func (a *app) mutableConfig() config.Config {
 	return a.currentConfig().Clone()
-}
-
-// cfgForDisk clears the credentials the user chose not to store. The TOTP
-// secret is a second credential for the same account, so it follows the
-// password toggle: unchecking 保存密码 must not leave it on disk. The in-memory
-// configuration keeps both for this run.
-func cfgForDisk(cfg config.Config) config.Config {
-	disk := cfg.Clone()
-	for index := range disk.Profiles {
-		if !disk.Profiles[index].Auth.StorePass {
-			disk.Profiles[index].Auth.Password = ""
-			disk.Profiles[index].Auth.TOTPSecret = ""
-		}
-	}
-	return disk
 }
 
 // sessionActive reports whether the phase has a session that 断开 must end:
