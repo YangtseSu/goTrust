@@ -156,6 +156,13 @@ packages under `core/`. `../2026-10-23-gotrust-skeleton/` built the app.
   reached online after the gateway accepted the answer. The log held no token,
   coordinate, code or callback value (only `prompt: <url>` went to stderr, never
   to the file), `go test ./...` covers every page, and `reuse lint` is clean.
+  The page is not a new mechanism: the imported terminal handler already
+  started a loopback server and opened a browser for the click captcha whenever
+  no captcha file path was configured, which was goTrust's case. This phase
+  moved that page out of the protocol layer, extended it to every other
+  challenge, and added the single-use token, the host check, the attempt
+  context, no disk copy and per-type tests. Its stdin paths and the file branch
+  are recorded in `PROVENANCE.md` as dropped.
 
 ### Phase 5: GUI refactor and publication
 
@@ -185,7 +192,7 @@ packages under `core/`. `../2026-10-23-gotrust-skeleton/` built the app.
 | Preserve the source's relative layout in `core/atrust/` | The import stays reviewable as a diff; a package rename is a separate commit if it ever earns one |
 | Keep the fork published and frozen | It carries the PR record and the last complete CLI; freezing means the packaging pins a commit that no longer moves |
 | CLI is a front-end, not a compatible tool | No TUN, no shadowsocks, no flag compatibility with any other client; it reuses `core/config`, `core/session` and `core/proxy` |
-| Web page for interactive steps | A click captcha needs an image and coordinates, and an SSO login needs a URL and a pasted answer; a terminal cannot render either, and the page works over SSH forwarding and in tests |
+| Web page for interactive steps | The imported layer already served a local page for the click captcha by default: its terminal handler started a loopback server and opened a browser unless a captcha file path was configured, and goTrust never configured one. The plan generalizes that page to every challenge and hardens it. A terminal cannot render an image, a click coordinate or an SSO redirect, and the page works over SSH forwarding and in tests |
 | Third-party version literal in imported fixtures | Client versions are published on a public index, so the value is a published fact; keep it as a configurable client version and record the source page in `PROVENANCE.md` |
 | Delete `--no-ui` after the CLI lands | Two headless paths diverge; the GUI binary should only do GUI |
 | Lock by (settings file, profile), file beside the settings | One profile owns one client data file and one tunnel identity; a config-wide lock would forbid the tray app on one account and the CLI on another, and `--config` keeps a scratch file apart |
