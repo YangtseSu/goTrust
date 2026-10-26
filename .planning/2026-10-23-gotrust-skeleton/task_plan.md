@@ -617,9 +617,8 @@ seeds it into every profile before the login.
 - [x] settings 高级 shows the id read-only and opens the file for hand edits
 - [x] live acceptance of the seeded id: two accounts logged in, both reported
       the same device id
-- [ ] live acceptance of the honest default UA: log in with family `linux` and
-      no client version; the connection must stay up and the portal must not
-      reject the client
+- [x] live acceptance of the honest default UA: logged in with family `linux`
+      and no client version, the connection stays up and the portal accepts it
 - [x] UA and tunnel process block from the identity: the client library takes
       a per-session UA and a process block, and `[identity]` supplies both; an
       empty process block keeps the client's own
