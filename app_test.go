@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/YangtseSu/goTrust/config"
-	gotrustproxy "github.com/YangtseSu/goTrust/proxy"
-	"github.com/YangtseSu/goTrust/session"
+	"github.com/YangtseSu/goTrust/core/config"
+	gotrustproxy "github.com/YangtseSu/goTrust/core/proxy"
+	"github.com/YangtseSu/goTrust/core/session"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
 )
 

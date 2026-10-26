@@ -11,7 +11,7 @@ import (
 
 	"github.com/mythologyli/zju-connect/client/atrust/auth"
 
-	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/core/config"
 )
 
 // The password calls go through the live client, so an idle manager has to

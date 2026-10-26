@@ -25,7 +25,7 @@ import (
 	"github.com/mythologyli/zju-connect/stack/gvisor"
 	"github.com/mythologyli/zju-connect/stack/tcptunnel"
 
-	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/core/config"
 )
 
 // A manager that was never logged in must refuse to dial instead of handing

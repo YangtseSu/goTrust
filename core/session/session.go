@@ -33,7 +33,7 @@ import (
 	"github.com/mythologyli/zju-connect/stack/tcptunnel"
 	"github.com/mythologyli/zju-connect/underlay"
 
-	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/core/config"
 )
 
 // Phase is the lifecycle position of the session, in the order a user sees it.

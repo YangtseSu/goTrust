@@ -8,8 +8,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/YangtseSu/goTrust/config"
-	"github.com/YangtseSu/goTrust/session"
+	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/session"
 )
 
 // A device-binding request must name the device, explain the consequence and

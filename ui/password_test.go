@@ -9,8 +9,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/YangtseSu/goTrust/config"
-	"github.com/YangtseSu/goTrust/session"
+	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/session"
 )
 
 // passwordTestStrategy is the smallest policy the panels can render: a length,

@@ -9,7 +9,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/YangtseSu/goTrust/session"
+	"github.com/YangtseSu/goTrust/core/session"
 )
 
 // CodePrompt is a one-time code challenge. SMS and RADIUS have no other way to

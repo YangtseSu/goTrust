@@ -12,8 +12,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/YangtseSu/goTrust/config"
-	"github.com/YangtseSu/goTrust/session"
+	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/session"
 )
 
 // SettingsState is the settings window's draft. It is a clone of the live

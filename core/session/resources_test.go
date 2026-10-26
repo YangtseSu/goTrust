@@ -13,7 +13,7 @@ import (
 
 	clientpkg "github.com/mythologyli/zju-connect/client"
 
-	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/core/config"
 )
 
 func grant() ([]clientpkg.IPResource, clientpkg.DomainResources, map[string][]net.IP) {

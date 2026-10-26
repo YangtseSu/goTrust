@@ -8,8 +8,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/YangtseSu/goTrust/config"
-	"github.com/YangtseSu/goTrust/session"
+	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/session"
 )
 
 // Every phase has one colour meaning, and a failure is the only red one.

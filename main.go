@@ -24,10 +24,10 @@ import (
 	"github.com/egoist/mygo/ui"
 	zjuconnectlog "github.com/mythologyli/zju-connect/log"
 
-	"github.com/YangtseSu/goTrust/config"
-	"github.com/YangtseSu/goTrust/logging"
-	gotrustproxy "github.com/YangtseSu/goTrust/proxy"
-	"github.com/YangtseSu/goTrust/session"
+	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/logging"
+	gotrustproxy "github.com/YangtseSu/goTrust/core/proxy"
+	"github.com/YangtseSu/goTrust/core/session"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
 )
 

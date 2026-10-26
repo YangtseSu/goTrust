@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/core/config"
 )
 
 func testMethods() []AuthMethod {

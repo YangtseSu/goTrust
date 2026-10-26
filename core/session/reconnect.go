@@ -12,7 +12,7 @@ import (
 	"github.com/mythologyli/zju-connect/client/atrust"
 	"github.com/mythologyli/zju-connect/client/authchallenge"
 
-	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/core/config"
 )
 
 // reconnectDelays is the ladder: five attempts, doubling from one second. The

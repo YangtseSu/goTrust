@@ -8,7 +8,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/YangtseSu/goTrust/session"
+	"github.com/YangtseSu/goTrust/core/session"
 )
 
 // The interface has four text sizes and one spacing grid, so every window looks

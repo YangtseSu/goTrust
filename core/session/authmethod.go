@@ -15,7 +15,7 @@ import (
 	"github.com/mythologyli/zju-connect/client/atrust/auth"
 	"github.com/mythologyli/zju-connect/underlay"
 
-	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/core/config"
 )
 
 // AuthMethod is one authentication method the gateway offers before login.

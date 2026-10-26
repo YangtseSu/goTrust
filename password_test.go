@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/YangtseSu/goTrust/config"
-	"github.com/YangtseSu/goTrust/session"
+	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/session"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
 )
 

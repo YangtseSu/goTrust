@@ -15,7 +15,7 @@ import (
 	"github.com/mythologyli/zju-connect/client/atrust"
 	"github.com/mythologyli/zju-connect/service"
 
-	"github.com/YangtseSu/goTrust/config"
+	"github.com/YangtseSu/goTrust/core/config"
 )
 
 // The ladder is a fixed promise: 1/2/4/8/16 s, five attempts. A change here

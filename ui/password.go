@@ -10,7 +10,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/YangtseSu/goTrust/session"
+	"github.com/YangtseSu/goTrust/core/session"
 )
 
 // PasswordPrompt is a password change: the gateway's forced reset during login,
