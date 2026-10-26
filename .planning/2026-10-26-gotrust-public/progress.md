@@ -131,7 +131,84 @@
 
 ### Phase 3: Front-end split
 
-- **Status:** pending
+- **Status:** complete
+- **Started:** 2026-10-27
+- Actions taken:
+  - `internal/cli` took the headless command line out of the tray binary:
+    `--config`, `--status`, `--print-resources`, `--json`, the log bridge to
+    stderr, the listeners, the grant output and the exit codes
+    (0 success, 1 failure, 2 usage, 3 `--status` found no instance). The
+    manager is wired from `core` only; the refusing prompter moved here from
+    the GUI's `prompt.go`
+  - `cmd/gotrust-cli` is the entry point: it calls `cli.Run` and exits with its
+    code, so nothing in the binary touches mygo
+  - `core/profilelock` takes an exclusive, non-blocking lock on a file beside
+    the settings file, named from the settings file and a hash of the profile.
+    Unix uses `flock(2)`, Windows `LockFileEx`; the holder writes its pid, so a
+    refused instance names the process. Both front-ends take it after the
+    logout join and release it after `Manager.Logout`, so a new instance cannot
+    start against a client that is still being torn down
+  - moved the identity-persisting load into `core/config` as `LoadOrCreate`, so
+    the GUI and the CLI share one startup path
+  - deleted `-no-ui`, `-print-resources`, `runHeadless` and `cliPrompter`; the
+    GUI's `uiPrompter` now refuses the text captcha itself, and the forced
+    password change reports a front-end-neutral reason
+  - `internal/guards` holds the dependency invariants as tests: no mygo or
+    purego under `core/`, no `ui/` or `internal/cli` in `cmd/gotrust-cli`, no
+    `internal/cli` in the tray app, with a sanity check that the graphs are not
+    empty
+  - `.github/workflows/ci.yml`: build, vet, gofmt, tests (with the guards), the
+    darwin and windows cross-builds and `reuse lint`
+  - README: the two builds, a command-line section with the exit codes and the
+    lock, and the `--no-ui`/`--print-resources` references replaced; AGENTS.md
+    lists the new packages; `.gitignore` covers the CLI binary and the lock
+    files
+  - PKGBUILD builds and installs `gotrust-cli` next to `gotrust`
+- Gates:
+  - `go build ./...`, `go test ./...`, `go vet ./...` clean, `gofmt -l .` empty,
+    `reuse lint` 188/188
+  - cross-builds for darwin/amd64, darwin/arm64, windows/amd64 and linux/arm64
+    pass, so the Windows lock implementation compiles
+  - live headless run: session online, two granted resources on stdout, both
+    listeners up, the granted web resource served through both (200, 507 bytes,
+    identical body), keep-alive answered 200
+  - a second CLI on the same profile exited 1 with
+    `profile "<name>" is in use by process <pid>`; `--status` returned 0 while
+    it ran and 3 afterwards; SIGTERM exited 0 and left no process or held lock
+  - a failed login against `127.0.0.1:1` returned 1 and left the profile free;
+    `--print-resources` without a cache returned 1; unknown flags and a stray
+    argument returned 2
+  - nested headless UI smoke: the tray app renders from a temporary
+    configuration (window, 配置 默认, 尚未填写网关), writes `config.toml` with
+    the generated identity, and SIGTERM exits 0
+  - `makepkg -fC` built `r72`; the payload carries
+    `/usr/bin/gotrust` and `/usr/bin/gotrust-cli`, and `namcap` reports the
+    documented warning classes
+- Follow-ups:
+  - the package keeps `gtk3` and `libayatana-appindicator` as hard
+    dependencies, so installing it on a headless host still pulls the tray
+    stack for the CLI. A split package or an optional dependency is a
+    packaging decision for Phase 5, when the package switches to the public
+    source
+  - `--status` reports the lock, not the live phase: a login that is starting
+    or shutting down is "in use", and the cached grant may be older than the
+    running session. Reading the live state would need a control channel,
+    which the plan does not ask for
+  - `internal/hook_func.Fatalf` keeps `log.Fatalf`'s exit — re-evaluated here
+    and left alone: it is reached only from the imported resolver and stack on
+    genuine fatal paths (fake-IP pool creation, packet writes), exits 1 in both
+    front-ends, and the profile lock is released by the kernel when the process
+    ends. Threading a shutdown path through the imported tree is not worth the
+    diff
+  - the login path still refuses a one-time code, a click captcha and an SSO
+    callback in the CLI; Phase 4's web page is what closes that
+- Files created/modified:
+  - `core/profilelock/**`, `internal/cli/**`, `cmd/gotrust-cli/main.go`,
+    `internal/guards/guards_test.go`, `.github/workflows/ci.yml`, `main.go`,
+    `prompt.go`, `app_test.go`, `core/config/config.go` and its test,
+    `core/session/{session,resources,password}.go` and `password_test.go`,
+    `core/logging/logging.go`, `README.md`, `AGENTS.md`, `.gitignore`,
+    `~/projects/arch-pkgs/gotrust-git/PKGBUILD`
 
 ### Phase 4: Web prompt for interactive steps
 

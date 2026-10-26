@@ -16,19 +16,20 @@ the gateway has already accepted.
 
 ## Next Step
 
-Phase 3: split the front-ends. `internal/cli` takes the config load, the
-manager wiring, the signal handling and the exit codes; `cmd/gotrust-cli`
-imports `core/*` only. The per-profile lock lands with it, and the dependency
-guards then report empty.
+Phase 4: a web prompt for the interactive steps. `core/prompt/web` serves one
+`127.0.0.1` page per challenge with a single-use token, and the CLI gets
+`--print-url` for hosts where no browser can be started; the click captcha is
+the first challenge to carry through, since the CLI refuses it today.
 
 ## Current Phase
 
-Phase 2 is complete: the protocol layer lives under `core/atrust/`, the fork
-dependency, the `replace` directive and `go.work` are gone, and the imported
-tests run in this repository. Phase 1 moved the application packages under
-`core/`, lowercased the technical names and migrated the installed directories;
-`../2026-10-23-gotrust-skeleton/` built the app, this plan moves it behind a
-stable core and makes the repository publishable.
+Phase 3 is complete: `cmd/gotrust-cli` is the only headless implementation,
+`internal/cli` imports `core/*` only, the per-profile lock refuses a second live
+login on one account, and the dependency guards are tests, so they run with
+`go test ./...`. Phase 2 put the protocol layer in the tree and removed the fork
+dependency; Phase 1 moved the application packages under `core/` and lowercased
+the technical names. `../2026-10-23-gotrust-skeleton/` built the app; this plan
+moves it behind a stable core and makes the repository publishable.
 
 ## Phases
 
@@ -101,17 +102,33 @@ stable core and makes the repository publishable.
 
 ### Phase 3: Front-end split
 
-- [ ] `internal/cli`: config load, manager wiring, signal handling, exit codes,
+- [x] `internal/cli`: config load, manager wiring, signal handling, exit codes,
       `--status` and `--json`
-- [ ] `cmd/gotrust-cli`: imports `core/*` only, never `ui/`, never mygo
-- [ ] A per-profile lock, so the GUI and the CLI cannot share one profile's
+- [x] `cmd/gotrust-cli`: imports `core/*` only, never `ui/`, never mygo
+- [x] A per-profile lock, so the GUI and the CLI cannot share one profile's
       login state or tunnel ports while still running different profiles
-- [ ] Delete `-no-ui` and `--print-resources` from the GUI binary once the CLI
+- [x] Delete `-no-ui` and `--print-resources` from the GUI binary once the CLI
       is at parity; one headless implementation only
-- [ ] Dependency guards in CI: no mygo or purego under `core/` or in
+- [x] Dependency guards in CI: no mygo or purego under `core/` or in
       `cmd/gotrust-cli`, and neither front-end imports the other
 - **Gates:** headless login against the live gateway, proxies serve, exit codes
   distinguish success from failure, the guards report empty
+- **Status:** complete. The CLI-split commit. `internal/cli` owns the command line
+  (`--config`, `--status`, `--print-resources`, `--json`), the log bridge, the
+  listeners and the exit codes 0/1/2/3; the login, the config load and the
+  identity write-back come from `core`. `core/profilelock` takes an exclusive
+  `flock(2)`/`LockFileEx` on a file beside the settings, keyed by the settings
+  file and the profile name; both front-ends take it before a login and release
+  it after the logout. `internal/guards` holds the dependency invariants as
+  tests, so `go test ./...` fails on a toolkit import under `core/` or a
+  front-end reaching the other. The live run logged in, served the granted web
+  resource through both listeners (200, identical body), answered the
+  keep-alive, refused a second instance with the holder's pid, and exited 0 on
+  SIGTERM with the profile free again; `--status` returned 3 when free and 0
+  when held. `makepkg -fC` built `r72` with both binaries, and the
+  darwin/arm64, darwin/amd64, windows/amd64 and linux/arm64 cross-builds pass.
+  `core/session/password.go` no longer names a removed flag, and the forced
+  password change is refused with a front-end-neutral reason.
 
 ### Phase 4: Web prompt for interactive steps
 
@@ -157,6 +174,9 @@ stable core and makes the repository publishable.
 | Web page for interactive steps | A click captcha needs an image and coordinates, and an SSO login needs a URL and a pasted answer; a terminal cannot render either, and the page works over SSH forwarding and in tests |
 | Third-party version literal in imported fixtures | Client versions are published on a public index, so the value is a published fact; keep it as a configurable client version and record the source page in `PROVENANCE.md` |
 | Delete `--no-ui` after the CLI lands | Two headless paths diverge; the GUI binary should only do GUI |
+| Lock by (settings file, profile), file beside the settings | One profile owns one client data file and one tunnel identity; a config-wide lock would forbid the tray app on one account and the CLI on another, and `--config` keeps a scratch file apart |
+| Try-lock instead of a pid file | `flock`/`LockFileEx` is released by the kernel when the process ends, so a crash cannot leave a stale claim; the holder's pid is written for the refusal message |
+| `--status` exits 3 when no instance holds the profile | A supervisor needs the distinction, and `systemctl is-active` uses the same code |
 
 ## Errors Encountered
 
