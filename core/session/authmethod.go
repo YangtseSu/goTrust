@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mythologyli/zju-connect/client"
-	"github.com/mythologyli/zju-connect/client/atrust/auth"
-	"github.com/mythologyli/zju-connect/underlay"
+	"github.com/YangtseSu/goTrust/core/atrust/client"
+	"github.com/YangtseSu/goTrust/core/atrust/client/atrust/auth"
+	"github.com/YangtseSu/goTrust/core/atrust/underlay"
 
 	"github.com/YangtseSu/goTrust/core/config"
 )

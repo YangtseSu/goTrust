@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	clientpkg "github.com/mythologyli/zju-connect/client"
+	clientpkg "github.com/YangtseSu/goTrust/core/atrust/client"
 )
 
 // ResourceKind separates what a resource entry is: an application the portal

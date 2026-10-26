@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mythologyli/zju-connect/client/atrust/auth"
+	"github.com/YangtseSu/goTrust/core/atrust/client/atrust/auth"
 
 	"github.com/YangtseSu/goTrust/core/config"
 )

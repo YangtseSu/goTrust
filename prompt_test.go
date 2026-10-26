@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mythologyli/zju-connect/client/authchallenge"
+	"github.com/YangtseSu/goTrust/core/atrust/client/authchallenge"
 
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/session"

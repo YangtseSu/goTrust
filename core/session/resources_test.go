@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	clientpkg "github.com/mythologyli/zju-connect/client"
+	clientpkg "github.com/YangtseSu/goTrust/core/atrust/client"
 
 	"github.com/YangtseSu/goTrust/core/config"
 )

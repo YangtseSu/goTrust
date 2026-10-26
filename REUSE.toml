@@ -32,3 +32,23 @@ SPDX-License-Identifier = "AGPL-3.0-or-later"
 path = ["AGENTS.md", "docs/**"]
 SPDX-FileCopyrightText = "2026 Yangtse Su <yangtsesu@gmail.com>"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# The protocol layer under core/atrust was imported from the zju-connect
+# project, which licenses its code under AGPL-3.0. Its own files carry no
+# headers, so the whole tree is annotated here. See core/atrust/PROVENANCE.md.
+[[annotations]]
+path = "core/atrust/**"
+SPDX-FileCopyrightText = "2023-2026 the zju-connect authors"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+# internal/ping is the third-party MIT-licensed code the imported layer carries.
+[[annotations]]
+path = "core/atrust/internal/ping/**"
+SPDX-FileCopyrightText = "2017 Cloverstd <cloverstd@gmail.com>"
+SPDX-License-Identifier = "MIT"
+
+# The provenance note is goTrust's own prose about the imported tree.
+[[annotations]]
+path = "core/atrust/PROVENANCE.md"
+SPDX-FileCopyrightText = "2026 Yangtse Su <yangtsesu@gmail.com>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"

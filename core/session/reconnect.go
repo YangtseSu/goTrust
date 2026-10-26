@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mythologyli/zju-connect/client/atrust"
-	"github.com/mythologyli/zju-connect/client/authchallenge"
+	"github.com/YangtseSu/goTrust/core/atrust/client/atrust"
+	"github.com/YangtseSu/goTrust/core/atrust/client/authchallenge"
 
 	"github.com/YangtseSu/goTrust/core/config"
 )
@@ -137,10 +137,9 @@ func (m *Manager) onSessionLost(reason string) {
 
 // hasStoredPassword reports whether a reconnect can log in without asking the
 // user. A session cannot outlive its connection: stored client data is device
-// material, not a reusable session, so only a saved password counts. (Both
-// atrust-quadlet and zju-connect tried to revive a session from the stored
-// sid ticket and the portal ended it anyway; the attempt only delayed the
-// login.)
+// material, not a reusable session, so only a saved password counts. (Reviving
+// a session from the stored sid ticket was tried and the portal ended it
+// anyway; the attempt only delayed the login.)
 func hasStoredPassword(profile config.Profile) bool {
 	return strings.TrimSpace(profile.Auth.Password) != ""
 }

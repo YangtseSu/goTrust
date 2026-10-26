@@ -19,11 +19,11 @@ import (
 
 	"inet.af/netaddr"
 
-	clientpkg "github.com/mythologyli/zju-connect/client"
-	"github.com/mythologyli/zju-connect/client/atrust"
-	"github.com/mythologyli/zju-connect/resolve"
-	"github.com/mythologyli/zju-connect/stack/gvisor"
-	"github.com/mythologyli/zju-connect/stack/tcptunnel"
+	clientpkg "github.com/YangtseSu/goTrust/core/atrust/client"
+	"github.com/YangtseSu/goTrust/core/atrust/client/atrust"
+	"github.com/YangtseSu/goTrust/core/atrust/resolve"
+	"github.com/YangtseSu/goTrust/core/atrust/stack/gvisor"
+	"github.com/YangtseSu/goTrust/core/atrust/stack/tcptunnel"
 
 	"github.com/YangtseSu/goTrust/core/config"
 )

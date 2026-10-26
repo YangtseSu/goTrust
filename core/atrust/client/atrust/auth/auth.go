@@ -1,0 +1,559 @@
+package auth
+
+import (
+	"context"
+	"crypto/tls"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	mathrand "math/rand"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/YangtseSu/goTrust/core/atrust/client"
+	"github.com/YangtseSu/goTrust/core/atrust/client/authchallenge"
+	"github.com/YangtseSu/goTrust/core/atrust/log"
+)
+
+const (
+	UserAgent    = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/2.4.10.50 Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-Linux-Plat-Ubuntu-x64 SPCClientType"
+	maxAttempts  = 5
+	maxAuthSteps = 8
+)
+
+var sharedParams = url.Values{
+	"clientType": {"SDPClient"},
+	"platform":   {"Linux"},
+	"lang":       {"en-US"},
+}
+
+func WithSharedParams(extra url.Values) url.Values {
+	combined := make(url.Values, len(sharedParams)+len(extra))
+	for k, v := range sharedParams {
+		combined[k] = append([]string(nil), v...)
+	}
+
+	for k, v := range extra {
+		for _, val := range v {
+			// notice: not Add()
+			combined.Set(k, val)
+		}
+	}
+
+	return combined
+}
+
+type Cookie struct {
+	Host   string `json:"host"`
+	Scheme string `json:"scheme"`
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+}
+
+type ClientAuthData struct {
+	Cookies           []Cookie        `json:"cookies"`
+	DeviceID          string          `json:"device_id"`
+	ServerVersionInfo json.RawMessage `json:"server_version_info,omitempty"`
+	// CSRFToken comes from the last authConfig and is what the restore path
+	// (sessionIdExchange) has to send, so a cold restore needs it.
+	CSRFToken string `json:"csrf_token,omitempty"`
+	// SignKey must be stored together with DeviceID: the server checks the pair,
+	// and a resume that cannot supply the original key brings the tunnel up while
+	// every authorization through it is rejected.
+	SignKey string `json:"sign_key,omitempty"`
+	// SIDTicket is the portal-issued ticket (ticketExchange) that the restore
+	// path exchanges for a session.
+	SIDTicket string `json:"sid_ticket,omitempty"`
+}
+
+type ServerVersionInfo struct {
+	Code int `json:"code"`
+	Data struct {
+		Capacities struct {
+			ZeroRTT struct {
+				Version string `json:"version"`
+			} `json:"zeroRTT"`
+		} `json:"capacities"`
+		Options struct {
+			Tun0RTT struct {
+				Enable bool `json:"enable"`
+			} `json:"tun0rtt"`
+		} `json:"options"`
+	} `json:"data"`
+}
+
+func ParseServerVersionInfo(data []byte) (ServerVersionInfo, error) {
+	var info ServerVersionInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return info, fmt.Errorf("failed to parse aTrust server manifest: %w", err)
+	}
+	if info.Code != 0 {
+		return info, fmt.Errorf("aTrust server manifest failed with code %d", info.Code)
+	}
+	return info, nil
+}
+
+func (i ServerVersionInfo) TCPTunnelZeroRTT() bool {
+	return i.Data.Capacities.ZeroRTT.Version != "" && i.Data.Options.Tun0RTT.Enable
+}
+
+type Session struct {
+	// ctxMu guards ctx. The session starts on the context of the setup call that
+	// builds it and is rebound to the client's lifetime context once setup hands
+	// it over; see SetLifetime.
+	ctxMu sync.RWMutex
+	ctx   context.Context
+	// stateMu guards the fields a portal answer updates (csrfToken, ticket,
+	// pubKey, pubKeyExp, antiReplayRand). Each response writes them in one short
+	// critical section. It does not serialize requests: Refresh, RestoreByTicket
+	// and Login may run concurrently, and the last writer wins. Callers that must
+	// not interleave them serialize themselves; the recovery ladder's `recovering`
+	// guard and the renewal loop's pause are what do that for the session paths.
+	stateMu    sync.Mutex
+	client     *http.Client
+	deviceID   string
+	username   string
+	totpSecret string
+
+	baseHost string
+	baseURL  string
+
+	rid            string
+	env            string
+	csrfToken      string
+	pubKey         string
+	pubKeyExp      string
+	antiReplayRand string
+	ticket         string
+	nextService    string
+
+	response map[string]json.RawMessage
+	// userAgent is the UA every request of this session carries. It starts as
+	// the package default and a caller may replace it once, before the first
+	// request (see SetUserAgent).
+	userAgent         string
+	challengeHandler  authchallenge.Handler
+	deviceBindHandler DeviceBindHandler
+	// passwordChange is the forced-change demand the password answer carried,
+	// and passwordChangeHandler is how the caller answers it. The notifier is
+	// called only after the portal accepted the new password.
+	passwordChange        *PasswordChangeChallenge
+	passwordChangeHandler PasswordChangeHandler
+	onPasswordChanged     func(newPassword string)
+	// loginDomain is the domain of the method this login uses, the fallback
+	// for a challenge that does not repeat username/domain.
+	loginDomain string
+}
+
+func NewSession(server string, tlsKeyLogWriter io.Writer, dialContext ...client.DialContextFunc) *Session {
+	return NewSessionContext(context.Background(), server, tlsKeyLogWriter, dialContext...)
+}
+
+func NewSessionContext(ctx context.Context, server string, tlsKeyLogWriter io.Writer, dialContext ...client.DialContextFunc) *Session {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			KeyLogWriter:       tlsKeyLogWriter,
+		},
+	}
+	if len(dialContext) > 0 && dialContext[0] != nil {
+		tr.DialContext = dialContext[0]
+	}
+	jar, _ := cookiejar.New(nil)
+	httpClient := &http.Client{Transport: tr, Jar: jar, Timeout: 20 * time.Second}
+
+	return &Session{
+		ctx:       ctx,
+		client:    httpClient,
+		baseHost:  server,
+		baseURL:   "https://" + server,
+		rid:       base64.StdEncoding.EncodeToString([]byte(server)),
+		response:  make(map[string]json.RawMessage),
+		userAgent: UserAgent,
+	}
+}
+
+// SetUserAgent overrides the UA before the first request. A caller that
+// presents an installation identity uses it, so the login and the tunnel
+// carry that string instead of the package default.
+func (s *Session) SetUserAgent(userAgent string) {
+	if userAgent != "" {
+		s.userAgent = userAgent
+	}
+}
+
+// SetLifetime rebinds the session from the context of the call that created it to
+// one that lives as long as the client. The setup context is cancelled the moment
+// setup returns, so a session that keeps it can neither renew nor notice a dead
+// session: every request made afterwards is born cancelled.
+func (s *Session) SetLifetime(ctx context.Context) {
+	s.ctxMu.Lock()
+	s.ctx = ctx
+	s.ctxMu.Unlock()
+}
+
+func (s *Session) lifetimeCtx() context.Context {
+	s.ctxMu.RLock()
+	defer s.ctxMu.RUnlock()
+	return s.ctx
+}
+
+// CSRFToken returns the token the portal issued last; the restore path has to
+// send it, and a caller outside the session (the client data record) has to read
+// it.
+func (s *Session) CSRFToken() string {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	return s.csrfToken
+}
+
+func (s *Session) request(req *http.Request) (*http.Response, error) {
+	// The request ends when either context does: the session's own one, or the
+	// one the caller put on the request (a per-call deadline or cancellation).
+	// The link to the session context is released when the caller closes the
+	// body, never before: the request context also governs reading the response
+	// body, so cancelling it earlier truncates a response nobody has read yet.
+	ctx, cancel := context.WithCancel(req.Context())
+	stop := context.AfterFunc(s.lifetimeCtx(), cancel)
+
+	resp, err := s.client.Do(req.WithContext(ctx))
+	if err != nil {
+		stop()
+		cancel()
+		return nil, err
+	}
+
+	resp.Body = &releaseOnClose{ReadCloser: resp.Body, release: func() { stop(); cancel() }}
+	return resp, nil
+}
+
+// releaseOnClose runs release once the caller has closed the response body.
+type releaseOnClose struct {
+	io.ReadCloser
+	release func()
+}
+
+func (b *releaseOnClose) Close() error {
+	err := b.ReadCloser.Close()
+	b.release()
+	return err
+}
+
+type AuthInfo struct {
+	LoginDomain string `json:"loginDomain"`
+	AuthID      string `json:"authId"`
+	AuthType    string `json:"authType"`
+	AuthName    string `json:"authName"`
+	SubType     string `json:"subType"`
+	LoginURL    string `json:"loginUrl"`
+}
+
+type LoginOptions struct {
+	DeviceID         string
+	Cookies          []Cookie
+	TOTPSecret       string
+	ChallengeHandler authchallenge.Handler
+	// DeviceBindHandler confirms auth/bindAuthDevice. Nil keeps the automatic
+	// answer, which is what a headless caller wants.
+	DeviceBindHandler DeviceBindHandler
+	// PasswordChangeHandler answers a forced password change. Without one, Login
+	// returns a *PasswordChangeRequiredError instead of failing generically.
+	PasswordChangeHandler PasswordChangeHandler
+	// OnPasswordChanged receives the new password after the portal accepted a
+	// forced change, so the caller can replace a stored credential.
+	OnPasswordChanged func(newPassword string)
+}
+
+type LoginResult struct {
+	Username string
+	SID      string
+	Cookies  []Cookie
+	// Ticket is the renewal ticket the portal hands out when authConfig is asked
+	// with needTicket=1; the restore path (sessionIdExchange) needs it later.
+	Ticket string
+}
+
+type LoginMethod interface {
+	AuthType() string
+	LoginDomain() string
+	login(*Session, AuthInfo) error
+}
+
+func (s *Session) randSdpId(n ...int) string {
+	length := 8
+	if len(n) > 0 {
+		length = n[0]
+	}
+	hexes := make([]byte, length)
+	for i := 0; i < length; i++ {
+		hexes[i] = "0123456789abcdef"[mathrand.Intn(16)]
+	}
+	return string(hexes)
+}
+
+func (s *Session) withGraphCheckCode(process func(string) (int, error), graphCodeFile string) error {
+	graphCheckCodeEnable, err := process("")
+	if err != nil {
+		return err
+	}
+
+	for attempt := 1; graphCheckCodeEnable == 1 && attempt <= maxAttempts; attempt++ {
+		if attempt > 1 {
+			log.Printf("Captcha attempt %d/%d", attempt, maxAttempts)
+		}
+
+		imgData, err := s.checkCode()
+		if err != nil {
+			return err
+		}
+
+		_, _, err = s.authConfig(false, true)
+		if err != nil {
+			return err
+		}
+
+		captchaResponse, err := s.challengeHandler.HandleClickCaptcha(authchallenge.ClickCaptchaChallenge{
+			Image:      imgData,
+			OutputPath: graphCodeFile,
+			Message:    "Please enter the graph check code JSON:",
+		})
+		if err != nil {
+			return fmt.Errorf("complete aTrust captcha challenge: %w", err)
+		}
+		graphCheckCode, err := graphCheckCodeFromResponse(captchaResponse, imgData)
+		if err != nil {
+			return fmt.Errorf("encode aTrust captcha response: %w", err)
+		}
+
+		log.DebugPrintf("graphCheckCode submitted: %s", graphCheckCode)
+
+		graphCheckCodeEnable, err = process(graphCheckCode)
+		if err != nil {
+			return err
+		}
+
+		if graphCheckCodeEnable == 0 {
+			return nil
+		}
+
+		log.Printf("Captcha verification failed (attempt %d/%d), retrying with new captcha...", attempt, maxAttempts)
+	}
+
+	if graphCheckCodeEnable != 0 {
+		return fmt.Errorf("captcha verification failed after %d attempts", maxAttempts)
+	}
+	return nil
+}
+
+func (s *Session) GetAuthInfoList() ([]AuthInfo, error) {
+	_, list, err := s.authConfig(false, true)
+	return list, err
+}
+
+func (s *Session) continueAuth(step authStep) error {
+	for attempt := 0; attempt < maxAuthSteps; attempt++ {
+		log.DebugPrintf("Continue authentication: service=%s smsMode=%d", step.Service, step.SMSMode)
+
+		var err error
+		switch step.Service {
+		case "":
+			return nil
+		case "auth/authCheck":
+			step, err = s.authCheck()
+		case "auth/sms":
+			step, err = s.completeSMS(step)
+		case "auth/customSms":
+			step, err = s.completeCustomSMS()
+		case "auth/totp":
+			step, err = s.completeTOTP()
+		case "auth/radius":
+			step, err = s.completeRadius("auth/token")
+		case "auth/challenge":
+			step, err = s.completeRadius("auth/challenge")
+		case "auth/accessCheck":
+			step, err = s.accessCheck()
+		case "auth/preEnhancedAuth", "auth/enhancedConfirm", "auth/enhancedDone":
+			step, err = s.completeEnhancedAuth(step)
+		case "auth/bindAuthDevice":
+			step, err = s.bindAuthDevice(step)
+		case "auth/modifyPwd":
+			step, err = s.completePasswordChange()
+		case "auth/token":
+			return fmt.Errorf("token authentication type is missing")
+		default:
+			return fmt.Errorf("unsupported next authentication service: %s", step.Service)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return fmt.Errorf("authentication chain exceeded %d steps", maxAuthSteps)
+}
+
+func (s *Session) completeSMS(step authStep) (authStep, error) {
+	switch step.SMSMode {
+	case smsWithAuthID:
+		// HITSZ-style gateways refresh the ticket-bearing auth config before
+		// querying the phone number and sending the SMS.
+		if _, _, err := s.authConfig(true, true); err != nil {
+			return authStep{}, err
+		}
+	case smsWithoutAuthID:
+		// SARI-style gateways refresh auth config after sending the SMS.
+	default:
+		return authStep{}, fmt.Errorf("unknown SMS authentication mode")
+	}
+
+	phoneNumbers, err := s.phoneNumber(step.AuthID)
+	if err != nil {
+		log.Printf("Warning: failed to get phone number: %v", err)
+	} else if len(phoneNumbers) > 0 {
+		log.Printf("Phone number: %s", strings.Join(phoneNumbers, ", "))
+	}
+
+	if err := s.authSms(step); err != nil {
+		return authStep{}, err
+	}
+
+	if step.SMSMode == smsWithoutAuthID {
+		if _, _, err := s.authConfig(true, true); err != nil {
+			return authStep{}, err
+		}
+	}
+
+	return s.smsCheckCode(step)
+}
+
+func (s *Session) Login(method LoginMethod, opts LoginOptions) (LoginResult, error) {
+	if len(opts.Cookies) > 0 {
+		for _, cookie := range opts.Cookies {
+			c := &http.Cookie{
+				Name:  cookie.Name,
+				Value: cookie.Value,
+			}
+			s.client.Jar.SetCookies(&url.URL{Host: cookie.Host, Scheme: cookie.Scheme}, []*http.Cookie{c})
+		}
+	}
+
+	s.deviceID = opts.DeviceID
+	s.totpSecret = opts.TOTPSecret
+	s.challengeHandler = opts.ChallengeHandler
+	s.deviceBindHandler = opts.DeviceBindHandler
+	s.stateMu.Lock()
+	s.passwordChange = nil
+	s.passwordChangeHandler = opts.PasswordChangeHandler
+	s.onPasswordChanged = opts.OnPasswordChanged
+	s.stateMu.Unlock()
+	if s.challengeHandler == nil {
+		s.challengeHandler = authchallenge.NewCLIHandler(authchallenge.CLIOptions{})
+	}
+	s.env = base64.StdEncoding.EncodeToString([]byte(`{"deviceId":"` + opts.DeviceID + `"}`))
+
+	isLogin, authInfoList, err := s.authConfig(false, true)
+	if err != nil {
+		return LoginResult{}, err
+	}
+	if isLogin == 1 {
+		log.Println("Already logged in")
+		username, err := s.onlineInfo()
+		if err != nil {
+			return LoginResult{}, err
+		}
+		sid, cookies := sessionCookies(s)
+		return LoginResult{
+			Username: username,
+			SID:      sid,
+			Cookies:  cookies,
+		}, nil
+	}
+
+	if method == nil {
+		return LoginResult{}, fmt.Errorf("login method is nil, but user is not logged in")
+	}
+	var foundAuthInfo *AuthInfo
+	for _, authInfo := range authInfoList {
+		if authInfo.AuthType == method.AuthType() && authInfo.LoginDomain == method.LoginDomain() {
+			foundAuthInfo = &authInfo
+			break
+		}
+	}
+	if foundAuthInfo != nil {
+		s.loginDomain = foundAuthInfo.LoginDomain
+	}
+	if foundAuthInfo == nil {
+		log.Printf("Available authentication methods: %+v", authInfoList)
+		return LoginResult{}, fmt.Errorf("auth type/login domain combination not found: auth type: %s, login domain: %s", method.AuthType(), method.LoginDomain())
+	}
+
+	log.Printf("Starting login with auth type: %s, login domain: %s", method.AuthType(), method.LoginDomain())
+	err = method.login(s, *foundAuthInfo)
+	if err != nil {
+		return LoginResult{}, err
+	}
+
+	// A forced password change is part of the login, not a failure: answer it
+	// before the environment report, because a portal that demands a new
+	// password may not have issued a ticket yet.
+	nextService := s.nextService
+	changedPassword := false
+	if nextService == "auth/modifyPwd" {
+		step, changeErr := s.completePasswordChange()
+		if changeErr != nil {
+			return LoginResult{}, changeErr
+		}
+		nextService = step.Service
+		changedPassword = true
+	}
+
+	switch {
+	case changedPassword && s.ticket == "":
+		log.Println("Skipping the environment report: the portal issued no ticket after the password change")
+	default:
+		if err := s.reportEnv(); err != nil {
+			return LoginResult{}, err
+		}
+	}
+
+	if nextService == "" {
+		nextService = "auth/authCheck"
+	}
+	err = s.continueAuth(authStep{Service: nextService})
+	if err != nil {
+		return LoginResult{}, err
+	}
+
+	username, err := s.onlineInfo()
+	if err != nil {
+		return LoginResult{}, err
+	}
+
+	sid, cookies := sessionCookies(s)
+	return LoginResult{
+		Username: username,
+		SID:      sid,
+		Cookies:  cookies,
+	}, nil
+}
+
+func sessionCookies(s *Session) (string, []Cookie) {
+	cookies := make([]Cookie, 0)
+	sid := ""
+	for _, cookie := range s.client.Jar.Cookies(&url.URL{Host: s.baseHost, Scheme: "https"}) {
+		if cookie.Name == "sid" {
+			sid = cookie.Value
+		}
+		cookies = append(cookies, Cookie{
+			Host:   s.baseHost,
+			Scheme: "https",
+			Name:   cookie.Name,
+			Value:  cookie.Value,
+		})
+	}
+	return sid, cookies
+}

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mythologyli/zju-connect/client/authchallenge"
+	"github.com/YangtseSu/goTrust/core/atrust/client/authchallenge"
 	"github.com/pquerna/otp/totp"
 )
 

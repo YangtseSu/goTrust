@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mythologyli/zju-connect/client/atrust/auth"
+	"github.com/YangtseSu/goTrust/core/atrust/client/atrust/auth"
 )
 
 // PasswordStrategy is the account's password policy. The alias keeps the UI on

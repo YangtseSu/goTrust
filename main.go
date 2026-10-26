@@ -19,10 +19,10 @@ import (
 	"syscall"
 	"time"
 
+	atrustlog "github.com/YangtseSu/goTrust/core/atrust/log"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
-	zjuconnectlog "github.com/mythologyli/zju-connect/log"
 
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/logging"
@@ -91,7 +91,7 @@ func main() {
 		// so pointing that at the same writer is the whole bridge.
 		log.SetOutput(fileLog)
 		if cfg.Logging.Verbose {
-			zjuconnectlog.EnableDebug()
+			atrustlog.EnableDebug()
 		}
 	}
 
@@ -1323,9 +1323,9 @@ func (a *app) setVerbose(on bool) {
 		a.log.SetVerbose(on)
 	}
 	if on {
-		zjuconnectlog.EnableDebug()
+		atrustlog.EnableDebug()
 	} else {
-		zjuconnectlog.DisableDebug()
+		atrustlog.DisableDebug()
 	}
 	a.persistFlag(func(cfg *config.Config) { cfg.Logging.Verbose = on })
 }
