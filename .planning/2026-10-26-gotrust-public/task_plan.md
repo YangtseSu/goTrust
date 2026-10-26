@@ -16,17 +16,19 @@ the gateway has already accepted.
 
 ## Next Step
 
-Phase 2: import the protocol layer from the published commit into `core/atrust/`
-and drop the packages this app does not run. The tree now has a stable
-`core/` home, so the import writes its final paths once.
+Phase 3: split the front-ends. `internal/cli` takes the config load, the
+manager wiring, the signal handling and the exit codes; `cmd/gotrust-cli`
+imports `core/*` only. The per-profile lock lands with it, and the dependency
+guards then report empty.
 
 ## Current Phase
 
-Phase 1 is complete: the application packages live under `core/`, the technical
-names are lowercase, the installed directories were migrated and the live login
-works against the migrated config. `../2026-10-23-gotrust-skeleton/` built the
-app; this plan moves it behind a stable core and makes the repository
-publishable.
+Phase 2 is complete: the protocol layer lives under `core/atrust/`, the fork
+dependency, the `replace` directive and `go.work` are gone, and the imported
+tests run in this repository. Phase 1 moved the application packages under
+`core/`, lowercased the technical names and migrated the installed directories;
+`../2026-10-23-gotrust-skeleton/` built the app, this plan moves it behind a
+stable core and makes the repository publishable.
 
 ## Phases
 
@@ -54,32 +56,48 @@ publishable.
 
 ### Phase 2: Protocol layer in-tree
 
-- [ ] Take the published `zju-connect` tree at commit `5caa3a1` (module cache or
+- [x] Take the published `zju-connect` tree at commit `5caa3a1` (module cache or
       `git archive`), not a working tree
-- [ ] Import the dependency closure into `core/atrust/`, keeping the source's
+- [x] Import the dependency closure into `core/atrust/`, keeping the source's
       relative layout so the import can be reviewed as a diff against the
       source tree
-- [ ] Drop `client/easyconnect`, together with the packet stack's
+- [x] Drop `client/easyconnect`, together with the packet stack's
       vendor-specific shutdown branch it exists for; the stack keeps taking the
       `client.Client` interface unchanged
-- [ ] Drop the CLI (`main.go`, `init.go`, and `configs` once nothing kept needs
-      it), `mobile/`, `stack/tun/`, `service/shadowsocks.go`, the READMEs, the
-      Dockerfile, the compose file and the plist
-- [ ] Split `service` so the keep-alive and DNS pieces stand alone; keep
-      `internal/hook_func` and `internal/ping` for now and re-evaluate them in
-      Phase 3, when the exit-on-shutdown semantics leave the tree
-- [ ] Delete the `replace` directive, the fork's `go.sum` lines, `go.work` and
+- [x] Drop the CLI (`main.go`, `init.go`), `mobile/`, `stack/tun/`,
+      `service/shadowsocks.go`, the READMEs, the Dockerfile, the compose file
+      and the plist. `configs` went with them: its only consumer was the CLI's
+      start-up hooks, which left in the same step
+- [x] Split `service` so the keep-alive and DNS pieces stand alone: the package
+      keeps `dns.go`, `keep_alive.go` and `keepalive_target.go`, and the SOCKS5,
+      HTTP, forwarding and shadowsocks listeners went with the CLI that ran
+      them. `internal/hook_func` keeps the terminal hooks the stacks call; its
+      start-up hooks went with `configs` because they named operator-specific
+      DNS suffixes
+- [x] Delete the `replace` directive, the fork's `go.sum` lines, `go.work` and
       the PKGBUILD symlink step
-- [ ] Keep `LICENSES/` intact, annotate `core/atrust/**` in `REUSE.toml` with
-      the upstream copyright, and write `core/atrust/PROVENANCE.md`: source,
-      commit, imported packages, dropped packages
-- [ ] Bounded text pass over the imported tree: third-party identifier names,
-      library names, version strings and provenance wording become protocol
-      descriptions. Algorithms, constants and test vectors are untouched
+- [x] Keep `LICENSES/` intact, annotate `core/atrust/**` in `REUSE.toml` with
+      the upstream copyright (`AGPL-3.0-only`, plus `MIT` for
+      `internal/ping`), and write `core/atrust/PROVENANCE.md`: source, commit,
+      imported packages, dropped packages
+- [x] Bounded text pass over the imported tree: third-party identifiers and
+      comments naming another product become protocol descriptions; the tunnel process block defaults to the running
+      binary; test fixtures use the documentation address ranges. Algorithms,
+      constants and test vectors are untouched
 - **Gates:** `diff -r` between the imported directory and the source tree shows
   only the import-path rewrite and the dropped files; the imported tests are
   green; the `go mod tidy` delta is exactly the expected subset; a live login,
   proxy and keep-alive run; `makepkg -fC`
+- **Status:** complete. The import commit and the protocol-layer docs commit.
+  95 imported files differ from the source only by the module prefix, 25 by the
+  documented pass, and 35 source files were not imported. `go mod tidy` removed
+  the fork, `gopsutil`, `shadowsocks`, `utls`, `brotli`, `etree`,
+  `klauspost/compress`, `go-bloom` and `x/crypto`, and promoted the layer's own
+  direct dependencies. The live run logged in, served the granted web
+  resource through both proxies (200, same body over SOCKS5 and HTTP) and
+  answered the keep-alive with 200;
+  `makepkg -fC` built `r70`, and the cross-builds for darwin and
+  windows pass.
 
 ### Phase 3: Front-end split
 

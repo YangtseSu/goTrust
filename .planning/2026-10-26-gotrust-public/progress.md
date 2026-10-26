@@ -62,9 +62,72 @@
     `docs/agent-ui-testing.md`, `AGENTS.md`, `.gitignore`, `icon.go`,
     `core/config/config.go`, `core/logging/logging.go` and their tests
 
+## Session: 2026-10-27
+
 ### Phase 2: Protocol layer in-tree
 
-- **Status:** pending
+- **Status:** complete
+- **Started:** 2026-10-27
+- Actions taken:
+  - took the tree from the module cache copy of the published commit
+    (`zju-connect@v1.3.2-0.20261026141502-5caa3a1684a1`), not from a working
+    checkout, and copied the dependency closure into `core/atrust/` at its
+    original relative paths
+  - rewrote the module prefix in 134 import lines and 13 application files
+  - dropped `client/easyconnect` and the packet-stack branch that watched for
+    its shutdown sentinel, `stack/tun`, the CLI entry point, `mobile/`, the
+    service package's listeners, the packaging and documentation files
+  - dropped the CLI's start-up hooks as well: they were unreachable from the
+    application and one of them named operator-specific DNS suffixes. Their
+    only consumer, the CLI's config type, went with them, which is what the
+    plan's "`configs` once nothing kept needs it" resolved to. `hook_func`
+    keeps the terminal hooks the stacks call
+  - narrowed `service` to the DNS server and the keep-alive, so the package no
+    longer carries the listeners `core/proxy` owns
+  - deleted the `replace` directive, the fork's `go.sum` lines and `go.work`,
+    and removed the sibling-path symlink from the PKGBUILD
+  - annotated `core/atrust/**` in `REUSE.toml` (`AGPL-3.0-only`, with `MIT` for
+    `internal/ping` and goTrust's own copyright for `PROVENANCE.md`) and added
+    `LICENSES/AGPL-3.0-only.txt` and `LICENSES/MIT.txt`
+  - wrote `core/atrust/PROVENANCE.md`: source repository, commit, imported and
+    dropped packages, the edits made after the import, and the public index the
+    client-version literal comes from
+  - bounded text pass: third-party identifiers and comments naming another
+    product became protocol descriptions; the tunnel
+    process block defaults to the running binary; fixtures moved to the
+    documentation address ranges; the challenge page title and the fatal-hook
+    test's environment variable follow the project name
+  - renamed the last fork-named import alias in `main.go` (`atrustlog`)
+- Gates:
+  - `diff -r` audit: 95 imported files differ from the source only by the
+    module prefix, 25 by the documented pass and 35 source files were not
+    imported; `PROVENANCE.md` is the only new file
+  - `go build ./...`, `go test ./...`, `go vet ./...` clean, `gofmt -l .` empty
+  - cross-builds for darwin/amd64, darwin/arm64, windows/amd64 and linux/arm64
+    pass, so the platform files that stayed still compile
+  - `go mod tidy` removed the fork require and replace, `gopsutil`,
+    `shadowsocks2`, `utls`, `brotli`, `etree`, `klauspost/compress`,
+    `go-bloom` and `x/crypto`, and promoted the layer's own direct
+    dependencies (dns, gvisor, sing, sing-tun, go-cache, x/sys)
+  - `reuse lint` 177/177, with `AGPL-3.0-only`, `AGPL-3.0-or-later` and `MIT`
+    as the used licenses
+  - live headless run: session online, two granted resources, SOCKS5 and HTTP
+    listeners up, the granted web resource served through both (200, identical
+    body), keep-alive answered 200, SIGTERM exit with no process left behind
+  - `makepkg -fC` built `gotrust-git r70`; `namcap` reports only the
+    warnings the recipe already documents, and the payload is unchanged
+- Follow-ups:
+  - the tunnel process block now defaults to the running binary, so a profile
+    with an empty `process_name` reports `gotrust` where it used to report the
+    source project's binary. The app names its own process anyway; the change
+    only affects what an unset field sends
+  - `internal/hook_func` still carries `Fatalf`'s exit-on-shutdown semantics, so
+    Phase 3 re-evaluates the package with the CLI split
+- Files created/modified:
+  - `core/atrust/**` (imported), `core/session/*.go` and the two top-level
+    entry files (import paths), `main.go` (alias), `go.mod`, `go.sum`,
+    `REUSE.toml`, `LICENSES/AGPL-3.0-only.txt`, `LICENSES/MIT.txt`, `README.md`,
+    `AGENTS.md`, `~/projects/arch-pkgs/gotrust-git/PKGBUILD`
 
 ### Phase 3: Front-end split
 
