@@ -401,3 +401,41 @@
     carried English sentence structure into Chinese and claimed a wrong reason
     for the SMS limitation. It now names zju-connect and EZ4Connect under
     鸣谢, and the security caveats live in `docs/development.md`.
+
+## Session: 2026-10-27 (dependency and DNS review)
+
+- **Status:** review and plan only; no code changed
+- Actions taken:
+  - audited the imported layer with `go list -deps`, `go mod why -m` and a
+    caller search per symbol; Phases 6 to 8 were added to `task_plan.md` and the
+    evidence is in `findings.md`.
+- Findings:
+  - `underlay` still carries the TUN-era machinery (per-interface binding,
+    default-interface monitoring, PCAP capture, underlay DNS override); both
+    call sites pass an empty `Options`, so none of it runs.
+  - that machinery is the only reason `sing-tun`, `sagernet/sing`,
+    `sagernet/netlink`, `go-tun2socks`, `comshim`, `metacubex/gvisor` and
+    `vishvananda/netns` stay in the module graph.
+  - three one-shot wrappers (`client.GetAuthInfoList`, `client.SetTrusted`,
+    `newUnderlayDialer`) are the last entry points and have no callers; the
+    features run through the methods (`DiscoverAuthMethods`,
+    `Manager.SetTrusted`).
+  - the DNS server code lost its only reader when TUN mode was dropped and
+    `ServeDNS` has no caller; the resolver is the only DNS path and asks for
+    `ip4` only, so AAAA falls to the secondary resolver.
+  - `inet.af/netaddr` is deprecated in favour of `net/netip`.
+  - nothing outside `.planning/` was touched, and no earlier deletion removed a
+    live path.
+  - decisions: the dead DNS server is deleted and nothing replaces it; a local
+    listener, a resolve subcommand and remote AAAA stay out because no client
+    asks for them, and the IPv6 data path (dial, resource matching, packet
+    stack) is IPv4-only, so an AAAA answer would leave the tunnel.
+  - requirement added: every declared dependency moves to its newest version,
+    and `netaddr` is replaced with `net/netip` (Phase 8). `go-cache` has no
+    newer tag, so Phase 9 replaces it with `jellydator/ttlcache/v3` (maintained,
+    per-entry TTL) unless an in-tree cache wins on review. The workflow actions
+    are three majors behind and move with it.
+  - Dependabot is added at the end of Phase 9, not now: daily, `gomod` and
+    `github-actions`, grouped, after the tree stops deleting modules. Its
+    security alerts are enabled at the same time. Pseudo-versions such as
+    `gvisor` stay a manual bump.

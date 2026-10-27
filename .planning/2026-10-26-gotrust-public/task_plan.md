@@ -16,10 +16,12 @@ the gateway has already accepted.
 
 ## Next Step
 
-Phase 5 is complete: the repository is public at
-<https://github.com/YangtseSu/goTrust>, CI is green, and
-`makepkg -fC` built `gotrust-git` and `gotrust-cli-git` at `r80`
-from the HTTPS source. Phase 20 of the app plan (keyring) is the next feature.
+Phase 6: remove the TUN-era dependency subtree. The protocol layer still binds
+sockets per interface, monitors the default interface and captures its own
+underlay traffic so a TUN device cannot swallow it; goTrust installs no TUN and
+never enables any of it. The work starts by deleting the three one-shot wrappers
+that are the only entry points to that machinery, then the machinery itself, and
+ends with `go mod tidy` showing the sing-tun subtree gone.
 
 ## Current Phase
 
@@ -33,6 +35,14 @@ single-use token, and the CLI opens or prints it. Phase 3 gave the CLI its own
 binary and a per-profile lock; Phase 2 put the protocol layer in the tree;
 Phase 1 moved the application packages under `core/`.
 `../2026-10-23-gotrust-skeleton/` built the app.
+
+After publication the imported layer was reviewed for what goTrust never runs.
+The result is Phases 6 to 9: the TUN-era binding and monitoring subtree with its
+seven modules, the DNS server code that lost its only reader when TUN mode was
+dropped, the deprecated address module, and a refresh of every declared
+dependency including the workflow actions. Everything else the review found is
+in "Not doing" with the reason. Evidence is in `findings.md`; no code has been
+removed yet.
 
 ## Phases
 
@@ -191,6 +201,141 @@ Phase 1 moved the application packages under `core/`.
   run (the GUI wrote its ready line and exited 0 on SIGTERM,
   `gotrust-cli --status` returned 3). `namcap` keeps the documented warnings
 - **Status:** complete
+
+### Phase 6: Remove the TUN-era dependency subtree
+
+The imported layer still carries the parts that exist so a TUN device cannot
+capture its own underlay traffic: socket binding per interface, default-interface
+monitoring, DNS override for the underlay and a PCAP capture of it. goTrust
+installs no TUN and constructs the dialer with zero options, so none of that
+runs. The only entry points that could switch it on are three one-shot wrappers
+that nothing in the tree calls. The login and auth-method discovery keep their
+own paths through `core/session`.
+
+- [ ] `client/atrust/client.go`: delete the package-level `GetAuthInfoList`,
+  `SetTrusted` and `newUnderlayDialer`, and the `ExcludeIP` call in the login
+  path. The features themselves stay: they run through
+  `(*auth.Session).GetAuthInfoList` and `(*Client).SetTrusted`.
+- [ ] `client/atrust/l3tunnel.go`: delete the `ExcludeIP` call on a virtual-IP
+  update.
+- [ ] `client/client.go`: drop `ExcludeIP` from `UnderlayDialer`, which leaves
+  `DialContext`; `net.Dialer` satisfies it.
+- [ ] `underlay/`: delete the package (binding, detection, retry, PCAP, local
+  DNS). `core/session` builds `net.Dialer` at its two call sites and drops the
+  dialer field and the two `Close` calls.
+- [ ] Delete `internal/platformdialer` and `internal/keylog`. The
+  `TLSKeyLogWriter` option stays: it is an `io.Writer` and needs no package.
+- [ ] Tests: the `underlay` tests go with the package; `client_options_test.go`
+  and `tls_test.go` use `net.Dialer`; the two dialer fakes lose `ExcludeIP`;
+  `underlay_api_test.go` asserts `*net.Dialer` instead.
+- [ ] `go mod tidy`; `go mod why -m` must answer "main module does not need" for
+  `mythologyli/sing-tun`, `sagernet/sing`, `sagernet/netlink`,
+  `sagernet/go-tun2socks`, `scjalliance/comshim`, `metacubex/gvisor` and
+  `vishvananda/netns`.
+- [ ] `core/atrust/PROVENANCE.md`: add the dropped packages and the reason.
+- **Gates:** build, vet, gofmt, `go test ./...`, `reuse lint`, darwin/windows/
+  arm64 cross-builds, one live login with both proxies serving, and a name
+  resolved through the tunnel (the dial path is shared by login, discovery and
+  keep-alive).
+- **Risk:** this is the first change to the dial path since the import. The
+  imported tests plus one live login are the acceptance gate; the module list is
+  the proof the dependency subtree really left.
+
+### Phase 7: Delete the dead DNS server code
+
+The resolver stays; the server around it goes. The only reader of
+`zcdns.LocalServer` was `stack/tun`, dropped with TUN mode, and `ServeDNS` has
+no caller. Nothing listens today, so nothing can regress.
+
+- [ ] Delete `core/atrust/service/dns.go`, `core/atrust/internal/zcdns`, the
+  `SetupResolve` method in both stacks, and the `NewDnsServer` call in
+  `core/session`.
+- [ ] Keep the resolver as the only DNS path and write its bounds into
+  `docs/development.md`: the gateway's server over the tunnel with a TCP
+  fallback, the portal's own name entries, a 3600 s cache, the gateway's second
+  server or the system resolver as the fallback, and IPv4 only.
+- **Gates:** build, vet, `go test ./...`, `reuse lint`, and one live login that
+  resolves an internal name through the proxy.
+
+### Phase 8: Replace the deprecated address module
+
+`inet.af/netaddr` is deprecated upstream in favour of `net/netip`. The tree uses
+`IPSet`, `IPSetBuilder`, `MustParseIP` and `MustParseIPPrefix` in
+`client/atrust/{client,parse}.go`, `client/client.go` and one test stub.
+
+- [ ] Replace those with `net/netip` and a small prefix set that takes prefixes,
+  ranges and single addresses and answers contains.
+- [ ] `go mod tidy` drops `inet.af/netaddr`, `go4.org/intern` and
+  `go4.org/unsafe/assume-no-moving-gc`.
+- **Gates:** resolver and resource-parsing tests, one live login, and the
+  granted-resource list rendering the same entries.
+
+### Phase 9: Refresh every declared dependency
+
+Run after Phase 6, so the modules that disappear with the TUN subtree are not
+chased first.
+
+| Module | Pinned | Latest |
+|---|---|---|
+| `egoist/mygo` | v0.6.4 | v0.7.1 |
+| `gvisor.dev/gvisor` | pseudo 2026-01-29 | pseudo 2026-10-27 |
+| `miekg/dns` | v1.1.72 | v1.1.73 |
+| `things-go/go-socks5` | v0.1.1 | v0.1.3 |
+| `golang.org/x/sys` | v0.48.0 | v0.49.0 |
+| `ebitengine/purego` | v0.11.1 | v0.11.2 |
+| `golang.org/x/image`, `x/mod`, `x/net`, `x/time`, `x/tools`, `x/exp` | — | one minor newer each |
+| `BurntSushi/toml`, `pquerna/otp`, `fsnotify`, `go-ole`, `go-text`, `btree`, `barcode` | — | already latest |
+| `patrickmn/go-cache` | v2.1.0+incompatible | no newer tag: the project is dormant, so it is replaced (see below) |
+
+- [ ] `go get -u ./...`, `go mod tidy`, `go mod verify`.
+- [ ] `mygo` 0.6.4 → 0.7.1 is the GUI toolkit: re-read its release notes, re-run
+  the UI smoke from `docs/agent-ui-testing.md`, and revisit the window
+  create/hide workarounds if the upstream fixes landed.
+- [ ] `gvisor.dev/gvisor` moves to the newest commit; the packet stack is the
+  only consumer, so one live login proves the L3 path.
+- [ ] Actions: `checkout` v4 → v7, `setup-go` v5 → v7, `upload-artifact`
+  v4 → v7, `download-artifact` v4 → v8. CI runs on `main`, so the proof is one
+  push.
+- [ ] Replace `patrickmn/go-cache` with a maintained cache. Preferred:
+  `github.com/jellydator/ttlcache/v3` (release 2026-06, per-entry TTL,
+  `NoTTL` for the permanent entries, three call sites in
+  `core/atrust/resolve`). The fallback is a ~50-line in-tree cache if adding a
+  module to replace a dormant one is not worth it. Either way the resolver's
+  `getDNSCache` / `setDNSCache` / `SetPermanentDNS` keep their shape.
+- [ ] After the tree is clean and every module is current, add
+  `.github/dependabot.yml`: daily, `gomod` and `github-actions`, one grouped PR
+  per ecosystem, a low open-PR limit (3 and 2). Enable Dependabot security
+  alerts at the same time.
+- **Conclusion on PRs:** enable version-update PRs, not alerts alone. By then
+  the pseudo-version and fork modules Dependabot cannot bump are gone, so the
+  remaining modules are normal releases it can move. A bot PR proves build, vet,
+  tests and the cross-builds; it cannot prove the live login or the UI smoke, so
+  merging stays manual and the open-PR limit stays low. Alerts stay on as well:
+  they cover pseudo-versions (the gvisor module) and transitive modules, where
+  no PR is possible.
+- [ ] Record in the plan that Dependabot does not bump pseudo-versions, so
+  `gvisor.dev/gvisor` stays a manual bump; check it when this phase is revisited.
+- [ ] The `go` directive stays at the installed toolchain unless a dependency
+  demands a newer one.
+- **Commits:** the patch/minor set together, `mygo` alone, `gvisor` alone, the
+  workflows alone, so a regression names its cause.
+- **Gates:** build, vet, gofmt, `go test ./...`, `reuse lint`, cross-builds, one
+  live login, the UI smoke, and a green CI run.
+- **Risk:** the gvisor module is a master commit, not a release. If the stack
+  breaks, pin the newest commit that passes and record why in the plan.
+
+## Not doing
+
+Items that would add code nobody has asked for, or that this machine cannot
+verify.
+
+| Item | Why not |
+|---|---|
+| Local DNS listener (`ServeDNS` on `127.0.0.1`) | No client requires one, and without TUN it only helps an application that resolves names itself and then reaches the proxy by IP. The current implementation answers one A/AAAA record, UDP only, zero TTL, no NXDOMAIN, so building it out is a feature with no consumer |
+| A `--resolve` subcommand | Convenience, not a requirement |
+| Remote AAAA lookups | The resolver asks `ip4` only, but the data plane is IPv4 throughout: `dial.Dial` and `DialIPPort` send every IPv6 target to `dialDirectIP`, `ipresource` folds addresses with `To4()` into a uint32 trie, and the gvisor endpoint dials `header.IPv4ProtocolNumber`. An AAAA answer would resolve an internal name and then connect around the tunnel. Revisit when a deployment grants IPv6 resources and the path can be exercised end to end |
+| `dns_ttl` / `custom_dns` configuration | The TTL is a constant and the portal supplies the name entries; no deployment has asked for either knob |
+| Resolving only granted names through the gateway DNS | Needs a campus split-horizon setup to measure, which this machine does not have |
 
 ## Key Questions
 
