@@ -280,3 +280,56 @@
 ### Phase 5: GUI refactor and publication
 
 - **Status:** pending
+
+### Phase 5: GUI refactor and publication
+
+- **Status:** in progress; code complete, publication waits on the operator
+- **Started:** 2026-10-27
+- Actions taken:
+  - moved the tray front-end from package main at the root into
+    `internal/gui`, with `Run(configPath) error` as its only entry point;
+    `cmd/gotrust` parses `--config` and calls it. The move also changed
+    `runUI` to return the toolkit's error instead of calling `log.Fatalf`, so
+    the binary's main owns the exit.
+  - removed the two protocol imports that kept the GUI off `core/session`:
+    `core/session` now re-exports the challenge and response types
+    (`CodeChallenge`, `ClickCaptchaChallenge`, `Point`, …) that the prompter
+    interface names, and `session.SetProtocolDebug` replaced
+    `atrustlog.EnableDebug`/`DisableDebug` in both front-ends.
+  - embedded the tray PNG from a new `data` package (`data/icons.go`), because
+    `go:embed` cannot name a parent directory; `go generate ./...` now runs
+    there.
+  - `internal/guards`: the tray-app guard follows `./cmd/gotrust`, the CLI
+    guard refuses `internal/gui`, and a new direct-import guard enforces the
+    session boundary. The transitive graph cannot express it: `core/session`
+    is itself built on the protocol layer.
+  - normalised the one fixture the host rule caught (`http://a/` became
+    `http://a.example/`, the same for b/c/d) and rewrote `AGENTS.md`: the new
+    layout, and a branch policy that no longer names a local-only branch, as
+    that policy itself required.
+  - PKGBUILD (outside this repository): source is
+    `git+https://github.com/YangtseSu/goTrust.git#branch=main`, and the package
+    is split into `gotrust-git` (GTK, appindicator, icons) and
+    `gotrust-cli-git` (glibc only), both built from one checkout and one test
+    run. This closes the Phase 3 follow-up: the recipe on disk never installed
+    the CLI, despite that phase's note.
+- Gates:
+  - `go build ./...`, `go vet ./...`, `go test ./...` clean, `gofmt -l .`
+    empty, `reuse lint` 193/193
+  - `go test -race` on `internal/gui`, `internal/guards` and `core/session`
+  - cross-builds for darwin/amd64, darwin/arm64, windows/amd64 and linux/arm64
+  - nested headless smoke of the real binary built from `cmd/gotrust`: the
+    window rendered (540x640, clipped by the 640x480 Xwayland screen), the
+    ready line was written, the tray was created (no "tray unavailable"), and
+    SIGTERM exited 0
+  - `bash -n` and `namcap` on the new PKGBUILD; the build itself needs the
+    push, because the recipe clones the remote branch
+- Follow-ups:
+  - publication is irreversible and needs the operator: `git push origin
+    main`, the GitHub visibility flip, then `makepkg -fC` on both packages.
+- Files created/modified:
+  - `internal/gui/**` (moved from the root), `cmd/gotrust/main.go`,
+    `data/icons.go`, `core/session/{challenge,debug}.go`, `internal/cli/cli.go`,
+    `internal/guards/guards_test.go`,
+    `core/atrust/service/keep_alive_test.go`, `.github/workflows/ci.yml`,
+    `README.md`, `AGENTS.md`, `~/projects/arch-pkgs/gotrust-git/PKGBUILD`
