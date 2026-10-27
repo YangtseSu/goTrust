@@ -439,3 +439,37 @@
     `github-actions`, grouped, after the tree stops deleting modules. Its
     security alerts are enabled at the same time. Pseudo-versions such as
     `gvisor` stay a manual bump.
+
+## Session: 2026-10-27 (TUN-era subtree removal)
+
+- **Status:** Phase 6 complete; the live-login gate passed on the packaged build
+- Actions taken:
+  - deleted the three one-shot entry points (`GetAuthInfoList`, `SetTrusted`,
+    `newUnderlayDialer`) and the `ExcludeIP` calls in the login path and on a
+    virtual-IP update;
+  - narrowed `client.UnderlayDialer` to `DialContext`, which `net.Dialer`
+    satisfies;
+  - deleted `underlay`, `internal/platformdialer` and `internal/keylog`;
+    `core/session` builds `net.Dialer` in `loginAttempt` and
+    `DiscoverAuthMethods`, and its dialer field and both `Close` calls are gone;
+  - tests: `client_options_test.go` and `tls_test.go` use `net.Dialer`,
+    `setup_context_test.go` lost `ExcludeIP`, `underlay_api_test.go` asserts
+    `*net.Dialer` and an external dialer still satisfy the interface;
+  - `go mod tidy`, and `PROVENANCE.md` records the dropped packages and why.
+- Evidence:
+  - `go mod why -m` answers "main module does not need" for
+    `mythologyli/sing-tun`, `sagernet/sing`, `sagernet/netlink`,
+    `sagernet/go-tun2socks`, `scjalliance/comshim`, `metacubex/gvisor`,
+    `vishvananda/netns`, and also for `fsnotify` and `go-ole`, which only
+    `sing-tun` pulled in.
+  - build, vet, gofmt, `go test ./...`, `go test -race` on `core/session` and
+    `core/atrust/client`, `reuse lint` 185/185, and both binaries cross-built
+    for darwin/amd64, darwin/arm64, windows/amd64, windows/arm64 and
+    linux/arm64.
+  - the dial path itself is covered by the imported TLS test's dial against a
+    local TLS server, now through `net.Dialer`.
+  - the packaged build `gotrust-git r95.gcd088a6` (built from the local
+    checkout, `namcap` clean apart from the four documented warnings, binary
+    without the `sing-tun` module) was installed and its live login passed. The
+    gateway-facing half of the gate is closed.
+  - `gotrust-cli --status` starts and answers with code 3, as documented.

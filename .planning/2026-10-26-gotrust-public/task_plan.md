@@ -16,15 +16,20 @@ the gateway has already accepted.
 
 ## Next Step
 
-Phase 6: remove the TUN-era dependency subtree. The protocol layer still binds
-sockets per interface, monitors the default interface and captures its own
-underlay traffic so a TUN device cannot swallow it; goTrust installs no TUN and
-never enables any of it. The work starts by deleting the three one-shot wrappers
-that are the only entry points to that machinery, then the machinery itself, and
-ends with `go mod tidy` showing the sing-tun subtree gone.
+Phase 7: delete the dead DNS server code. `internal/zcdns` lost its only reader
+when TUN mode went, `ServeDNS` has no caller and nothing listens today, so the
+package, `service/dns.go`, the `SetupResolve` methods in both stacks and the
+`NewDnsServer` call in `core/session` go. The resolver stays as the only DNS
+path, and its bounds move into `docs/development.md`.
 
 ## Current Phase
 
+Phase 6 is complete. The TUN-era subtree is gone: `underlay`,
+`internal/platformdialer` and `internal/keylog` are deleted, the three one-shot
+wrappers that were their only entry points are deleted, `client.UnderlayDialer`
+is one method and `net.Dialer` satisfies it, and `go mod why -m` answers "main
+module does not need" for `sing-tun`, `sagernet/sing`, `sagernet/netlink`,
+`go-tun2socks`, `comshim`, `metacubex/gvisor` and `vishvananda/netns`.
 Phase 5 is complete. `internal/gui` holds the tray app behind one `Run` entry
 point, `cmd/gotrust` supplies main, and neither front-end imports the protocol
 layer: `core/session` re-exports the challenge types the prompter interface
@@ -41,8 +46,7 @@ The result is Phases 6 to 9: the TUN-era binding and monitoring subtree with its
 seven modules, the DNS server code that lost its only reader when TUN mode was
 dropped, the deprecated address module, and a refresh of every declared
 dependency including the workflow actions. Everything else the review found is
-in "Not doing" with the reason. Evidence is in `findings.md`; no code has been
-removed yet.
+in "Not doing" with the reason. Evidence is in `findings.md`.
 
 ## Phases
 
@@ -212,31 +216,39 @@ runs. The only entry points that could switch it on are three one-shot wrappers
 that nothing in the tree calls. The login and auth-method discovery keep their
 own paths through `core/session`.
 
-- [ ] `client/atrust/client.go`: delete the package-level `GetAuthInfoList`,
+- [x] `client/atrust/client.go`: delete the package-level `GetAuthInfoList`,
   `SetTrusted` and `newUnderlayDialer`, and the `ExcludeIP` call in the login
   path. The features themselves stay: they run through
   `(*auth.Session).GetAuthInfoList` and `(*Client).SetTrusted`.
-- [ ] `client/atrust/l3tunnel.go`: delete the `ExcludeIP` call on a virtual-IP
+- [x] `client/atrust/l3tunnel.go`: delete the `ExcludeIP` call on a virtual-IP
   update.
-- [ ] `client/client.go`: drop `ExcludeIP` from `UnderlayDialer`, which leaves
+- [x] `client/client.go`: drop `ExcludeIP` from `UnderlayDialer`, which leaves
   `DialContext`; `net.Dialer` satisfies it.
-- [ ] `underlay/`: delete the package (binding, detection, retry, PCAP, local
+- [x] `underlay/`: delete the package (binding, detection, retry, PCAP, local
   DNS). `core/session` builds `net.Dialer` at its two call sites and drops the
   dialer field and the two `Close` calls.
-- [ ] Delete `internal/platformdialer` and `internal/keylog`. The
+- [x] Delete `internal/platformdialer` and `internal/keylog`. The
   `TLSKeyLogWriter` option stays: it is an `io.Writer` and needs no package.
-- [ ] Tests: the `underlay` tests go with the package; `client_options_test.go`
+- [x] Tests: the `underlay` tests go with the package; `client_options_test.go`
   and `tls_test.go` use `net.Dialer`; the two dialer fakes lose `ExcludeIP`;
   `underlay_api_test.go` asserts `*net.Dialer` instead.
-- [ ] `go mod tidy`; `go mod why -m` must answer "main module does not need" for
+- [x] `go mod tidy`; `go mod why -m` must answer "main module does not need" for
   `mythologyli/sing-tun`, `sagernet/sing`, `sagernet/netlink`,
   `sagernet/go-tun2socks`, `scjalliance/comshim`, `metacubex/gvisor` and
   `vishvananda/netns`.
-- [ ] `core/atrust/PROVENANCE.md`: add the dropped packages and the reason.
+- [x] `core/atrust/PROVENANCE.md`: add the dropped packages and the reason.
 - **Gates:** build, vet, gofmt, `go test ./...`, `reuse lint`, darwin/windows/
   arm64 cross-builds, one live login with both proxies serving, and a name
   resolved through the tunnel (the dial path is shared by login, discovery and
   keep-alive).
+- **Status:** complete. The local gates ran: build, vet, gofmt,
+  `go test ./...`, `go test -race` on `core/session` and `core/atrust/client`,
+  `reuse lint` 185/185, and both binaries cross-built for darwin/amd64,
+  darwin/arm64, windows/amd64, windows/arm64 and linux/arm64. The packaged build
+  `gotrust-git r95.gcd088a6` was installed from the local checkout and its live
+  login passed, which is the gateway-facing half of the gate; the package built
+  with `namcap` reporting only the four documented warnings, and its binary
+  carries no `sing-tun` module.
 - **Risk:** this is the first change to the dial path since the import. The
   imported tests plus one live login are the acceptance gate; the module list is
   the proof the dependency subtree really left.
