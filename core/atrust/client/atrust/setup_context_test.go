@@ -15,8 +15,6 @@ func (blockingUnderlayDialer) DialContext(ctx context.Context, network, address 
 	return nil, ctx.Err()
 }
 
-func (blockingUnderlayDialer) ExcludeIP(net.IP) {}
-
 func TestSetupContextCancellationReachesManifestDial(t *testing.T) {
 	client := NewClient(ClientOptions{UnderlayDialer: blockingUnderlayDialer{}})
 	ctx, cancel := context.WithCancel(context.Background())

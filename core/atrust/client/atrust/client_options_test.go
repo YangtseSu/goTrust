@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	stdlog "log"
+	"net"
 	"strings"
 	"testing"
 
 	"github.com/YangtseSu/goTrust/core/atrust/client/atrust/auth"
 	"github.com/YangtseSu/goTrust/core/atrust/log"
-	"github.com/YangtseSu/goTrust/core/atrust/underlay"
 )
 
 // TestSessionDebugMaterialRedactsTheSignKey: the debug dump names the session
@@ -41,11 +41,7 @@ func TestSessionDebugMaterialRedactsTheSignKey(t *testing.T) {
 }
 
 func TestNewClientMapsOptions(t *testing.T) {
-	dialer, err := underlay.New(underlay.Options{AutoDetect: false})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = dialer.Close() })
+	dialer := &net.Dialer{}
 	var keyLogWriter strings.Builder
 
 	c := NewClient(ClientOptions{

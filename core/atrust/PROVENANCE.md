@@ -30,11 +30,10 @@ separately.
 ## Imported packages
 
 - `client`, `client/atrust`, `client/atrust/auth`, `client/authchallenge`
-- `dial`, `resolve`, `log`, `service`, `underlay`
+- `dial`, `resolve`, `log`, `service`
 - `stack`, `stack/gvisor`, `stack/tcptunnel`
 - `internal/hook_func`, `internal/ippool`, `internal/ipresource`,
-  `internal/keylog`, `internal/ping`, `internal/platformdialer`,
-  `internal/zcdns`, `internal/zctcpip`
+  `internal/ping`, `internal/zcdns`, `internal/zctcpip`
 
 ## Dropped packages
 
@@ -42,6 +41,7 @@ separately.
 |---|---|
 | `client/easyconnect` | A second protocol this application does not speak. The packet stack matched one of its sentinels in its write path; the `client.Client` interface the stack takes is unchanged. |
 | `stack/tun` | TUN mode is out of scope: goTrust runs unprivileged and proxies over loopback. |
+| `underlay`, `internal/platformdialer`, `internal/keylog` | The socket layer that existed so a TUN device would not capture its own underlay traffic: per-interface binding, default-interface monitoring, the PCAP capture of the underlay and its local DNS override, plus the key-log file the removed one-shot entry points opened. goTrust installs no TUN and dials the gateway with `net.Dialer`, so none of it can run; `client.UnderlayDialer` is now the single method `net.Dialer` satisfies, and `ClientOptions.TLSKeyLogWriter` keeps the debug path as an `io.Writer`. |
 | `main.go`, `init.go`, `configs` | The source project's CLI entry point, its flag parsing and its config type. goTrust wires the layer from `core/session`. |
 | `service` listeners | The SOCKS5, HTTP, TCP/UDP forwarding and shadowsocks servers. `core/proxy` owns the listeners, and the imported `service` package keeps only the DNS server and the keep-alive. |
 | `internal/hook_func` initial hooks | The start-up checks belonged to the CLI, and one of them named operator-specific DNS suffixes. The package keeps the terminal hooks the stacks call. |

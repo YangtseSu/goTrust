@@ -31,7 +31,6 @@ import (
 	"github.com/YangtseSu/goTrust/core/atrust/stack"
 	"github.com/YangtseSu/goTrust/core/atrust/stack/gvisor"
 	"github.com/YangtseSu/goTrust/core/atrust/stack/tcptunnel"
-	"github.com/YangtseSu/goTrust/core/atrust/underlay"
 
 	"github.com/YangtseSu/goTrust/core/config"
 )
@@ -186,7 +185,6 @@ type Manager struct {
 	liveProfile string
 	dialer      tunnelDialer
 	resolver    *resolve.Resolver
-	underlay    *underlay.Dialer
 	cancel      context.CancelFunc
 	login       sync.Mutex
 
@@ -310,17 +308,11 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	m.connectingState("preparing the tunnel")
 
-	underlayDialer, err := underlay.New(underlay.Options{})
-	if err != nil {
-		cancel()
-		m.fail(fmt.Errorf("create the underlay dialer: %w", err))
-		return err
-	}
+	dialer := &net.Dialer{}
 
 	// From here on every failure has to release what was already opened.
 	fail := func(stage string, cause error) error {
 		cancel()
-		_ = underlayDialer.Close()
 		wrapped := fmt.Errorf("%s: %w", stage, cause)
 		// A cancelled attempt is what 断开 asked for. Publishing a failure
 		// would race the idle state that disconnect publishes and paint an
@@ -372,7 +364,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 
 	client := atrust.NewClient(atrust.ClientOptions{
 		Session:        atrust.SessionOptions{Username: profile.Auth.Username},
-		UnderlayDialer: underlayDialer,
+		UnderlayDialer: dialer,
 	})
 
 	m.connectingState("logging in")
@@ -446,7 +438,6 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 			// The password changed (or was skipped); the portal refuses the
 			// pending chain. Release everything without publishing a failure:
 			// the caller logs in again with the new credential.
-			_ = underlayDialer.Close()
 			cancel()
 			return err
 		}
@@ -505,7 +496,6 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	m.client = client
 	m.liveProfile = profile.Name
 	m.resolver = resolver
-	m.underlay = underlayDialer
 	m.dialer = dial.NewDialer(vpnStack, resolver, ipResources, false, "")
 	m.cancel = cancel
 	m.mu.Unlock()
@@ -568,14 +558,12 @@ func (m *Manager) teardown() {
 	m.mu.Lock()
 	cancel := m.cancel
 	client := m.client
-	underlayDialer := m.underlay
 
 	m.cancel = nil
 	m.client = nil
 	m.liveProfile = ""
 	m.dialer = nil
 	m.resolver = nil
-	m.underlay = nil
 	m.mu.Unlock()
 
 	if cancel != nil {
@@ -583,9 +571,6 @@ func (m *Manager) teardown() {
 	}
 	if client != nil {
 		client.Close()
-	}
-	if underlayDialer != nil {
-		_ = underlayDialer.Close()
 	}
 }
 

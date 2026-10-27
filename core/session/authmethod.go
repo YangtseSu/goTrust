@@ -13,7 +13,6 @@ import (
 
 	"github.com/YangtseSu/goTrust/core/atrust/client"
 	"github.com/YangtseSu/goTrust/core/atrust/client/atrust/auth"
-	"github.com/YangtseSu/goTrust/core/atrust/underlay"
 
 	"github.com/YangtseSu/goTrust/core/config"
 )
@@ -61,10 +60,8 @@ var ErrAuthMethodChoice = errors.New("the gateway offers several authentication 
 // logged in offers nothing, and the client then restores the stored session.
 // The caller must not read it as an error.
 //
-// The call runs on its own underlay dialer, like a login does: it must not be
-// captured by a tunnel that is already up. The context stops the request, which
-// atrust.GetAuthInfoList could not do (it builds its own dialer and takes no
-// context).
+// The call dials the gateway directly, like a login does: it must not be
+// captured by a tunnel that is already up. The context stops the request.
 func DiscoverAuthMethods(ctx context.Context, profile config.Profile) ([]AuthMethod, error) {
 	address := profile.ServerAddress()
 	if address == "" {
@@ -74,13 +71,7 @@ func DiscoverAuthMethods(ctx context.Context, profile config.Profile) ([]AuthMet
 		return nil, err
 	}
 
-	dialer, err := underlay.New(underlay.Options{})
-	if err != nil {
-		return nil, fmt.Errorf("create the underlay dialer: %w", err)
-	}
-	defer func() { _ = dialer.Close() }()
-
-	return discoverAuthMethods(ctx, authHost(address, profile.Server.Port), dialer.DialContext)
+	return discoverAuthMethods(ctx, authHost(address, profile.Server.Port), (&net.Dialer{}).DialContext)
 }
 
 // authHost is the host a login sends to the gateway. The client omits the port

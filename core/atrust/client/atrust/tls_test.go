@@ -3,12 +3,11 @@ package atrust
 import (
 	"bytes"
 	"crypto/tls"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/YangtseSu/goTrust/core/atrust/underlay"
 )
 
 func TestTunnelTLSConfigShape(t *testing.T) {
@@ -40,10 +39,7 @@ func TestDialTLSContextUsesCallerKeyLogWriter(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer server.Close()
 
-	dialer, err := underlay.New(underlay.Options{AutoDetect: false})
-	if err != nil {
-		t.Fatal(err)
-	}
+	dialer := &net.Dialer{}
 	var keyLog bytes.Buffer
 	base := &tls.Config{
 		InsecureSkipVerify: true,

@@ -7,7 +7,6 @@ import (
 
 	"github.com/YangtseSu/goTrust/core/atrust/client"
 	"github.com/YangtseSu/goTrust/core/atrust/client/atrust"
-	"github.com/YangtseSu/goTrust/core/atrust/underlay"
 )
 
 type externalUnderlay struct{}
@@ -16,11 +15,9 @@ func (externalUnderlay) DialContext(context.Context, string, string) (net.Conn, 
 	return nil, nil
 }
 
-func (externalUnderlay) ExcludeIP(net.IP) {}
-
 var (
 	_ client.UnderlayDialer = externalUnderlay{}
-	_ client.UnderlayDialer = (*underlay.Dialer)(nil)
+	_ client.UnderlayDialer = (*net.Dialer)(nil)
 )
 
 func TestPublicClientAcceptsExternalUnderlay(t *testing.T) {

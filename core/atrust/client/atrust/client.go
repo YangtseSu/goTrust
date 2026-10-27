@@ -18,9 +18,7 @@ import (
 	"github.com/YangtseSu/goTrust/core/atrust/client/atrust/auth"
 	"github.com/YangtseSu/goTrust/core/atrust/client/authchallenge"
 	"github.com/YangtseSu/goTrust/core/atrust/internal/ipresource"
-	"github.com/YangtseSu/goTrust/core/atrust/internal/keylog"
 	"github.com/YangtseSu/goTrust/core/atrust/log"
-	"github.com/YangtseSu/goTrust/core/atrust/underlay"
 	"inet.af/netaddr"
 )
 
@@ -396,33 +394,6 @@ func randHex(n int) string {
 	return strings.ToUpper(hex.EncodeToString(b)[:n])
 }
 
-func GetAuthInfoList(serverAddress string, serverPort int, bindInterface string, autoDetectInterface bool, localDNSServer, debugTLSLogFile string) (authInfo []auth.AuthInfo, err error) {
-	var serverHost string
-	if serverPort == 443 {
-		serverHost = serverAddress
-	} else {
-		serverHost = fmt.Sprintf("%s:%d", serverAddress, serverPort)
-	}
-	dialer, err := newUnderlayDialer(bindInterface, autoDetectInterface, localDNSServer)
-	if err != nil {
-		return nil, err
-	}
-	defer dialer.Close()
-	tlsKeyLogWriter, err := keylog.Open(debugTLSLogFile)
-	if err != nil {
-		return nil, fmt.Errorf("open TLS key log: %w", err)
-	}
-	defer func() {
-		if tlsKeyLogWriter != nil {
-			if closeErr := tlsKeyLogWriter.Close(); closeErr != nil {
-				err = errors.Join(err, fmt.Errorf("close TLS key log: %w", closeErr))
-			}
-		}
-	}()
-	sess := auth.NewSession(serverHost, tlsKeyLogWriter, dialer.DialContext)
-	return sess.GetAuthInfoList()
-}
-
 func (c *Client) CanUseTCPTunnel() bool {
 	return true
 }
@@ -435,73 +406,6 @@ func (c *Client) NewL3Conn() (io.ReadWriteCloser, error) {
 		return nil, errors.New("L3 tunnel not initialized")
 	}
 	return tunnel.NewL3Conn()
-}
-
-func SetTrusted(serverAddress string, serverPort int, authData []byte, trusted bool, bindInterface string, autoDetectInterface bool, localDNSServer, debugTLSLogFile string) (err error) {
-	var clientAuthData auth.ClientAuthData
-	if authData != nil {
-		err := json.Unmarshal(authData, &clientAuthData)
-		if err != nil {
-			log.Println("Error parsing client data:", err)
-			return err
-		}
-	}
-	log.DebugPrintf("Given auth data: device=%s cookies=%d sign_key=%s sid_ticket=%s",
-		clientAuthData.DeviceID, len(clientAuthData.Cookies),
-		log.Redact(clientAuthData.SignKey), log.Redact(clientAuthData.SIDTicket))
-
-	if clientAuthData.DeviceID == "" {
-		clientAuthData.DeviceID = strings.ToLower(randHex(32))
-	}
-
-	var serverHost string
-	if serverPort == 443 {
-		serverHost = serverAddress
-	} else {
-		serverHost = fmt.Sprintf("%s:%d", serverAddress, serverPort)
-	}
-	dialer, err := newUnderlayDialer(bindInterface, autoDetectInterface, localDNSServer)
-	if err != nil {
-		return err
-	}
-	defer dialer.Close()
-	tlsKeyLogWriter, err := keylog.Open(debugTLSLogFile)
-	if err != nil {
-		return fmt.Errorf("open TLS key log: %w", err)
-	}
-	defer func() {
-		if tlsKeyLogWriter != nil {
-			if closeErr := tlsKeyLogWriter.Close(); closeErr != nil {
-				err = errors.Join(err, fmt.Errorf("close TLS key log: %w", closeErr))
-			}
-		}
-	}()
-	sess := auth.NewSession(serverHost, tlsKeyLogWriter, dialer.DialContext)
-
-	if _, err := sess.Login(nil, auth.LoginOptions{
-		DeviceID: clientAuthData.DeviceID,
-		Cookies:  clientAuthData.Cookies,
-	}); err != nil {
-		return err
-	}
-	result, err := sess.QueryDevice()
-	if err != nil {
-		return err
-	}
-
-	if trusted {
-		if result.DeviceTrusted {
-			log.Println("Device already trusted, skipping")
-			return nil
-		}
-		return sess.TrustDevice([]string{result.SelfID})
-	} else {
-		if !result.DeviceTrusted {
-			log.Println("Device already untrusted, skipping")
-			return nil
-		}
-		return sess.UntrustDevice([]string{result.SelfID})
-	}
 }
 
 type sessionEstablishment struct {
@@ -736,7 +640,6 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	c.underlayDialer.ExcludeIP(c.ip)
 
 	if err := setupCtx.Err(); err != nil {
 		return nil, err
@@ -774,14 +677,6 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 func (c *Client) debugSessionMaterial() {
 	log.DebugPrintf("SID: %s, DeviceID: %s, ConnectionID: %s, SignKey: %s",
 		c.SID, c.DeviceID, c.ConnectionID, log.Redact(c.SignKey))
-}
-
-func newUnderlayDialer(bindInterface string, autoDetectInterface bool, localDNSServer string) (*underlay.Dialer, error) {
-	return underlay.New(underlay.Options{
-		InterfaceName:  bindInterface,
-		AutoDetect:     autoDetectInterface,
-		LocalDNSServer: localDNSServer,
-	})
 }
 
 func resolveServerVersionInfo(cached, fetched []byte, fetchErr error) ([]byte, error) {
