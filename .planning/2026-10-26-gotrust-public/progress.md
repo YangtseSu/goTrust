@@ -357,3 +357,32 @@
     `internal/guards/guards_test.go`,
     `core/atrust/service/keep_alive_test.go`, `.github/workflows/ci.yml`,
     `README.md`, `AGENTS.md`, `~/projects/arch-pkgs/gotrust-git/PKGBUILD`
+
+## Session: 2026-10-27 (release)
+
+### Release 0.1.0
+
+- **Status:** in progress while the tag workflow runs
+- Actions taken:
+  - `internal/version` carries the release a binary was built from; both entry
+    points gained `-version`, and a source checkout reports `devel`.
+  - `.github/workflows/release.yml`: the five checks on the tagged commit, then
+    a matrix that builds Linux amd64/arm64, one macOS universal binary (two
+    cross-builds joined with `lipo`) and Windows amd64 (`-H windowsgui` for the
+    tray app, console for the CLI), packages each with its licence, adds the
+    desktop entry and icons to the Linux archive, and publishes a GitHub release
+    with `sha256` checksums.
+  - README rewritten for end users and in Chinese, because the interface is
+    Chinese. The development material moved to `docs/development.md` and the
+    TOML reference to `docs/configuration.md`; the README names zju-connect,
+    EZ4Connect and mygo under 鸣谢.
+  - `AGENTS.md` points the packaging recipe at
+    `github.com/YangtseSu/arch-pkgs` instead of a local directory, and the
+    packaging repo's HTTPS/split commit was pushed.
+  - `v0.1.0` is signed (ED25519 key) and pushed.
+- Evidence:
+  - local matrix rehearsal before tagging: Linux amd64/arm64, Windows amd64 and
+    macOS amd64/arm64 all built with the workflow's flags; the Windows GUI
+    binary reports `PE32+ ... (GUI)` and both `-version` flags print `0.1.0`.
+  - nothing is code-signed: macOS and Windows builds pass the build matrix but
+    have never run on those systems.
