@@ -283,7 +283,7 @@
 
 ### Phase 5: GUI refactor and publication
 
-- **Status:** in progress; code complete, publication waits on the operator
+- **Status:** complete
 - **Started:** 2026-10-27
 - Actions taken:
   - moved the tray front-end from package main at the root into
@@ -324,9 +324,33 @@
     SIGTERM exited 0
   - `bash -n` and `namcap` on the new PKGBUILD; the build itself needs the
     push, because the recipe clones the remote branch
+- Publication:
+  - the payload was reviewed before the push (three signed commits, diff and
+    messages, no secret, home path or real address), then `main` was pushed
+    and the repository was flipped to public after the operator's
+    answer.
+  - the operator chose to publish `.planning/` as it stands. It carries no
+    local path, no real address and no reference to the local development
+    branch; what it does name are public projects, the fork's public
+    history, and desktop/packaging tools (`ydotoold`, `flameshot`, `import`,
+    `mutter --headless`, `Xwayland`, `namcap`, `rsvg-convert`, `secret-tool`).
+  - CI on that commit green: build, vet, gofmt, tests with the guards, the darwin/windows
+    cross-builds and `reuse lint`.
+  - `makepkg -fC` built `gotrust-git r80` and
+    `gotrust-cli-git r80` from `git+https://`. The first attempt
+    failed because the old build directory was an SSH clone of the same
+    repository; removing it let makepkg clone again.
+  - the packaged binaries were extracted and run: the GUI wrote
+    `goTrust ready` and exited 0 on SIGTERM, and `gotrust-cli --status`
+    returned 3 with no cached grant. `namcap` keeps only the documented
+    purego/dlopen and libresolv warnings.
 - Follow-ups:
-  - publication is irreversible and needs the operator: `git push origin
-    main`, the GitHub visibility flip, then `makepkg -fC` on both packages.
+  - the new packages are built but not installed; `pacman -U` still has
+    `gotrust-next-git` installed, which owns `/usr/bin/goTrust`.
+  - the PKGBUILD change is committed in `~/projects/arch-pkgs` (`366b82b`).
+  - `AGENTS.md` still names `~/projects/arch-pkgs/gotrust-git` as the recipe
+    location; it is a local path without a user name,
+    but it is the operator's layout, not the project's.
 - Files created/modified:
   - `internal/gui/**` (moved from the root), `cmd/gotrust/main.go`,
     `data/icons.go`, `core/session/{challenge,debug}.go`, `internal/cli/cli.go`,

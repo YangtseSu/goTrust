@@ -16,19 +16,18 @@ the gateway has already accepted.
 
 ## Next Step
 
-Phase 5's code is complete; publication is the last step and needs the
-operator: push `main`, flip the repository to public, then rebuild the package,
-whose PKGBUILD now clones over HTTPS and ships `gotrust` and `gotrust-cli` as
-two packages.
+Phase 5 is complete: the repository is public at
+<https://github.com/YangtseSu/goTrust>, CI is green, and
+`makepkg -fC` built `gotrust-git` and `gotrust-cli-git` at `r80`
+from the HTTPS source. Phase 20 of the app plan (keyring) is the next feature.
 
 ## Current Phase
 
-Phase 5 is complete apart from the publication itself. `internal/gui` holds the
-tray app behind one `Run` entry point, `cmd/gotrust` supplies main, and neither
-front-end imports the protocol layer: `core/session` re-exports the challenge
-types the prompter interface names and owns the debug switch. `internal/guards`
-kept its dependency guards, and the PKGBUILD splits the tray app from the
-headless front-end and clones over HTTPS. Phase 4 is complete: `core/prompt/web`
+Phase 5 is complete. `internal/gui` holds the tray app behind one `Run` entry
+point, `cmd/gotrust` supplies main, and neither front-end imports the protocol
+layer: `core/session` re-exports the challenge types the prompter interface
+names and owns the debug switch. `internal/guards` kept its dependency guards, the PKGBUILD splits the tray app from the headless front-end and
+clones over HTTPS, the repository is public, CI passed its five checks, and both packages were built at `r80` from the public source. Phase 4 is complete: `core/prompt/web`
 serves every interactive login step as one page on `127.0.0.1` under a
 single-use token, and the CLI opens or prints it. Phase 3 gave the CLI its own
 binary and a per-profile lock; Phase 2 put the protocol layer in the tree;
@@ -177,16 +176,21 @@ Phase 1 moved the application packages under `core/`.
       debug switch (now `session.SetProtocolDebug`). A guard checks the direct
       imports of both front-ends, which the transitive graph cannot express
       because `core/session` itself is built on the protocol layer
-- [ ] Publication: flip the repository to public and switch the PKGBUILD source
-      from the local checkout to `git+https://`. The PKGBUILD is ready
-      (`git+https://`, split into `gotrust-git` and `gotrust-cli-git`) and the
-      push waits on the operator's approval
+- [x] Publication: flip the repository to public and switch the PKGBUILD source
+      from the local checkout to `git+https://`. `main` was pushed
+      and the repository is public; `makepkg -fC` built
+      `gotrust-git` and `gotrust-cli-git` at `r80` from the HTTPS
+      source; both payloads were inspected and both binaries started
 - **Gates:** UI smoke per `docs/agent-ui-testing.md`, CI green. The local gates ran:
   build, vet, gofmt, `go test ./...` (with `-race` on the moved packages),
   `reuse lint` 193/193, four cross-builds, and the nested headless smoke
-  (window rendered, ready line, SIGTERM exit 0). CI and `makepkg` follow the
-  push: the package clones the remote branch
-- **Status:** in progress; only the publication step remains
+  (window rendered, ready line, SIGTERM exit 0). The pushed commit ran CI
+  green (build, vet, gofmt, tests with the guards, the
+  cross-builds, `reuse lint`); `makepkg -fC` built both packages from the
+  HTTPS source, the payloads were inspected, and both packaged binaries were
+  run (the GUI wrote its ready line and exited 0 on SIGTERM,
+  `gotrust-cli --status` returned 3). `namcap` keeps the documented warnings
+- **Status:** complete
 
 ## Key Questions
 
