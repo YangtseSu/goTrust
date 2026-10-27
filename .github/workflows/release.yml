@@ -114,21 +114,22 @@ jobs:
             GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build "${flags[@]}" -o "build/gotrust-cli$ext" ./cmd/gotrust-cli
           fi
 
-          root="gotrust_${version}_${goos}_${goarch}"
-          mkdir -p "dist/$root" "dist/${root}-cli"
-          cp "build/gotrust$ext" LICENSE "dist/$root/"
-          cp "build/gotrust-cli$ext" LICENSE "dist/${root}-cli/"
+          gui_root="gotrust_${version}_${goos}_${goarch}"
+          cli_root="gotrust-cli_${version}_${goos}_${goarch}"
+          mkdir -p "dist/$gui_root" "dist/$cli_root"
+          cp "build/gotrust$ext" LICENSE "dist/$gui_root/"
+          cp "build/gotrust-cli$ext" LICENSE "dist/$cli_root/"
           # The desktop entry and the icons belong to the Linux archive: a
           # package installs them, and a tarball should carry the same files.
           if [ "$goos" = linux ]; then
-            mkdir -p "dist/$root/data"
-            cp -r data/gotrust.desktop data/icons "dist/$root/data/"
+            mkdir -p "dist/$gui_root/data"
+            cp -r data/gotrust.desktop data/icons "dist/$gui_root/data/"
           fi
 
           if [ "$ARCHIVE" = zip ]; then
-            (cd dist && zip -qr "$root.zip" "$root" && zip -qr "${root}-cli.zip" "${root}-cli")
+            (cd dist && zip -qr "$gui_root.zip" "$gui_root" && zip -qr "$cli_root.zip" "$cli_root")
           else
-            (cd dist && tar -czf "$root.tar.gz" "$root" && tar -czf "${root}-cli.tar.gz" "${root}-cli")
+            (cd dist && tar -czf "$gui_root.tar.gz" "$gui_root" && tar -czf "$cli_root.tar.gz" "$cli_root")
           fi
 
       - uses: actions/upload-artifact@v4
