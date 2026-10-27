@@ -9,7 +9,6 @@ import (
 	clientpkg "github.com/YangtseSu/goTrust/core/atrust/client"
 	"github.com/YangtseSu/goTrust/core/atrust/internal/hook_func"
 	"github.com/YangtseSu/goTrust/core/atrust/internal/ippool"
-	"github.com/YangtseSu/goTrust/core/atrust/internal/zcdns"
 	"github.com/YangtseSu/goTrust/core/atrust/log"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -22,7 +21,6 @@ import (
 
 type Stack struct {
 	gvisorStack *stack.Stack
-	resolve     zcdns.LocalServer
 	ipPool      *ippool.IPPool[[]clientpkg.DomainResource]
 
 	endpoint *Endpoint
@@ -200,10 +198,6 @@ func (s *Stack) updateIP(ip net.IP) error {
 	}
 	s.ip = newAddr
 	return nil
-}
-
-func (s *Stack) SetupResolve(r zcdns.LocalServer) {
-	s.resolve = r
 }
 
 func (s *Stack) SetupIPPool(ipPool *ippool.IPPool[[]clientpkg.DomainResource]) {

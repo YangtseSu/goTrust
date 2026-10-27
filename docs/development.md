@@ -153,6 +153,26 @@ CONNECT and does not count as application traffic, so it does not renew the
 session. Manual targets are probed before derived candidates, and the interval
 has a 10 s floor.
 
+## Name resolution
+
+goTrust runs no DNS listener: nothing it starts answers on port 53, and names
+are resolved only for the lookups the proxies, the keep-alive and the login
+make. `core/atrust/resolve` is the single resolver, and its order is:
+
+1. the cached answer for the host — the first address returned, held for
+   3600 s and swept 7200 s after it was written;
+2. the portal's own name entries, rotating across the addresses it listed; a
+   host that matches a granted domain resource also gets an address from
+   `198.18.0.0/16`, which the dial path maps back to that resource;
+3. the gateway's DNS server over the tunnel — UDP first, a TCP retry after the
+   fallback delay, and TCP kept as the preference for a while after a UDP
+   answer was lost;
+4. the gateway's second server when the portal named one, otherwise the system
+   resolver. Step 4 is the whole path when the gateway names no usable server.
+
+Step 3 asks for IPv4 only, so an AAAA name is answered by step 4. The proxy
+starts a connection only once the resolver has returned an address.
+
 ## Password change requests
 
 Both password changes reuse the login password's encryption and the shared

@@ -5,7 +5,6 @@ go 1.27.3
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/egoist/mygo v0.6.4
-	github.com/miekg/dns v1.1.72
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pquerna/otp v1.5.0
 	github.com/things-go/go-socks5 v0.1.1
@@ -23,12 +22,9 @@ require (
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
 	golang.org/x/image v0.46.0 // indirect
-	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.51.0 // indirect
 )
 
 tool github.com/egoist/mygo/cmd/mygo

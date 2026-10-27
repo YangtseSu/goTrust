@@ -8,7 +8,6 @@ import (
 	"github.com/YangtseSu/goTrust/core/atrust/client"
 	"github.com/YangtseSu/goTrust/core/atrust/internal/ippool"
 	"github.com/YangtseSu/goTrust/core/atrust/internal/ipresource"
-	"github.com/YangtseSu/goTrust/core/atrust/internal/zcdns"
 	"github.com/YangtseSu/goTrust/core/atrust/resolve"
 )
 
@@ -98,7 +97,6 @@ type capturingStack struct {
 }
 
 func (s *capturingStack) Run()                                                {}
-func (s *capturingStack) SetupResolve(zcdns.LocalServer)                      {}
 func (s *capturingStack) SetupIPPool(*ippool.IPPool[[]client.DomainResource]) {}
 func (s *capturingStack) DialTCP(ctx context.Context, _ *net.TCPAddr) (net.Conn, error) {
 	if resource, ok := ctx.Value(resolve.ContextKeyDomainResource).(client.DomainResource); ok {

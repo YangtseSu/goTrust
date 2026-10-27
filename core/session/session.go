@@ -481,7 +481,6 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 
 	remoteDNSServer, secondaryDNSServer, useRemoteDNS := m.tunnelDNS(client)
 	resolver := resolve.NewResolver(vpnStack, remoteDNSServer, secondaryDNSServer, 3600, domainResources, dnsResource, useRemoteDNS)
-	vpnStack.SetupResolve(service.NewDnsServer(resolver, []string{remoteDNSServer, secondaryDNSServer}))
 	vpnStack.SetupIPPool(resolver.IPPool)
 	go m.runPacketStack(vpnStack.Run)
 

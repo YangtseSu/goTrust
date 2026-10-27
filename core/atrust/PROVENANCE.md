@@ -33,7 +33,7 @@ separately.
 - `dial`, `resolve`, `log`, `service`
 - `stack`, `stack/gvisor`, `stack/tcptunnel`
 - `internal/hook_func`, `internal/ippool`, `internal/ipresource`,
-  `internal/ping`, `internal/zcdns`, `internal/zctcpip`
+  `internal/ping`, `internal/zctcpip`
 
 ## Dropped packages
 
@@ -43,7 +43,8 @@ separately.
 | `stack/tun` | TUN mode is out of scope: goTrust runs unprivileged and proxies over loopback. |
 | `underlay`, `internal/platformdialer`, `internal/keylog` | The socket layer that existed so a TUN device would not capture its own underlay traffic: per-interface binding, default-interface monitoring, the PCAP capture of the underlay and its local DNS override, plus the key-log file the removed one-shot entry points opened. goTrust installs no TUN and dials the gateway with `net.Dialer`, so none of it can run; `client.UnderlayDialer` is now the single method `net.Dialer` satisfies, and `ClientOptions.TLSKeyLogWriter` keeps the debug path as an `io.Writer`. |
 | `main.go`, `init.go`, `configs` | The source project's CLI entry point, its flag parsing and its config type. goTrust wires the layer from `core/session`. |
-| `service` listeners | The SOCKS5, HTTP, TCP/UDP forwarding and shadowsocks servers. `core/proxy` owns the listeners, and the imported `service` package keeps only the DNS server and the keep-alive. |
+| `service` listeners | The SOCKS5, HTTP, TCP/UDP forwarding and shadowsocks servers. `core/proxy` owns the listeners, and the imported `service` package keeps only the keep-alive and its target derivation. |
+| `internal/zcdns`, the DNS server half of `service` | Nothing listened: the only reader of `zcdns.LocalServer` was `stack/tun`, dropped with TUN mode, and `ServeDNS` had no caller. `core/atrust/resolve` is the only DNS path, so the interface, the server that answered through it and the `miekg/dns` dependency left with them. |
 | `internal/hook_func` initial hooks | The start-up checks belonged to the CLI, and one of them named operator-specific DNS suffixes. The package keeps the terminal hooks the stacks call. |
 | `client/authchallenge` terminal handler | The stdin handler and the temporary browser page it started duplicated what the front-ends own. Every interactive step now comes from `core/prompt/web`, and a caller without a prompt gets `UnsupportedHandler` instead of a read from a terminal that may not exist. |
 | `mobile`, `docs`, `Dockerfile`, `docker-compose.yml`, the property list, the READMEs | Packaging and documentation of the source project. |
