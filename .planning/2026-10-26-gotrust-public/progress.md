@@ -362,7 +362,7 @@
 
 ### Release 0.1.0
 
-- **Status:** in progress while the tag workflow runs
+- **Status:** complete
 - Actions taken:
   - `internal/version` carries the release a binary was built from; both entry
     points gained `-version`, and a source checkout reports `devel`.
@@ -379,10 +379,25 @@
   - `AGENTS.md` points the packaging recipe at
     `github.com/YangtseSu/arch-pkgs` instead of a local directory, and the
     packaging repo's HTTPS/split commit was pushed.
-  - `v0.1.0` is signed (ED25519 key) and pushed.
+  - `v0.1.0` is signed (ED25519 key) and pushed. The tag moved twice: the
+    macOS job first failed because the matrix exported `GOARCH=universal` into
+    the job environment, where `setup-go` runs `go env`; the release job then
+    failed because it had no checkout, so `gh` could not resolve the repository.
+    Both are fixed in the workflow, and the tag was re-created after each fix
+    because no release had been published yet.
 - Evidence:
   - local matrix rehearsal before tagging: Linux amd64/arm64, Windows amd64 and
     macOS amd64/arm64 all built with the workflow's flags; the Windows GUI
     binary reports `PE32+ ... (GUI)` and both `-version` flags print `0.1.0`.
   - nothing is code-signed: macOS and Windows builds pass the build matrix but
     have never run on those systems.
+  - the published release carries nine archives and `checksums.txt`; every
+    checksum verified after download, `gotrust -version` and
+    `gotrust-cli -version` report `0.1.0`, the macOS binary is a Mach-O
+    universal binary with two architectures, and the Windows archive holds the
+    GUI-subsystem `gotrust.exe`.
+  - the README was rewritten twice: first for users and in Chinese (the
+    interface is Chinese), then again after review, because the first pass
+    carried English sentence structure into Chinese and claimed a wrong reason
+    for the SMS limitation. It now names zju-connect and EZ4Connect under
+    鸣谢, and the security caveats live in `docs/development.md`.
