@@ -27,6 +27,13 @@ goTrust 是 aTrust 的桌面客户端。它常驻托盘，登录 Sangfor aTrust 
 GTK3、libayatana-appindicator 和 hicolor-icon-theme；macOS 和 Windows 使用系统自带
 的界面组件，不需要额外的运行库。
 
+Arch Linux 用户也可以从 AUR 安装，两个包都从发布标签构建：
+
+```sh
+yay -S gotrust        # 托盘版，会装上 GTK3 和 appindicator
+yay -S gotrust-cli    # 无界面版，只依赖 glibc
+```
+
 发布的包没有代码签名：macOS 会提示开发者来源不明，Windows 会弹出 SmartScreen 提示。
 如需自行构建，见 [`docs/development.md`](docs/development.md)。
 

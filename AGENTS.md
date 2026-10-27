@@ -24,7 +24,9 @@ protocol layer instead of `core/session`.
 except in the imported tree, which is annotated in `REUSE.toml` instead of being
 edited.
 The Arch packages live in `github.com/YangtseSu/arch-pkgs` (`gotrust-git/`);
-build them with `makepkg -fC` from that directory.
+build them with `makepkg -fC` from that directory. The AUR release packages
+(`gotrust`, `gotrust-cli`) are separate clones in `~/aur`; the update steps for
+each release are in `docs/development.md`.
 
 ## Layout
 

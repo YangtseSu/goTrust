@@ -92,6 +92,37 @@ but have never been run on those systems, so a signature would only hide that.
 macOS users get Gatekeeper's unknown-developer refusal, Windows users get
 SmartScreen's prompt; the release notes say so and nothing more.
 
+### AUR
+
+Two release packages are published from local clones in `~/aur`, one per AUR
+repository:
+
+| package | repository | installs |
+|---|---|---|
+| `gotrust` | `ssh://aur@aur.archlinux.org/gotrust.git` | tray app, desktop entry, icons |
+| `gotrust-cli` | `ssh://aur@aur.archlinux.org/gotrust-cli.git` | headless binary |
+
+Both build the `v<ver>` tarball and inject that version at link time. They are
+release packages, not VCS packages: the `-git` pair stays in `arch-pkgs` for the
+operator's own use, and the AUR packages conflict with it.
+
+On every release, after the tag is pushed:
+
+```sh
+# in each of ~/aur/gotrust and ~/aur/gotrust-cli
+sed -i "s/^pkgver=.*/pkgver=<ver>/" PKGBUILD
+updpkgsums                        # refetches the tarball and rewrites sha256sums
+makepkg --printsrcinfo > .SRCINFO
+makepkg -f                        # builds, runs check(), packages
+namcap PKGBUILD && namcap <pkgname>-<ver>-*.pkg.tar.zst
+git commit -am "upgpkg: <pkgname> <ver>-1"
+git push
+```
+
+`updpkgsums` downloads the new tag, so the release has to exist first. The only
+namcap warnings expected are the two documented ones: libresolv from the
+external linker, and GTK/appindicator because purego loads them at runtime.
+
 ## Packaging
 
 The Arch recipe lives outside this repository, in
