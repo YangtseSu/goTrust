@@ -16,10 +16,9 @@ the gateway has already accepted.
 
 ## Next Step
 
-Phase 9 is code complete. The remaining gates need the operator: one push to
-`main` runs CI with the new actions and activates the Dependabot config, and
-one live login proves the refreshed packet stack. The Dependabot security
-alerts are already on.
+Phase 9 is complete. CI is green, the installed `r105` package passed its live
+login, and Dependabot's security alerts are on with one grouped update run a
+day per ecosystem. No phase is open; the next work is new scope.
 
 ## Current Phase
 
@@ -27,7 +26,7 @@ Phase 9 is code complete. Every declared module is current: the patch/minor set,
 mygo 0.7.1, gvisor's newest buildable `go` branch commit, and ttlcache in place
 of the dormant cache. The workflows use the current action majors, Dependabot
 has one grouped pull request a day per ecosystem, and the security alerts are
-on. The live login and a green CI run still need a gateway and a push.
+on. The push ran CI green and the installed package passed its live login.
 Phase 8 is complete. The deprecated address module is gone: the `IPSet` accessor,
 its builder and the interface method are deleted rather than reimplemented on
 `net/netip`, because the set's only reader left with TUN mode and destination
@@ -339,7 +338,7 @@ chased first.
   L3 path.
 - [x] Actions: `checkout` v4 → v7, `setup-go` v5 → v7, `upload-artifact`
   v4 → v7, `download-artifact` v4 → v8. The inputs this repository uses are
-  unchanged. CI runs on `main`, so the proof is one push.
+  unchanged. CI run 40521378071 passed on `3b5d923` with the new majors.
 - [x] Replace `patrickmn/go-cache`: the resolver's three calls map to
   `github.com/jellydator/ttlcache/v3`, with touch-on-hit disabled so a lookup
   does not extend the answer's life and `NoTTL` for the permanent entry. A zero
@@ -349,7 +348,8 @@ chased first.
 - [x] `.github/dependabot.yml`: daily, `gomod` and `github-actions`, one grouped
   PR per ecosystem, open-PR limits 3 and 2. Dependabot security alerts were
   enabled through the repository API (the endpoint answered 404 before and 204
-  after).
+  after). The first update run succeeded and opened no PR because every module
+  is current.
 - **Conclusion on PRs:** enable version-update PRs, not alerts alone. By now
   the fork modules are gone, so the remaining modules are normal releases
   Dependabot can move. A bot PR proves build, vet, tests and the cross-builds;
@@ -363,11 +363,12 @@ chased first.
   workflows and Dependabot each have their own commit, so a regression names its
   cause.
 - **Gates:** build, vet, gofmt, `go test ./...`, `go test -race` on the touched
-  packages, `reuse lint` 185/185, cross-builds, and the UI smoke passed. The
-  live login needs a gateway, and the CI run needs the push.
-- **Status:** code complete. The local test package is `gotrust-git
-  r105.gfd3499a-1`; its binaries carry mygo 0.7.1, ttlcache and the pinned
-  gvisor, and no `go-cache` or `netaddr`.
+  packages, `reuse lint` 185/185, cross-builds, the UI smoke, the green CI run
+  and the live login passed.
+- **Status:** complete. The installed `gotrust-git r105.gfd3499a-1` and
+  `gotrust-cli-git r105.gfd3499a-1` passed their live login; their binaries
+  carry mygo 0.7.1, ttlcache and the pinned gvisor, and no `go-cache` or
+  `netaddr`.
 - **Risk:** the gvisor module is a branch commit, not a release. If the stack
   breaks later, pin the newest commit that passes and record why here.
 

@@ -528,8 +528,8 @@
 
 ## Session: 2026-10-27 (dependency refresh)
 
-- **Status:** Phase 9 code complete; the live login needs a gateway and the CI
-  run needs the push
+- **Status:** Phase 9 complete; CI is green and the live login passed on the
+  installed package
 - Actions taken:
   - patch/minor set: `things-go/go-socks5` 0.1.3, `x/sys` 0.49.0, `purego`
     0.11.2, and one minor each for `x/exp`, `x/image`, `x/net` and `x/time`;
@@ -569,5 +569,12 @@
     `go-cache` or `netaddr`;
   - the packaged CLI starts, answers `--status` with exit 0 and renders the
     cached grant.
-- Open gates: one live login through the refreshed gvisor stack, and one push
-  to `main` for CI with the new actions and for the Dependabot config.
+- Push, CI and the live login:
+  - `main` was pushed as `74a51a1..3b5d923` (13 signed commits, fast-forward);
+  - CI run 40521378071 passed in 2m3s: build, vet, gofmt, the tests with the
+    dependency guards, the darwin/windows cross-builds and `reuse lint` on the
+    new action majors;
+  - the first Dependabot update run succeeded and opened no pull request,
+    because every module is current; the security alerts answer 204;
+  - the operator installed the `r105.gfd3499a-1` packages and tested the build;
+    the live login passed, which closes the last gate.
