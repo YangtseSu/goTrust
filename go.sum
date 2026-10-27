@@ -43,5 +43,5 @@ golang.org/x/text v0.43.0 h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=
 golang.org/x/text v0.43.0/go.mod h1:hbSIYA/amXcRXTFSZqh8tWHEoqRvvbKPJ2uz/KU+a+s=
 golang.org/x/time v0.16.0 h1:vMb6ptszcQMkcwiRTAuNNU50gom6++Q/6gY2hDM6VDE=
 golang.org/x/time v0.16.0/go.mod h1:rVKOqvZeKvrDKTQiAHJ7wmwP0RzleSphoEA9RcdLA0s=
-gvisor.dev/gvisor v0.0.0-20260129214308-cb856800aa1c h1:bGlf1xYxmMtrHdekAk8YIkzIbpDTUTU7uDE0M48a0gA=
-gvisor.dev/gvisor v0.0.0-20260129214308-cb856800aa1c/go.mod h1:QkHjoMIBaYtpVufgwv3keYAbln78mBoCuShZrPrer1Q=
+gvisor.dev/gvisor v0.0.0-20261027095827-a68437cfc713 h1:17bKXXL04yqd982t5iI40Ktm3xl3X5vIIobMgpZaSCs=
+gvisor.dev/gvisor v0.0.0-20261027095827-a68437cfc713/go.mod h1:Ml6ZH/vUKATC2FmyegP0ISP5Bu3U+DXEXJHB6MlH1dY=

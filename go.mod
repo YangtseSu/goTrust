@@ -9,7 +9,7 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/things-go/go-socks5 v0.1.3
 	golang.org/x/sys v0.49.0
-	gvisor.dev/gvisor v0.0.0-20260129214308-cb856800aa1c
+	gvisor.dev/gvisor v0.0.0-20261027095827-a68437cfc713
 )
 
 require (
