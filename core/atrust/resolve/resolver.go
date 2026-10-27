@@ -14,7 +14,7 @@ import (
 	"github.com/YangtseSu/goTrust/core/atrust/internal/ippool"
 	"github.com/YangtseSu/goTrust/core/atrust/log"
 	"github.com/YangtseSu/goTrust/core/atrust/stack"
-	"github.com/patrickmn/go-cache"
+	"github.com/jellydator/ttlcache/v3"
 )
 
 type Resolver struct {
@@ -27,7 +27,7 @@ type Resolver struct {
 	dnsResourceCursor sync.Map
 	useRemoteDNS      bool
 
-	dnsCache *cache.Cache
+	dnsCache *ttlcache.Cache[string, net.IP]
 
 	IPPool *ippool.IPPool[[]client.DomainResource]
 
@@ -406,7 +406,7 @@ func NewResolver(stack stack.Stack, remoteDNSServer, secondaryDNSServer string, 
 		ttl:          ttl,
 		domainIndex:  newDomainResourceIndex(domainResources),
 		dnsResource:  dnsResource,
-		dnsCache:     cache.New(time.Duration(ttl)*time.Second, time.Duration(ttl)*2*time.Second),
+		dnsCache:     newDNSCache(time.Duration(ttl) * time.Second),
 		useRemoteDNS: useRemoteDNS,
 	}
 

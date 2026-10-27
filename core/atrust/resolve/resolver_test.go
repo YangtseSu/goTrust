@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/YangtseSu/goTrust/core/atrust/client"
-	"github.com/patrickmn/go-cache"
 )
 
 var domainResourceMatchSink bool
@@ -113,7 +112,7 @@ func TestResolverReleasesCoordinationEntry(t *testing.T) {
 		remoteUDPResolver: failing,
 		remoteTCPResolver: failing,
 		secondaryResolver: failing,
-		dnsCache:          cache.New(time.Minute, 0),
+		dnsCache:          newDNSCache(time.Minute),
 		useRemoteDNS:      true,
 	}
 
@@ -129,7 +128,7 @@ func TestResolverRotatesConfiguredDNSAddresses(t *testing.T) {
 	resolver := &Resolver{
 		domainIndex: newDomainResourceIndex(nil),
 		dnsResource: map[string][]net.IP{"service.example": {first, second}},
-		dnsCache:    cache.New(time.Minute, 0),
+		dnsCache:    newDNSCache(time.Minute),
 	}
 
 	_, gotFirst, err := resolver.Resolve(context.Background(), "service.example")
@@ -162,7 +161,7 @@ func TestResolverWaitingCallerHonorsContext(t *testing.T) {
 		remoteUDPResolver: blocking,
 		remoteTCPResolver: blocking,
 		secondaryResolver: failingNetResolver(),
-		dnsCache:          cache.New(time.Minute, 0),
+		dnsCache:          newDNSCache(time.Minute),
 		useRemoteDNS:      true,
 	}
 

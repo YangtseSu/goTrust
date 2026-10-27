@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/egoist/mygo v0.6.4
-	github.com/patrickmn/go-cache v2.1.0+incompatible
+	github.com/jellydator/ttlcache/v3 v3.4.1
 	github.com/pquerna/otp v1.5.0
 	github.com/things-go/go-socks5 v0.1.3
 	golang.org/x/sys v0.49.0
@@ -20,6 +20,7 @@ require (
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/image v0.47.0 // indirect
 	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 )
