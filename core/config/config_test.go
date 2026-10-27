@@ -24,6 +24,9 @@ func TestDefaultHasOneProfileAndBothListeners(t *testing.T) {
 		t.Fatalf("defaults disable a listener: socks5=%q http=%q", socks5, httpBind)
 	}
 	profile := cfg.Active()
+	if strings.TrimSpace(profile.ID) == "" {
+		t.Fatal("the default profile has no id")
+	}
 	if profile.Server.Port != 443 {
 		t.Fatalf("default port = %d, want 443", profile.Server.Port)
 	}
@@ -272,6 +275,144 @@ func TestDuplicateProfileIsIndependent(t *testing.T) {
 	cfg.Profiles[index].Keep.Targets[0] = "http://192.0.2.6/"
 	if cfg.Profiles[0].Keep.Targets[0] != "http://192.0.2.5/" {
 		t.Fatal("profiles share their target slice")
+	}
+}
+
+func TestNewProfileHasAUniqueID(t *testing.T) {
+	first := NewProfile("a")
+	second := NewProfile("b")
+	if first.ID == "" || second.ID == "" {
+		t.Fatalf("profile ids = %q, %q", first.ID, second.ID)
+	}
+	if first.ID == second.ID {
+		t.Fatalf("two profiles share the id %q", first.ID)
+	}
+}
+
+func TestDuplicateProfileGetsANewID(t *testing.T) {
+	cfg := Default()
+	source := cfg.Active().ID
+	index, err := cfg.DuplicateProfile(0, "副本")
+	if err != nil {
+		t.Fatalf("duplicate: %v", err)
+	}
+	if cfg.Profiles[index].ID == "" || cfg.Profiles[index].ID == source {
+		t.Fatalf("duplicate id = %q, want a new one", cfg.Profiles[index].ID)
+	}
+}
+
+func TestProfileIDSurvivesSaveLoadAndRename(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg := Default()
+	id := cfg.Active().ID
+	cfg.Profiles[0].Name = "工作"
+	if err := SaveFile(path, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if loaded.Profiles[0].ID != id {
+		t.Fatalf("id = %q, want %q after a rename round-trip", loaded.Profiles[0].ID, id)
+	}
+	if loaded.Version != 3 {
+		t.Fatalf("version = %d, want 3", loaded.Version)
+	}
+}
+
+func TestLoadOrCreateFillsProfileIDsOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := `version = 2
+
+[[profiles]]
+name = "a"
+
+[[profiles]]
+name = "b"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	first, _, err := LoadOrCreate(path)
+	if err != nil {
+		t.Fatalf("LoadOrCreate() error = %v", err)
+	}
+	for index, profile := range first.Profiles {
+		if strings.TrimSpace(profile.ID) == "" {
+			t.Fatalf("profile %d has no id", index)
+		}
+	}
+	if first.Profiles[0].ID == first.Profiles[1].ID {
+		t.Fatalf("profiles share the id %q", first.Profiles[0].ID)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(string(raw), "version = 3") ||
+		!strings.Contains(string(raw), first.Profiles[0].ID) {
+		t.Fatalf("the generated ids were not persisted:\n%s", raw)
+	}
+	second, _, err := LoadOrCreate(path)
+	if err != nil {
+		t.Fatalf("second LoadOrCreate() error = %v", err)
+	}
+	if second.Profiles[0].ID != first.Profiles[0].ID ||
+		second.Profiles[1].ID != first.Profiles[1].ID {
+		t.Fatalf("ids changed between loads: %q/%q then %q/%q",
+			first.Profiles[0].ID, first.Profiles[1].ID,
+			second.Profiles[0].ID, second.Profiles[1].ID)
+	}
+}
+
+func TestDuplicateProfileIDsAreBrokenOnLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := `version = 2
+
+[[profiles]]
+id = "shared"
+name = "a"
+
+[[profiles]]
+id = "shared"
+name = "b"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, _, err := LoadOrCreate(path)
+	if err != nil {
+		t.Fatalf("LoadOrCreate() error = %v", err)
+	}
+	if cfg.Profiles[0].ID != "shared" {
+		t.Fatalf("the first id = %q, want the hand-edited value", cfg.Profiles[0].ID)
+	}
+	if cfg.Profiles[1].ID == "shared" || cfg.Profiles[1].ID == "" {
+		t.Fatalf("the duplicate id was kept: %q", cfg.Profiles[1].ID)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if count := strings.Count(string(raw), `id = "shared"`); count != 1 {
+		t.Fatalf("the file carries the shared id %d times:\n%s", count, raw)
+	}
+}
+
+func TestSaveFileWritesAnIDForAHandBuiltProfile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg := Default()
+	cfg.Profiles = []Profile{{Name: "a"}}
+	if err := SaveFile(path, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if strings.TrimSpace(loaded.Profiles[0].ID) == "" {
+		t.Fatal("a hand-built profile reached the file without an id")
 	}
 }
 

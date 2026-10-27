@@ -15,6 +15,7 @@ import (
 
 func TestSettingsApplyBuildsAProfile(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
+	id := state.Draft.Profiles[0].ID
 	state.NameText = " 工作 "
 	state.Draft.Profiles[0].Server.Address = " vpn.example.com "
 	state.Draft.Profiles[0].Auth.Username = " alice "
@@ -33,6 +34,9 @@ func TestSettingsApplyBuildsAProfile(t *testing.T) {
 	profile := cfg.Active()
 	if cfg.ActiveProfile != "工作" || profile.Name != "工作" {
 		t.Fatalf("active = %q, profile = %q", cfg.ActiveProfile, profile.Name)
+	}
+	if profile.ID != id {
+		t.Fatalf("profile id = %q, want %q after a rename", profile.ID, id)
 	}
 	if profile.Server.Address != "vpn.example.com" || profile.Server.Port != 8443 {
 		t.Fatalf("server = %+v", profile.Server)

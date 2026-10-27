@@ -31,7 +31,7 @@ import (
 
 // CurrentVersion is the schema version this build writes. A file from a newer
 // build is refused rather than rewritten with fields this build would drop.
-const CurrentVersion = 2
+const CurrentVersion = 3
 
 // DefaultProfileName is the profile a fresh install uses.
 const DefaultProfileName = "默认"
@@ -291,6 +291,11 @@ func randomHexID() string {
 	return strings.ToUpper(hex.EncodeToString(buffer))
 }
 
+// newProfileID returns the opaque local identity a profile keeps for its
+// lifetime. It never reaches the gateway; it only keys local state, so the
+// format is free to change as long as it stays unique and TOML-safe.
+func newProfileID() string { return rand.Text() }
+
 // ProxyConfig is the pair of local listeners. An empty bind disables that
 // listener, so a user who only wants SOCKS5 can turn HTTP off. The binds are
 // global on purpose: switching accounts must not move the ports other
@@ -310,6 +315,11 @@ type HandoffConfig struct {
 // Profile is one account: the gateway, the credentials, the keep-alive and
 // the diagnostics that go with it.
 type Profile struct {
+	// ID is this profile's stable local identity. It is generated once, kept
+	// across renames, and never reused, so per-profile state can key off it
+	// instead of the mutable name. A hand-edited value stays unless another
+	// profile already owns it.
+	ID     string       `toml:"id"`
 	Name   string       `toml:"name"`
 	Server ServerConfig `toml:"server"`
 	Auth   AuthConfig   `toml:"auth"`
@@ -370,11 +380,35 @@ type DebugConfig struct {
 func NewProfile(name string) Profile {
 	enabled := true
 	return Profile{
+		ID:     newProfileID(),
 		Name:   name,
 		Server: ServerConfig{Port: defaultServerPort},
 		Auth:   AuthConfig{Domain: defaultLoginDomain},
 		Keep:   KeepConfig{Enabled: &enabled, Interval: defaultKeepAlivePeriod.String()},
 	}
+}
+
+// EnsureProfileIDs fills a missing id and breaks a duplicate, and reports
+// whether anything changed. The caller persists the file, so an upgraded
+// settings file gets ids once instead of a new one on every load. A hand-edited
+// id wins unless another profile already owns it.
+func (c *Config) EnsureProfileIDs() bool {
+	changed := false
+	used := make(map[string]bool, len(c.Profiles))
+	for index := range c.Profiles {
+		profile := &c.Profiles[index]
+		id := profile.ID
+		if strings.TrimSpace(id) == "" || used[id] {
+			id = newProfileID()
+			for used[id] {
+				id = newProfileID()
+			}
+			profile.ID = id
+			changed = true
+		}
+		used[id] = true
+	}
+	return changed
 }
 
 // Default returns the settings a fresh install uses.
@@ -427,7 +461,9 @@ func Load() (Config, error) {
 	return LoadFile(path)
 }
 
-// LoadFile reads one settings file. Missing files yield Default().
+// LoadFile reads one settings file. Missing files yield Default(). Profile ids
+// are left as read; LoadOrCreate repairs them and persists the result, because
+// an id minted for a read-only load would be lost on the next launch.
 func LoadFile(path string) (Config, error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -489,9 +525,13 @@ func LoadOrCreate(path string) (Config, string, error) {
 	if err != nil {
 		return Config{}, path, err
 	}
-	if cfg.EnsureIdentity() {
+	changed := cfg.EnsureIdentity()
+	if cfg.EnsureProfileIDs() {
+		changed = true
+	}
+	if changed {
 		if err := SaveFile(path, cfg); err != nil {
-			return Config{}, path, fmt.Errorf("save the install identity: %w", err)
+			return Config{}, path, fmt.Errorf("save the generated settings: %w", err)
 		}
 	}
 	return cfg, path, nil
@@ -507,10 +547,13 @@ func Save(cfg Config) error {
 	return SaveFile(path, cfg)
 }
 
-// SaveFile writes one settings file atomically.
+// SaveFile writes one settings file atomically. The written copy carries an id
+// for every profile, so a hand-built configuration cannot leave the file
+// without one; NewProfile and LoadOrCreate already supply them.
 func SaveFile(path string, cfg Config) error {
 	cfg.Version = CurrentVersion
 	cfg.normalise()
+	cfg.EnsureProfileIDs()
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
@@ -648,6 +691,7 @@ func (c *Config) DuplicateProfile(index int, newName string) (int, error) {
 		return -1, fmt.Errorf("profile %q already exists", newName)
 	}
 	clone := c.Profiles[index]
+	clone.ID = newProfileID()
 	clone.Name = newName
 	clone.Keep.Targets = append([]string(nil), clone.Keep.Targets...)
 	if clone.Keep.Enabled != nil {

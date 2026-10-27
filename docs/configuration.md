@@ -13,7 +13,7 @@ goTrust 的设置保存在 `config.toml`，位置随系统：
 ## 完整示例
 
 ```toml
-version = 2
+version = 3
 active_profile = "默认"
 
 [app]
@@ -36,6 +36,7 @@ verbose = false
 device_id = "…"
 
 [[profiles]]
+id = "…"
 name = "默认"
 
 [profiles.server]
@@ -64,7 +65,7 @@ client_data_path = ""
 
 | 字段 | 说明 |
 |---|---|
-| `version` | 配置格式版本，当前为 2。比程序新的版本会被拒绝读取，而不是按旧格式改写 |
+| `version` | 配置格式版本，当前为 3。比程序新的版本会被拒绝读取，而不是按旧格式改写 |
 | `active_profile` | 当前使用的配置名，对应某个 `[[profiles]]` 的 `name` |
 
 ### `[app]`
@@ -118,6 +119,7 @@ client_data_path = ""
 
 | 字段 | 说明 |
 |---|---|
+| `id` | 配置的稳定标识。首次读取时生成，重命名不变；只在本地使用，不发给网关。复制到另一个配置会被改成新的值 |
 | `name` | 配置名，也是设置窗口里显示的名字 |
 | `server.address` / `server.port` | 网关地址和端口 |
 | `auth.username` | 用户名 |
@@ -134,4 +136,4 @@ client_data_path = ""
 
 ## 兼容性
 
-旧版 JSON 格式（`config.json`）不做迁移，存在也直接忽略，可以删掉。配置里出现程序不认识的键会被拒绝：拼错的键不应该悄悄退回默认值。
+旧版 JSON 格式（`config.json`）不做迁移，存在也直接忽略，可以删掉。version 2 的文件在第一次读取时补上每份配置的 `id` 并写回 version 3；`id` 是本地标识，不会发给网关。配置里出现程序不认识的键会被拒绝：拼错的键不应该悄悄退回默认值。

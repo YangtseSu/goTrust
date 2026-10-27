@@ -1639,6 +1639,29 @@
   and the sync/backup note in `docs/configuration.md`) stay unapplied until
   asked.
 
+### 2026-10-27: stable profile id (schema 3)
+
+- **Status:** complete
+- Actions taken:
+  - `Profile.ID` (`[[profiles]].id`) and `CurrentVersion` 2 → 3; `NewProfile`
+    mints (`crypto/rand.Text`), `DuplicateProfile` mints a fresh one,
+    `LoadOrCreate` fills a missing or duplicate id once and persists it, and
+    `SaveFile` guarantees every written profile carries one
+  - docs: the example, field table and v2 upgrade note in
+    `docs/configuration.md`
+  - tests: default/uniqueness, duplicate copy, save/load + rename, v2 upgrade,
+    duplicate repair, hand-built profile, and the settings rename
+- Verification:
+  | Check | Result |
+  |-------|--------|
+  | `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` | green |
+  | `reuse lint` | compliant |
+  | CLI smoke on a v2 file (`--status`) | wrote `version = 3`, a profile id and the device id; the id stayed the same on the second run; exit 3 (profile not in use) |
+- Files created/modified: `core/config/config.go`, `core/config/config_test.go`,
+  `ui/settings_test.go`, `docs/configuration.md`, planning files
+- Next: no scheduled implementation phase; the keyring stays closed and Phase
+  22's native endpoint reporting stays off until a gateway accepts it.
+
 ## Error Log
 
 | Timestamp | Error | Attempt | Resolution |
@@ -1651,8 +1674,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 20 is closed (not doing): credentials stay in the 0600 settings file, written only when the user ticks 保存密码. No phase is active |
+| Where am I? | Phase 23 is complete: every profile has a stable local id and the schema is 3. Phase 20 is closed (not doing): credentials stay in the 0600 settings file, written only when the user ticks 保存密码. No phase is active |
 | Where am I going? | No scheduled phase. Remaining items: Phase 22's native endpoint reporting (off until a gateway accepts it), Phase 8 (dae, deferred), Phase 17's manual expiry→reconnect case, and Phase 18's upstream glib item |
 | What's the goal? | a daily-use aTrust tray client |
 | What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects; the 2026-10-27 credential study adds that a keyring only covers backups/sync/copies, and a Linux-only version would leave macOS/Windows on the file |
-| What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package, the forced/voluntary password change, and the portal terminal list with device trust; a full review with five reproduced defects, recorded as Phase 17; and the keyring phase closed without code, with its research and reopen conditions recorded |
+| What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package, the forced/voluntary password change, and the portal terminal list with device trust; a full review with five reproduced defects, recorded as Phase 17; the keyring phase closed without code, with its research and reopen conditions recorded; and the stable profile id with schema 3 |

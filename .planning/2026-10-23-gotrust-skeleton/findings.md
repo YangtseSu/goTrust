@@ -794,6 +794,8 @@ The reset flow uses these request shapes:
 Phase 20 (keyring credential storage) is closed without an implementation. The
 evidence, the design that was settled and the reopen conditions are recorded
 here so a future request starts from measurements instead of repeating them.
+The stable profile id from that design landed separately as Phase 23; the
+credential store did not.
 
 ### The posture today
 
