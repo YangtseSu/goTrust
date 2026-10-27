@@ -473,3 +473,28 @@
     without the `sing-tun` module) was installed and its live login passed. The
     gateway-facing half of the gate is closed.
   - `gotrust-cli --status` starts and answers with code 3, as documented.
+
+## Session: 2026-10-27 (DNS server removal)
+
+- **Status:** Phase 7 code complete; the live-login gate needs a gateway
+- Actions taken:
+  - deleted `service/dns.go` and `internal/zcdns`; `ServeDNS` had no caller and
+    the interface's only reader left with TUN mode;
+  - dropped `SetupResolve` from `stack.Stack` and from both implementations,
+    which also removed the unused `resolve` field, and dropped the
+    `NewDnsServer` call in `core/session`;
+  - `dialer_test.go` lost the method and the `zcdns` import;
+  - `docs/development.md` gained "Name resolution": no listener, the resolver's
+    four steps, the 3600 s cache, the gateway's second server or the system
+    resolver as fallback, and IPv4 only over the tunnel;
+  - `PROVENANCE.md` records the dropped package and the DNS server half of
+    `service`.
+- Evidence:
+  - `go mod why -m github.com/miekg/dns` answers "main module does not need", and
+    `go mod tidy` also dropped the `x/mod`, `x/sync` and `x/tools` that module
+    pulled in.
+  - build, vet, gofmt, `go test ./...`, `reuse lint` 183/183, and both binaries
+    cross-built for darwin/amd64, darwin/arm64, windows/amd64, windows/arm64 and
+    linux/arm64.
+  - nothing listens on port 53 in either front-end: the removed server was the
+    only binder, and no test replaced it.

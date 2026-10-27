@@ -16,14 +16,18 @@ the gateway has already accepted.
 
 ## Next Step
 
-Phase 7: delete the dead DNS server code. `internal/zcdns` lost its only reader
-when TUN mode went, `ServeDNS` has no caller and nothing listens today, so the
-package, `service/dns.go`, the `SetupResolve` methods in both stacks and the
-`NewDnsServer` call in `core/session` go. The resolver stays as the only DNS
-path, and its bounds move into `docs/development.md`.
+Phase 8: replace the deprecated address module. `inet.af/netaddr` is deprecated
+in favour of `net/netip`; `IPSet`, `IPSetBuilder`, `MustParseIP` and
+`MustParseIPPrefix` appear in `client/atrust/{client,parse}.go`,
+`client/client.go` and one test stub, and a small in-tree prefix set that takes
+prefixes, ranges and single addresses and answers contains replaces them.
 
 ## Current Phase
 
+Phase 7 is complete. `service/dns.go` and `internal/zcdns` are deleted, the
+`SetupResolve` method is gone from the stack interface and both implementations,
+`core/session` no longer builds a DNS server, and `docs/development.md` records
+the resolver's order and bounds. `miekg/dns` left the module graph with it.
 Phase 6 is complete. The TUN-era subtree is gone: `underlay`,
 `internal/platformdialer` and `internal/keylog` are deleted, the three one-shot
 wrappers that were their only entry points are deleted, `client.UnderlayDialer`
@@ -259,15 +263,20 @@ The resolver stays; the server around it goes. The only reader of
 `zcdns.LocalServer` was `stack/tun`, dropped with TUN mode, and `ServeDNS` has
 no caller. Nothing listens today, so nothing can regress.
 
-- [ ] Delete `core/atrust/service/dns.go`, `core/atrust/internal/zcdns`, the
+- [x] Delete `core/atrust/service/dns.go`, `core/atrust/internal/zcdns`, the
   `SetupResolve` method in both stacks, and the `NewDnsServer` call in
   `core/session`.
-- [ ] Keep the resolver as the only DNS path and write its bounds into
+- [x] Keep the resolver as the only DNS path and write its bounds into
   `docs/development.md`: the gateway's server over the tunnel with a TCP
   fallback, the portal's own name entries, a 3600 s cache, the gateway's second
   server or the system resolver as the fallback, and IPv4 only.
 - **Gates:** build, vet, `go test ./...`, `reuse lint`, and one live login that
   resolves an internal name through the proxy.
+- **Status:** code complete. `miekg/dns` left with the server, so the module is
+  gone from `go.mod` together with the `x/mod`, `x/sync` and `x/tools` it
+  pulled in. Local gates ran: build, vet, gofmt, `go test ./...`,
+  `reuse lint` 183/183, and both binaries cross-built for the five targets. The
+  live login gate needs a gateway.
 
 ### Phase 8: Replace the deprecated address module
 
@@ -291,12 +300,11 @@ chased first.
 |---|---|---|
 | `egoist/mygo` | v0.6.4 | v0.7.1 |
 | `gvisor.dev/gvisor` | pseudo 2026-01-29 | pseudo 2026-10-27 |
-| `miekg/dns` | v1.1.72 | v1.1.73 |
 | `things-go/go-socks5` | v0.1.1 | v0.1.3 |
 | `golang.org/x/sys` | v0.48.0 | v0.49.0 |
 | `ebitengine/purego` | v0.11.1 | v0.11.2 |
-| `golang.org/x/image`, `x/mod`, `x/net`, `x/time`, `x/tools`, `x/exp` | — | one minor newer each |
-| `BurntSushi/toml`, `pquerna/otp`, `fsnotify`, `go-ole`, `go-text`, `btree`, `barcode` | — | already latest |
+| `golang.org/x/image`, `x/net`, `x/time`, `x/exp` | — | one minor newer each |
+| `BurntSushi/toml`, `pquerna/otp`, `go-text`, `btree`, `barcode` | — | already latest |
 | `patrickmn/go-cache` | v2.1.0+incompatible | no newer tag: the project is dormant, so it is replaced (see below) |
 
 - [ ] `go get -u ./...`, `go mod tidy`, `go mod verify`.
