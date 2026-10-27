@@ -8,15 +8,22 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 
 	"github.com/YangtseSu/goTrust/internal/gui"
+	"github.com/YangtseSu/goTrust/internal/version"
 )
 
 func main() {
 	configPath := flag.String("config", "", "TOML settings file (default: the user config directory); the stored account material lives beside it")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 
+	if *showVersion {
+		fmt.Println("goTrust " + version.Version)
+		return
+	}
 	if err := gui.Run(*configPath); err != nil {
 		log.Fatalf("goTrust: %v", err)
 	}

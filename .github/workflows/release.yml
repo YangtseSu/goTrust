@@ -1,0 +1,163 @@
+# SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# One release per tag. The tag names the version the binaries report; the
+# release carries prebuilt archives for Linux, macOS and Windows plus a
+# checksum file. Nothing is code-signed: macOS and Windows builds are
+# unverified by anyone yet, and a signature would not change that.
+#
+# Linux: amd64 and arm64, built from the Ubuntu runner.
+# macOS: one universal binary, two cross-builds joined with lipo.
+# Windows: amd64 only; ARM desktops are untested, so they are not published.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  # A tag can point at a commit that never ran on main. Repeat the checks
+  # before anything is published.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - run: go build ./...
+      - run: go vet ./...
+      - run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted" >&2
+            exit 1
+          fi
+      - run: go test ./...
+
+      - name: reuse
+        run: pipx run reuse lint
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            archive: tar
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            archive: tar
+          - os: ubuntu-latest
+            goos: windows
+            goarch: amd64
+            archive: zip
+          - os: macos-latest
+            goos: darwin
+            goarch: universal
+            archive: tar
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ github.ref_name }}
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      ARCHIVE: ${{ matrix.archive }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${VERSION#v}"
+          ext=""
+          if [ "$GOOS" = windows ]; then ext=".exe"; fi
+          flags=(-trimpath -ldflags "-s -w -X github.com/YangtseSu/goTrust/internal/version.Version=$version")
+          # A GUI-subsystem Windows binary opens no console window. The CLI
+          # keeps its console so its output is visible.
+          gui_flags=("${flags[@]}")
+          if [ "$GOOS" = windows ]; then
+            gui_flags=(-trimpath -ldflags "-s -w -H windowsgui -X github.com/YangtseSu/goTrust/internal/version.Version=$version")
+          fi
+
+          mkdir -p build dist
+          if [ "$GOARCH" = universal ]; then
+            for arch in amd64 arm64; do
+              GOARCH="$arch" CGO_ENABLED=0 go build "${gui_flags[@]}" -o "build/gotrust-$arch" ./cmd/gotrust
+              GOARCH="$arch" CGO_ENABLED=0 go build "${flags[@]}" -o "build/gotrust-cli-$arch" ./cmd/gotrust-cli
+            done
+            lipo -create build/gotrust-amd64 build/gotrust-arm64 -output "build/gotrust$ext"
+            lipo -create build/gotrust-cli-amd64 build/gotrust-cli-arm64 -output "build/gotrust-cli$ext"
+          else
+            CGO_ENABLED=0 go build "${gui_flags[@]}" -o "build/gotrust$ext" ./cmd/gotrust
+            CGO_ENABLED=0 go build "${flags[@]}" -o "build/gotrust-cli$ext" ./cmd/gotrust-cli
+          fi
+
+          root="gotrust_${version}_${GOOS}_${GOARCH}"
+          mkdir -p "dist/$root" "dist/${root}-cli"
+          cp "build/gotrust$ext" LICENSE "dist/$root/"
+          cp "build/gotrust-cli$ext" LICENSE "dist/${root}-cli/"
+          # The desktop entry and the icons belong to the Linux archive: a
+          # package installs them, and a tarball should carry the same files.
+          if [ "$GOOS" = linux ]; then
+            mkdir -p "dist/$root/data"
+            cp -r data/gotrust.desktop data/icons "dist/$root/data/"
+          fi
+
+          if [ "$ARCHIVE" = zip ]; then
+            (cd dist && zip -qr "$root.zip" "$root" && zip -qr "${root}-cli.zip" "${root}-cli")
+          else
+            (cd dist && tar -czf "$root.tar.gz" "$root" && tar -czf "${root}-cli.tar.gz" "${root}-cli")
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.goos }}-${{ matrix.goarch }}-zip
+          path: dist/*.zip
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz *.zip > checksums.txt
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --generate-notes \
+            --title "goTrust $GITHUB_REF_NAME" \
+            dist/*

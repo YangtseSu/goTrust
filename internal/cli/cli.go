@@ -24,6 +24,7 @@ import (
 	"github.com/YangtseSu/goTrust/core/prompt/web"
 	gotrustproxy "github.com/YangtseSu/goTrust/core/proxy"
 	"github.com/YangtseSu/goTrust/core/session"
+	"github.com/YangtseSu/goTrust/internal/version"
 )
 
 // Exit codes. A supervisor or a script can tell a finished job from a failed
@@ -51,6 +52,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	asJSON := flags.Bool("json", false, "encode the reported grant and status as JSON")
 	printURL := flags.Bool("print-url", false,
 		"print the URL of an interactive login step instead of opening a browser")
+	showVersion := flags.Bool("version", false, "print the version and exit")
 
 	switch err := flags.Parse(args); {
 	case errors.Is(err, flag.ErrHelp):
@@ -65,6 +67,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if *status && *printResources {
 		fmt.Fprintf(stderr, "%s: -status and -print-resources are separate commands\n", program)
 		return ExitUsage
+	}
+	if *showVersion {
+		// Print the version before loading the settings: it has to work on a
+		// host that has no configuration yet.
+		fmt.Fprintf(stdout, "%s %s\n", program, version.Version)
+		return ExitOK
 	}
 
 	cfg, path, err := config.LoadOrCreate(*configPath)
