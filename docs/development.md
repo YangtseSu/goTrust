@@ -1,0 +1,140 @@
+# Development
+
+Everything here is for people working on the code. Users want the README, the
+[configuration reference](configuration.md) and the [UI smoke recipe](agent-ui-testing.md).
+
+## Status
+
+The session layer, local proxies, tray, in-window prompts, the settings window,
+profiles, logging, autostart, the granted-resource list and the `gotrust-cli`
+front-end are implemented. The protocol path was verified against a real
+gateway; the settings, profile, startup and resource paths are covered by tests
+and headless smoke runs. The current phase and its history live in `.planning/`.
+
+## Build and checks
+
+```sh
+go build ./...
+go test ./...
+go vet ./...
+gofmt -l .
+reuse lint
+```
+
+Go 1.27 or later. Neither binary needs cgo: the tray app loads GTK through
+purego at runtime on Linux, and macOS/Windows use mygo's native backends. The
+tree is REUSE-compliant (AGPL-3.0-or-later, with the imported layer annotated in
+`REUSE.toml`); `reuse lint` must stay clean.
+
+Two binaries:
+
+```sh
+go build -o gotrust ./cmd/gotrust         # tray app
+go build -o gotrust-cli ./cmd/gotrust-cli # headless front-end
+```
+
+`go test ./...` includes `internal/guards`, which fails if a core package
+reaches mygo or purego, if either front-end reaches the other or `ui/`, if a
+front-end imports the protocol layer instead of `core/session`.
+
+## Layout
+
+- `core/`: application packages; nothing here imports mygo or purego.
+  - `core/atrust/`: the aTrust protocol layer, imported from `zju-connect`.
+    `core/atrust/PROVENANCE.md` records the source commit and what was left
+    out. Do not edit the imported files for style, and keep the relative layout
+    so a diff against the source still reads.
+  - `core/config/`, `core/session/`, `core/proxy/`, `core/logging/`,
+    `core/profilelock/`, `core/prompt/web/`: settings, login/session, listeners,
+    log file, per-profile lock, and the CLI's loopback prompt pages.
+- `internal/gui/`: the tray front-end (windows, tray, event loop, prompts).
+- `internal/cli/`: the headless front-end.
+- `cmd/gotrust/`, `cmd/gotrust-cli/`: entry points.
+- `ui/`: pure view functions and the testable `ui.NewTester` views.
+- `data/`: desktop entry, icons, and the Go file that embeds the tray PNG.
+
+## Why the protocol layer is in the tree
+
+The protocol implementation comes from
+[`zju-connect`](https://github.com/Mythologyli/zju-connect), which already
+speaks aTrust, including the session-lifecycle and keep-alive fixes this app
+needs. It is imported once at a recorded commit and kept here, so a protocol
+change and its consumer land in one commit instead of a pin bump per change.
+`core/atrust/PROVENANCE.md` names the source, the commit and the dropped
+packages; the imported tests are the acceptance gate for the import.
+
+## Release
+
+A release is one signed tag on `main`:
+
+```sh
+git tag -s v0.1.0 -m "goTrust 0.1.0"
+git push origin v0.1.0
+```
+
+`.github/workflows/release.yml` repeats the checks on the tagged commit, builds
+the archives, and creates the GitHub release with generated notes:
+
+| asset | build |
+|---|---|
+| `gotrust_<ver>_linux_{amd64,arm64}.tar.gz` | binary, desktop entry, icons, licence |
+| `gotrust_<ver>_darwin_universal.tar.gz` | amd64 and arm64 joined with `lipo` |
+| `gotrust_<ver>_windows_amd64.zip` | GUI subsystem, so no console window |
+| `gotrust-cli_<ver>_<os>_<arch>.*` | the headless binary, console subsystem |
+| `checksums.txt` | sha256 of every archive |
+
+The version a binary reports is injected at link time into
+`internal/version.Version`; a source checkout says `devel`, and
+`gotrust --version` / `gotrust-cli --version` print it.
+
+Nothing is code-signed. macOS and Windows builds pass the cross-build matrix
+but have never been run on those systems, so a signature would only hide that.
+macOS users get Gatekeeper's unknown-developer refusal, Windows users get
+SmartScreen's prompt; the release notes say so and nothing more.
+
+## Packaging
+
+The Arch recipe lives outside this repository, in
+`github.com/YangtseSu/arch-pkgs` (`gotrust-git`): one checkout builds
+`gotrust-git` (tray app; `gtk3`, `libayatana-appindicator`,
+`hicolor-icon-theme`) and `gotrust-cli-git` (headless; glibc only), both with
+`-trimpath`, PIE, FULL RELRO and the version injected. `makepkg -fC` from that
+directory, then `namcap` on both packages: the only warnings are libresolv from
+the external linker and the two dlopen-only GUI dependencies.
+
+The desktop entry and icons come from `data/`, so a package installs exactly
+what the repository holds. The tray PNG is rendered from the scalable SVG; after
+editing the SVG:
+
+```sh
+go generate ./...   # needs rsvg-convert
+```
+
+## Session and keep-alive behaviour
+
+A session belongs to its connection and cannot be reused. A stored sid ticket
+is device material, not a login: after 断开, or after the portal ends the
+session, the next connection logs in again. The gateway rejects a ticket
+exchange while logged out, so 启动后自动连接 requires a saved password.
+
+The keep-alive sends a real HTTP request: a `https://` target is tunnelled with
+CONNECT and does not count as application traffic, so it does not renew the
+session. Manual targets are probed before derived candidates, and the interval
+has a 10 s floor.
+
+## Password change requests
+
+Both password changes reuse the login password's encryption and the shared
+request parameters, so the session's own key and counters are what the portal
+expects. A forced change goes through the portal's forced-change endpoint; the
+voluntary reset asks the portal's policy before it submits. Refreshing the
+login configuration before encrypting replaces that state and is rejected.
+
+## CLI prompt pages
+
+`gotrust-cli` asks every interactive question through `core/prompt/web`: one
+`127.0.0.1` page per question, under a fresh single-use token, served only while
+the login waits. The URL goes to stderr (and, with `--print-url`, nowhere else);
+the page is not logged, accepts one answer, rejects a request whose `Host` is
+not a loopback name, loads no external assets, and closes with the login
+attempt's context. A page works over SSH port forwarding.

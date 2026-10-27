@@ -23,8 +23,8 @@ protocol layer instead of `core/session`.
 `reuse lint` must stay clean; every new Go file starts with the SPDX header,
 except in the imported tree, which is annotated in `REUSE.toml` instead of being
 edited.
-The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
-`makepkg -fC`.
+The Arch packages live in `github.com/YangtseSu/arch-pkgs` (`gotrust-git/`);
+build them with `makepkg -fC` from that directory.
 
 ## Layout
 
