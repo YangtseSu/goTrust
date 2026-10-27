@@ -498,3 +498,30 @@
     linux/arm64.
   - nothing listens on port 53 in either front-end: the removed server was the
     only binder, and no test replaced it.
+
+## Session: 2026-10-27 (address module removal)
+
+- **Status:** Phase 8 code complete; the live-login gate needs a gateway
+- Actions taken:
+  - the review's premise did not hold: `IPSet` had no reader anywhere in the
+    tree, in the working copy or in the repository history. The TUN stack was
+    its only consumer and left in Phase 6, so the accessor was deleted instead
+    of reimplemented on `net/netip`. A replacement prefix set would have been
+    dead code from the moment it landed;
+  - removed `IPSet` from `core/atrust/client.Client`, the `ipSet` field and
+    method from `atrust.Client`, the `IPSetBuilder` setup and every add/remove
+    in `parseResource`, and the method from the `core/session` test stub;
+  - destination matching is unchanged: `ipresource.Index` already answers
+    containment over the `IPMin`/`IPMax` entries and applies the port and
+    protocol rules. The deleted builder also excluded node addresses from the
+    set, which only mattered for TUN routing loops, never for resource matching.
+- Evidence:
+  - `go mod why -m` answers "main module does not need" for `inet.af/netaddr`,
+    `go4.org/intern` and `go4.org/unsafe/assume-no-moving-gc`;
+  - build, vet, gofmt, `go test ./...`, `reuse lint` 183/183, and both binaries
+    cross-built for darwin/amd64, darwin/arm64, windows/amd64, windows/arm64 and
+    linux/arm64;
+  - `parse_resource_test.go` and `node_test.go` exercise every branch the
+    builder shared: CIDR prefixes, address ranges, single addresses and DNS
+    rules. The granted-resource entries they assert are the same entries the
+    lists render, and they did not change.

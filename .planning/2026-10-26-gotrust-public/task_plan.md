@@ -16,14 +16,18 @@ the gateway has already accepted.
 
 ## Next Step
 
-Phase 8: replace the deprecated address module. `inet.af/netaddr` is deprecated
-in favour of `net/netip`; `IPSet`, `IPSetBuilder`, `MustParseIP` and
-`MustParseIPPrefix` appear in `client/atrust/{client,parse}.go`,
-`client/client.go` and one test stub, and a small in-tree prefix set that takes
-prefixes, ranges and single addresses and answers contains replaces them.
+Phase 9: refresh every declared dependency. The TUN-era modules and the
+deprecated address module are gone, so the module list is what the tree really
+uses; the refresh covers the remaining direct modules, the indirect minors, and
+the three workflow actions that are three majors behind.
 
 ## Current Phase
 
+Phase 8 is complete. The deprecated address module is gone: the `IPSet` accessor,
+its builder and the interface method are deleted rather than reimplemented on
+`net/netip`, because the set's only reader left with TUN mode and destination
+matching already runs on `ipresource.Index`. `inet.af/netaddr` and the two
+`go4.org` modules left the graph with it.
 Phase 7 is complete. `service/dns.go` and `internal/zcdns` are deleted, the
 `SetupResolve` method is gone from the stack interface and both implementations,
 `core/session` no longer builds a DNS server, and `docs/development.md` records
@@ -278,18 +282,28 @@ no caller. Nothing listens today, so nothing can regress.
   `reuse lint` 183/183, and both binaries cross-built for the five targets. The
   live login gate needs a gateway.
 
-### Phase 8: Replace the deprecated address module
+### Phase 8: Remove the deprecated address module
 
-`inet.af/netaddr` is deprecated upstream in favour of `net/netip`. The tree uses
-`IPSet`, `IPSetBuilder`, `MustParseIP` and `MustParseIPPrefix` in
-`client/atrust/{client,parse}.go`, `client/client.go` and one test stub.
+`inet.af/netaddr` is deprecated upstream in favour of `net/netip`. Its `IPSet`
+answered "is this destination inside the VPN's address set" for the TUN stack;
+after TUN mode was dropped the set had no reader, so the accessor, its builder
+and the interface method go rather than being reimplemented on `net/netip`.
+Destination matching already runs on `ipresource.Index`, which folds the same
+`IPMin`/`IPMax` entries and additionally applies the port and protocol rules.
 
-- [ ] Replace those with `net/netip` and a small prefix set that takes prefixes,
-  ranges and single addresses and answers contains.
-- [ ] `go mod tidy` drops `inet.af/netaddr`, `go4.org/intern` and
+- [x] Delete `IPSet` from `core/atrust/client.Client`, the `ipSet` field and the
+  method, the builder in `parseResource` (prefixes, ranges, single addresses and
+  the node-address exclusion), and the session test stub's method.
+- [x] `go mod tidy` drops `inet.af/netaddr`, `go4.org/intern` and
   `go4.org/unsafe/assume-no-moving-gc`.
 - **Gates:** resolver and resource-parsing tests, one live login, and the
   granted-resource list rendering the same entries.
+- **Status:** code complete. `go mod why -m` answers "main module does not need"
+  for all three modules. Local gates ran: build, vet, gofmt, `go test ./...`,
+  `reuse lint` 183/183, and both binaries cross-built for the five targets. The
+  live login gate needs a gateway.
+- **Risk:** the only changed behaviour is that no set is accumulated during
+  parsing; nothing read it, so no decision can change.
 
 ### Phase 9: Refresh every declared dependency
 
