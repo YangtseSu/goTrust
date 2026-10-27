@@ -788,3 +788,119 @@ The reset flow uses these request shapes:
   `reportEnv` when the portal issued no ticket with the change. The voluntary
   path is `Client.ResetPassword` / `PasswordStrategy` / `CheckWeakPassword`,
   gated on the live session.
+
+## Research 2026-10-27: credential storage decision (Phase 20 closed)
+
+Phase 20 (keyring credential storage) is closed without an implementation. The
+evidence, the design that was settled and the reopen conditions are recorded
+here so a future request starts from measurements instead of repeating them.
+
+### The posture today
+
+- `store_password` defaults to false (`NewProfile` leaves `StorePass` zero).
+  When it is on, `password` and `totp_secret` are written to `config.toml`
+  (0600, atomic replace); `ForDisk` is the single save filter. A profile that
+  does not store keeps the credential in memory for one run.
+- `client_data*.json` (cookies, sign key, sid ticket) sits beside the settings
+  with the same 0600 and atomic write. `config.toml`, `client_data*.json`,
+  `resources.json` and logs are gitignored; the log redacts credential headers.
+- `Auth.Password` is read from the in-memory settings at every login
+  (`session.go:410`), and `hasStoredPassword` (`reconnect.go:144`) plus
+  `decideAutoConnect` (`gui.go:1455`) need it in memory; a keyring backend
+  would either hydrate the config at load or add a resolver to the session
+  options.
+
+### Backend evidence
+
+- **`secret-tool` (libsecret) probed on this machine (2026-10-27).**
+  `store`/`lookup`/`clear` with `service`/`scope`/`key` round-trips with the
+  login collection unlocked; a missing item exits 1 with empty stderr; a
+  missing session bus exits 1 after a `dbus-launch --autolaunch` failure. The
+  locked-collection path was not exercised: [[INFERENCE]] libsecret asks the
+  provider's agent, so the wait is bounded only by the caller's context.
+  `exec.CommandContext` gives a real timeout and the secret travels on stdin,
+  not argv. Linux-only, no new Go module, adds a `libsecret` runtime
+  dependency.
+- **`go-keyring` v0.2.8 (read from the module source).** Linux uses D-Bus
+  Secret Service (`godbus`); `Get`, `Set` and `Delete` all call `Unlock` first,
+  and `handlePrompt` waits for a prompt signal with **no context and no
+  deadline**, so a locked collection or a host without a prompt agent can block
+  the caller forever. Items carry only `service` + `username` attributes, so a
+  config-path/profile/key scope must be encoded into two strings. It would add
+  go-keyring, `godbus`, `shellescape` and `wincred` to the module graph.
+- **macOS.** `/usr/bin/security` is the only no-cgo route:
+  `add-generic-password -w <password>` puts the secret in the child's argv,
+  visible in `ps` (the same exposure `go-keyring`'s darwin backend has). A
+  Security.framework binding avoids that, but every release build sets
+  `CGO_ENABLED=0` (`.github/workflows/release.yml`), so a cgo package is
+  excluded without changing the build pipeline.
+- **Windows.** `cmdkey` can add, list and delete but cannot read a password
+  back, so it cannot back a credential store. Credential Manager is reachable
+  through `CredRead`/`CredWrite`; `github.com/danieljoos/wincred` v1.2.2 is
+  pure Go (no cgo) and survives the current cross-build, but no binary has been
+  run on Windows. DPAPI (`CryptProtectData`) would be a third shape: encrypt
+  the secret in place, with no Credential Manager entry.
+
+### Design that was settled (preserved, not implemented)
+
+- `Profile.ID`: a stable id generated once (`crypto/rand.Text`), persisted with
+  the settings (schema version 3), minted by `NewProfile`, replaced by
+  `DuplicateProfile`, repaired by `LoadOrCreate` for old or hand-copied files.
+  Scope = absolute config path + `#` + id, so `--config` cannot read the real
+  account and a rename keeps the item; moving the file loses the link.
+- `core/credentials`: `Store` (`Get`/`Set`/`Delete` with a context),
+  `ErrNotFound`/`ErrUnavailable`/`ErrLocked`/`ErrTimeout`, `Open` (probe,
+  hydrate, migrate), `Sync` (write the difference, return the disk copy),
+  `Erase` (after the settings file is written). Keys `password` and `totp`; the
+  keyring attributes are `service=gotrust`, `scope`, `key`.
+- Disk policy: keyring mode clears `StorePass` secrets from the file; file mode
+  keeps today's `ForDisk()`. Migration writes both items and rewrites the file
+  only when every write succeeded; a failure keeps the plaintext and retries
+  next start; an unavailable store puts the whole run in file mode.
+- Failure handling: read 5 s, write 10-30 s, serialize store calls; a timed-out
+  write may still complete in the provider after the child is killed, so the
+  next start converges. A locked collection leaves the password unavailable,
+  the UI reports it, and no plaintext is written.
+- Platform plan: Linux `secret-tool`; darwin and windows report unavailable and
+  use the file until `security`/`wincred` can be tested on hardware.
+- Tests: a fake store for migration, fallback, locked, rename and delete; an
+  injected command runner for argv/stdin/exit classification; and changed
+  assertions in `gui/password_test.go`, `gui/prompt_test.go` and `cli_test.go`
+  that currently read the password back from the file.
+
+### Why it is not doing
+
+1. **Narrow threat gain.** 0600 already blocks other local users; a same-user
+   process reads the unlocked keyring and the process memory; root reads
+   everything. The new protection is backups, cloud sync and copied configs.
+2. **The at-rest story stays mixed.** `client_data*.json` carries cookies and
+   session material in the same 0600 directory, so a backup still contains
+   sensitive data either way; the keyring removes one class of secret.
+3. **It lands on the credential path at the end.** Migration, erase and the
+   forced-change rewrite are the code that can lose a stored password or fail
+   to persist a changed one; that risk is not worth the remaining gain now.
+4. **Cross-platform would be half a feature.** Linux keyring, macOS with an
+   argv exposure or cgo, Windows with an untested backend; the macOS/Windows
+   binaries are cross-built and have never run on hardware, and the docs would
+   have to describe three behaviours.
+5. **Permanent maintenance.** A subprocess, provider differences, locked and
+   no-agent paths, one more packaging dependency, and the docs that go with it.
+
+### Reopen conditions
+
+Revisit if the target users sync or back up `~/.config`, a user asks for it, or
+a security review requires it. The minimum slice is Linux-only `secret-tool` +
+file fallback, in five commits: stable profile id (schema 3) → `credentials`
+package and fake tests → hydrate/migrate → GUI save and erase → CLI and docs.
+Do not add macOS/Windows backends until the binaries are exercised on those
+systems.
+
+### Cheap follow-ups, not applied
+
+These do not need the feature and were deliberately left out of the closure
+because they change user-facing behaviour:
+
+- Say "明文" in the settings label (today it only says 文件权限 0600).
+- In `docs/configuration.md`, tell users who sync or back up the config
+  directory to exclude `config.toml` and `client_data*.json`, and that not
+  ticking 保存密码 means no auto-connect/reconnect.

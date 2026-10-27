@@ -12,23 +12,19 @@ package, and a UI polish pass.
 
 ## Next Step
 
-Phase 19 (password change, forced and voluntary) is complete: the live gateway
-forced it on a new account's first login, which uses the same `forced-change`
-flow as the 90-day expiry. Phase 20 (keyring, backend decided at
-  execution) is next.
-Research is in `findings.md`. Phase 17 is closed apart from the manual
-expiry→reconnect case; a live 断开 exposed a fatal packet-stack panic, fixed in
-that fix (package `r44`).
+No implementation phase is active. Phase 20 (keyring credential storage) was
+closed on 2026-10-27 without an implementation: credentials stay in the 0600
+settings file, and the evidence plus the reopen conditions are in
+`findings.md`. Phase 8 (dae export) is superseded by Phase 10 of the public
+plan.
 
 ## Current Phase
 
-Phase 19 is complete. The live trigger was a new account's first login
-(`forced-change`, code 75500401), the same flow the 90-day policy uses: the
-change, the credential rewrite and the recovery after the portal closed the
-pending chain all ran against the gateway.
-Phase 17 is complete apart from the manual expiry→reconnect case, Phase 16 is
-closed, Phase 8 (dae export) is superseded by Phase 10 of the public plan, and
-Phase 18's double-click waits on mygo.
+Phase 20 is not doing and no phase is active. The remaining items are listed
+but not scheduled: Phase 22's native endpoint reporting (off until a gateway
+accepts a native session), Phase 17's manual expiry→reconnect case, and Phase
+18's upstream glib item. The tray app, the CLI and the packages are the
+delivered surface; new work starts from new scope.
 
 ## Phases
 
@@ -518,10 +514,10 @@ policy). Endpoints and the signal are in `findings.md`.
       (`{oldPassword,newPassword}`) from the settings window, policy
       check via `portal/public/policy-probe`; only the profile that owns the
       live session is offered
-- [x] After success: rewrite the stored credential (config today, keyring after
-      Phase 20) and continue; the portal is expected to end other terminals'
-      sessions. A forced change continues the same login; the online reset keeps
-      the tunnel and warns that other terminals must log in again
+- [x] After success: rewrite the stored credential in `config.toml` and
+      continue; the portal is expected to end other terminals' sessions. A
+      forced change continues the same login; the online reset keeps the tunnel
+      and warns that other terminals must log in again
 - [x] Tests: typed signal parsing, form/JSON bodies and encryption, skip,
       rules/violations, panel validation and cancel, stored credential updated,
       headless refusal is clear
@@ -566,26 +562,26 @@ policy). Endpoints and the signal are in `findings.md`.
   same reset page; only the account-rename (`75500402`) and skip (`75500404`)
   flags vary. The live evidence therefore covers the expiry case as well.
 
-### Phase 20: Keyring credential storage (second; backend chosen at execution)
+### Phase 20: Keyring credential storage (closed 2026-10-27: not doing)
 
-The reference branch is EZ4Connect's local-only `feat/credential-keychain`
-(libsecret `secret-tool`, attributes `service`/`scope`/`key`; macOS
-Keychain and Windows Credential Manager; settings file as the fallback). The
-zju-connect fork has no keyring branch. Details and the goTrust choke points are
-in `findings.md`.
+Credentials stay in `config.toml` (0600, written only when the user ticks
+保存密码). The evidence, the settled design and the reopen conditions are in
+`findings.md` ("Research 2026-10-27: credential storage decision").
 
-- [ ] Choose the backend then: `go-keyring` (D-Bus Secret Service, no CGO) or
-      `secret-tool` (mirrors EZ4Connect, adds `libsecret` to depends)
-- [ ] Stable scope per profile (a new id, or the client-data move/erase hooks);
-      the `--config` path must be part of the scope
-- [ ] Read at the login snapshot; write/erase through `cfgForDisk` and the
-      profile actions; erase on `store_password=false`, delete and reset
-- [ ] Migrate an existing plaintext `password`/`totp_secret` into the store,
-      dropping the file copy only after a successful write
-- [ ] Headless contract without a session bus or prompt agent; locked-collection
-      behaviour and its UI message
-- [ ] Tests with a fake store: migration, fallback, locked/absent, rename and
-      delete
+- **Decision:** no keyring backend. The gain over the current posture is narrow:
+  0600 already blocks other local users, a same-user process reads the unlocked
+  keyring or the process memory, and the only new protection is backups, cloud
+  sync and copied configs. The at-rest story is already mixed because
+  `client_data*.json` sits beside the settings, and the feature would land on
+  the login credential path after everything else shipped.
+- **Why not shim it per platform:** a Linux-only backend would leave macOS and
+  Windows on the file; macOS would need an argv-exposing CLI or cgo (excluded
+  by `CGO_ENABLED=0`), and Windows would need an untested Credential Manager
+  call. Those binaries are cross-built and have never run on hardware.
+- **If reopened:** Linux-only `secret-tool`, a stable per-profile id, scope =
+  absolute config path + id, migration only after a successful write, and the
+  file fallback everywhere else. The five-commit order, the failure matrix and
+  the test list are in `findings.md`.
 
 ### Phase 21: 终端管理与设备信任 (complete)
 

@@ -1613,6 +1613,32 @@
 - Next: operator check of the tray activation on the real panel, and of 断开
   with the restored hops.
 
+### 2026-10-27: Phase 20 closed (keyring, not doing)
+
+- **Status:** closed without an implementation
+- Actions taken:
+  - researched both backends from source and on this machine: `go-keyring`
+    v0.2.8 unlocks before every call and waits for the prompt signal with no
+    context or deadline; `secret-tool` round-trips with the login collection
+    unlocked, but the locked path was not exercised; macOS `security` puts the
+    password in argv and a cgo binding conflicts with the `CGO_ENABLED=0`
+    release builds; `cmdkey` cannot read a password back
+  - settled the design for a future attempt: stable profile id, scope =
+    absolute config path + id, a `core/credentials` store with
+    hydrate/migrate/sync/erase, file fallback, and fake-store tests, recorded
+    in `findings.md`
+  - decided against it: the current posture is already 0600, opt-in and
+    redacting; the keyring only covers backups/sync/copies,
+    `client_data*.json` keeps comparable material beside the settings, and the
+    change lands on the login credential path after everything else shipped
+  - recorded the public decision in the public plan's "Not doing" table; no
+    code, UI or user docs changed
+- Files created/modified: `findings.md`, `task_plan.md` (this plan and the
+  public plan), this log
+- Next: no scheduled implementation phase. The cheap follow-ups (the 明文 label
+  and the sync/backup note in `docs/configuration.md`) stay unapplied until
+  asked.
+
 ## Error Log
 
 | Timestamp | Error | Attempt | Resolution |
@@ -1625,8 +1651,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 21 is complete: the settings window reads the portal's 终端管理 lists and changes this device's trust, the main window confirms a device binding, the live acceptance passed, and `r56` carries both |
-| Where am I going? | Keyring storage (Phase 20) is next. Phase 8 (dae) stays deferred; Phase 18's activation landed with mygo v0.6.4 and only the upstream glib backend remains. Phase 16 is closed: `gotrust-git` is installed |
+| Where am I? | Phase 20 is closed (not doing): credentials stay in the 0600 settings file, written only when the user ticks 保存密码. No phase is active |
+| Where am I going? | No scheduled phase. Remaining items: Phase 22's native endpoint reporting (off until a gateway accepts it), Phase 8 (dae, deferred), Phase 17's manual expiry→reconnect case, and Phase 18's upstream glib item |
 | What's the goal? | a daily-use aTrust tray client |
-| What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects |
-| What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package, the forced/voluntary password change, and the portal terminal list with device trust; a full review with five reproduced defects, recorded as Phase 17 |
+| What have I learned? | see `findings.md` (license chain, embeddable surface, shutdown gap, mygo API traps, auth lookup and second factors); the client's own recovery ladder is the only trustworthy session-loss signal; the 2026-10-24 review adds the lock-order, listener-lifetime and resolver/stack defects; the 2026-10-27 credential study adds that a keyring only covers backups/sync/copies, and a Linux-only version would leave macOS/Windows on the file |
+| What have I done? | four packages, the polished windows, the reliability state machine, the fork hooks, the new icon/desktop files and the package, the forced/voluntary password change, and the portal terminal list with device trust; a full review with five reproduced defects, recorded as Phase 17; and the keyring phase closed without code, with its research and reopen conditions recorded |

@@ -511,6 +511,7 @@ verify.
 | Remote AAAA lookups | The resolver asks `ip4` only, but the data plane is IPv4 throughout: `dial.Dial` and `DialIPPort` send every IPv6 target to `dialDirectIP`, `ipresource` folds addresses with `To4()` into a uint32 trie, and the gvisor endpoint dials `header.IPv4ProtocolNumber`. An AAAA answer would resolve an internal name and then connect around the tunnel. Revisit when a deployment grants IPv6 resources and the path can be exercised end to end |
 | `dns_ttl` / `custom_dns` configuration | The TTL is a constant and the portal supplies the name entries; no deployment has asked for either knob |
 | Resolving only granted names through the gateway DNS | Needs a campus split-horizon setup to measure, which this machine does not have |
+| System-keyring credential storage | The settings file is already 0600 and stores a password only when the user ticks 保存密码; a keyring would only cover backups, sync and copied files, while `client_data*.json` keeps comparable material in the same directory. A Linux-only backend would leave macOS and Windows on the file even though their binaries are cross-built and never run on hardware. The design and the reopen conditions are in `../2026-10-23-gotrust-skeleton/findings.md` |
 
 ## Key Questions
 
