@@ -19,7 +19,6 @@ import (
 	"github.com/YangtseSu/goTrust/core/atrust/client/authchallenge"
 	"github.com/YangtseSu/goTrust/core/atrust/internal/ipresource"
 	"github.com/YangtseSu/goTrust/core/atrust/log"
-	"inet.af/netaddr"
 )
 
 type SessionOptions struct {
@@ -125,7 +124,6 @@ type Client struct {
 	ipResources     []client.IPResource
 	resourceIndex   *ipresource.Index
 	domainResources client.DomainResources
-	ipSet           *netaddr.IPSet
 	dnsResource     map[string][]net.IP
 	dnsServer       string
 	dnsServers      []string
@@ -238,14 +236,6 @@ func (c *Client) applyIPUpdate(ip net.IP) error {
 		return errors.New("network stack does not support virtual IP updates")
 	}
 	return handler(append(net.IP(nil), ip...))
-}
-
-func (c *Client) IPSet() (*netaddr.IPSet, error) {
-	if c.ipSet == nil {
-		return nil, errors.New("IP set not available")
-	}
-
-	return c.ipSet, nil
 }
 
 // Apps returns the applications the portal granted this account, with the

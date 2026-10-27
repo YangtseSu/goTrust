@@ -17,8 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"inet.af/netaddr"
-
 	clientpkg "github.com/YangtseSu/goTrust/core/atrust/client"
 	"github.com/YangtseSu/goTrust/core/atrust/client/atrust"
 	"github.com/YangtseSu/goTrust/core/atrust/resolve"
@@ -223,8 +221,6 @@ func (c stubClient) IP() (net.IP, error) {
 	}
 	return c.ip, nil
 }
-
-func (c stubClient) IPSet() (*netaddr.IPSet, error) { return nil, errors.New("IP set not available") }
 
 func (c stubClient) IPResources() ([]clientpkg.IPResource, error) { return nil, nil }
 

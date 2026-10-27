@@ -9,7 +9,6 @@ import (
 	"github.com/YangtseSu/goTrust/core/atrust/client"
 	"github.com/YangtseSu/goTrust/core/atrust/internal/ipresource"
 	"github.com/YangtseSu/goTrust/core/atrust/log"
-	"inet.af/netaddr"
 )
 
 type ClientResource struct {
@@ -110,7 +109,6 @@ func (c *Client) parseResource(resource []byte) error {
 		return err
 	}
 
-	ipSetBuilder := netaddr.IPSetBuilder{}
 	c.ipResources = make([]client.IPResource, 0)
 	c.domainResources = make(client.DomainResources)
 	c.dnsResource = make(map[string][]net.IP)
@@ -181,8 +179,6 @@ func (c *Client) parseResource(resource []byte) error {
 								for i := range ip4 {
 									ipMax4[i] = ip4[i] | ^ipNet.Mask[i]
 								}
-								ipSetBuilder.AddPrefix(netaddr.MustParseIPPrefix(hostStr))
-
 								c.ipResources = append(c.ipResources, client.IPResource{
 									IPMin:           ip4.To16(),
 									IPMax:           ipMax4.To16(),
@@ -204,8 +200,6 @@ func (c *Client) parseResource(resource []byte) error {
 							if ipMin != nil && ipMax != nil {
 								// It's a range of IP addresses
 								if ipMin.To4() != nil {
-									ipSetBuilder.AddRange(netaddr.IPRangeFrom(netaddr.MustParseIP(ipMin.String()), netaddr.MustParseIP(ipMax.String())))
-
 									c.ipResources = append(c.ipResources, client.IPResource{
 										IPMin:           ipMin,
 										IPMax:           ipMax,
@@ -230,8 +224,6 @@ func (c *Client) parseResource(resource []byte) error {
 					} else {
 						// It's an IP address
 						if ip.To4() != nil {
-							ipSetBuilder.Add(netaddr.MustParseIP(ip.String()))
-
 							c.ipResources = append(c.ipResources, client.IPResource{
 								IPMin:           ip,
 								IPMax:           ip,
@@ -279,7 +271,6 @@ func (c *Client) parseResource(resource []byte) error {
 							ip := net.ParseIP(ipStr)
 							if ip != nil {
 								if ip.To4() != nil {
-									ipSetBuilder.Add(netaddr.MustParseIP(ip.String()))
 									c.dnsResource[hostStr] = append(c.dnsResource[hostStr], ip)
 									c.ipResources = append(c.ipResources, client.IPResource{
 										IPMin: ip, IPMax: ip, PortMin: portMin, PortMax: portMax,
@@ -337,17 +328,6 @@ func (c *Client) parseResource(resource []byte) error {
 			default:
 				log.DebugPrintf("Ignore node with unsupported type %q: %s", addressInfo.Type, address)
 			}
-
-			// Remove ip from ipSetBuilder to prevent circular routing
-			host, _, err := net.SplitHostPort(address)
-			if err != nil {
-				continue
-			}
-			ip := net.ParseIP(host)
-			if ip != nil && ip.To4() != nil {
-				ipSetBuilder.Remove(netaddr.MustParseIP(ip.String()))
-				log.DebugPrintf("Remove IP from IP set to prevent circular routing: %s", ip)
-			}
 		}
 		c.NodeGroups[nodeGroup.ID] = addresses
 		log.DebugPrintf(
@@ -358,7 +338,6 @@ func (c *Client) parseResource(resource []byte) error {
 		)
 	}
 
-	c.ipSet, _ = ipSetBuilder.IPSet()
 	c.resourceIndex = ipresource.New(c.ipResources)
 
 	return nil
