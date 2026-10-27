@@ -186,14 +186,14 @@ func TestKeepAliveFallsBackToRemoteDNSWithALabel(t *testing.T) {
 
 func TestKeepAliveOrderPutsTheWorkingTargetFirst(t *testing.T) {
 	targets := []KeepAliveTarget{
-		{URL: "http://a/", Named: true},
-		{URL: "http://b/", Named: true},
-		{URL: "http://c/"},
-		{URL: "http://d/"},
+		{URL: "http://a.example/", Named: true},
+		{URL: "http://b.example/", Named: true},
+		{URL: "http://c.example/"},
+		{URL: "http://d.example/"},
 	}
 
-	ordered := keepAliveOrder(targets, "http://c/")
-	want := []string{"http://c/", "http://a/", "http://b/", "http://d/"}
+	ordered := keepAliveOrder(targets, "http://c.example/")
+	want := []string{"http://c.example/", "http://a.example/", "http://b.example/", "http://d.example/"}
 	for i, target := range ordered {
 		if target.URL != want[i] {
 			t.Fatalf("order = %v, want %v", urls(ordered), want)

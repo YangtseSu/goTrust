@@ -14,10 +14,11 @@ gofmt -l .
 reuse lint
 ```
 
-Two binaries: `gotrust` (the tray app, built from the repository root) and
-`gotrust-cli` (`cmd/gotrust-cli`, the headless front-end). `go test ./...`
-includes `internal/guards`, which fails if a core package reaches mygo or
-purego, if the CLI reaches `ui/`, or if the tray app reaches `internal/cli`.
+Two binaries: `gotrust` (`cmd/gotrust`, the tray app) and `gotrust-cli`
+(`cmd/gotrust-cli`, the headless front-end). `go test ./...` includes
+`internal/guards`, which fails if a core package reaches mygo or purego, if
+either front-end reaches the other or `ui/`, if a front-end imports the
+protocol layer instead of `core/session`.
 
 `reuse lint` must stay clean; every new Go file starts with the SPDX header,
 except in the imported tree, which is annotated in `REUSE.toml` instead of being
@@ -41,9 +42,13 @@ The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
 - `core/logging/`: rotating, redacted line log.
 - `core/profilelock/`: the per-profile instance lock both front-ends take.
 - `internal/cli/`: the headless front-end; imports `core/*` only.
-- `cmd/gotrust-cli/`: its entry point.
+- `internal/gui/`: the tray front-end: windows, tray, event loop, prompt
+  panels. It imports `core/session` and never the protocol layer.
+- `cmd/gotrust-cli/`: the CLI's entry point.
+- `cmd/gotrust/`: the tray app's entry point.
 - `ui/`: pure view functions and the testable `ui.NewTester` views.
-- `main.go`: wiring, tray, settings window, startup.
+- `data/`: the desktop entry and icons, plus the Go file that embeds the tray
+  PNG.
 - Plan and history: `.planning/2026-10-23-gotrust-skeleton/` (the app) and
   `.planning/2026-10-26-gotrust-public/` (the restructure to a self-contained
   core and a public repository).
@@ -71,19 +76,18 @@ The Arch package builds from `~/projects/arch-pkgs/gotrust-git` with
 ## Branch policy
 
 - Only `main` is published: `git push origin main`. Never `git push --all`,
-  `--mirror`, or push a `devel/*` ref.
-- `devel/next` in this repository and in the `zju-connect` fork is local-only.
-  Treat it as generic new-feature development; its notes are not part of the
-  public record.
-- Never mention `devel/next`, its B-items, or their research in commits, code,
-  comments, docs or tests that reach `main`. Describe released behaviour and
-  interfaces only.
-- Never merge `devel/next` into `main`: its ancestry predates the public
-  rewrite. Move one B-item at a time (rewrite, rebase/cherry-pick, new phase).
-- A B-item enters `main` only when all of these hold:
-  1. its code builds against the published fork pin, with no local `replace`;
+  `--mirror`, or push any other ref.
+- Work that is not ready for the public record stays on a local branch and is
+  never pushed. Its notes are not part of the public tree.
+- Work enters `main` one item at a time, rewritten to describe released
+  behaviour and interfaces. Never merge a local development branch into `main`:
+  its ancestry predates the public rewrite, so move one item at a time (rewrite,
+  rebase/cherry-pick, new phase).
+- An item enters `main` only when all of these hold:
+  1. its code builds against the in-tree protocol layer, with no local
+     `replace`;
   2. its notes are rewritten to behaviour/interface level and moved into
-     `task_plan.md` as the next numbered phase, without the B number;
+     `task_plan.md` as the next numbered phase;
   3. no local paths, real addresses, upstream artifact names or third-party
      identifiers remain;
   4. `go build ./...`, `go test ./...` and `reuse lint` pass, and the commits
