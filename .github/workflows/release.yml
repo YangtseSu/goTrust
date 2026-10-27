@@ -147,6 +147,12 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # gh reads the repository and the tag from a checkout; without one it
+      # fails before it talks to the API.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
