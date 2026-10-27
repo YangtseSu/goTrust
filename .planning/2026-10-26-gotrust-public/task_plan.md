@@ -16,13 +16,18 @@ the gateway has already accepted.
 
 ## Next Step
 
-Phase 9: refresh every declared dependency. The TUN-era modules and the
-deprecated address module are gone, so the module list is what the tree really
-uses; the refresh covers the remaining direct modules, the indirect minors, and
-the three workflow actions that are three majors behind.
+Phase 9 is code complete. The remaining gates need the operator: one push to
+`main` runs CI with the new actions and activates the Dependabot config, and
+one live login proves the refreshed packet stack. The Dependabot security
+alerts are already on.
 
 ## Current Phase
 
+Phase 9 is code complete. Every declared module is current: the patch/minor set,
+mygo 0.7.1, gvisor's newest buildable `go` branch commit, and ttlcache in place
+of the dormant cache. The workflows use the current action majors, Dependabot
+has one grouped pull request a day per ecosystem, and the security alerts are
+on. The live login and a green CI run still need a gateway and a push.
 Phase 8 is complete. The deprecated address module is gone: the `IPSet` accessor,
 its builder and the interface method are deleted rather than reimplemented on
 `net/netip`, because the set's only reader left with TUN mode and destination
@@ -310,53 +315,61 @@ Destination matching already runs on `ipresource.Index`, which folds the same
 Run after Phase 6, so the modules that disappear with the TUN subtree are not
 chased first.
 
-| Module | Pinned | Latest |
+| Module | Before | After |
 |---|---|---|
 | `egoist/mygo` | v0.6.4 | v0.7.1 |
-| `gvisor.dev/gvisor` | pseudo 2026-01-29 | pseudo 2026-10-27 |
+| `gvisor.dev/gvisor` | pseudo 2026-01-29 | pseudo 2026-10-27, `a68437cfc713` |
 | `things-go/go-socks5` | v0.1.1 | v0.1.3 |
 | `golang.org/x/sys` | v0.48.0 | v0.49.0 |
 | `ebitengine/purego` | v0.11.1 | v0.11.2 |
 | `golang.org/x/image`, `x/net`, `x/time`, `x/exp` | — | one minor newer each |
 | `BurntSushi/toml`, `pquerna/otp`, `go-text`, `btree`, `barcode` | — | already latest |
-| `patrickmn/go-cache` | v2.1.0+incompatible | no newer tag: the project is dormant, so it is replaced (see below) |
+| `patrickmn/go-cache` | v2.1.0+incompatible | replaced by `jellydator/ttlcache/v3` v3.4.1 |
 
-- [ ] `go get -u ./...`, `go mod tidy`, `go mod verify`.
-- [ ] `mygo` 0.6.4 → 0.7.1 is the GUI toolkit: re-read its release notes, re-run
-  the UI smoke from `docs/agent-ui-testing.md`, and revisit the window
-  create/hide workarounds if the upstream fixes landed.
-- [ ] `gvisor.dev/gvisor` moves to the newest commit; the packet stack is the
-  only consumer, so one live login proves the L3 path.
-- [ ] Actions: `checkout` v4 → v7, `setup-go` v5 → v7, `upload-artifact`
-  v4 → v7, `download-artifact` v4 → v8. CI runs on `main`, so the proof is one
-  push.
-- [ ] Replace `patrickmn/go-cache` with a maintained cache. Preferred:
-  `github.com/jellydator/ttlcache/v3` (release 2026-06, per-entry TTL,
-  `NoTTL` for the permanent entries, three call sites in
-  `core/atrust/resolve`). The fallback is a ~50-line in-tree cache if adding a
-  module to replace a dormant one is not worth it. Either way the resolver's
-  `getDNSCache` / `setDNSCache` / `SetPermanentDNS` keep their shape.
-- [ ] After the tree is clean and every module is current, add
-  `.github/dependabot.yml`: daily, `gomod` and `github-actions`, one grouped PR
-  per ecosystem, a low open-PR limit (3 and 2). Enable Dependabot security
-  alerts at the same time.
-- **Conclusion on PRs:** enable version-update PRs, not alerts alone. By then
-  the pseudo-version and fork modules Dependabot cannot bump are gone, so the
-  remaining modules are normal releases it can move. A bot PR proves build, vet,
-  tests and the cross-builds; it cannot prove the live login or the UI smoke, so
-  merging stays manual and the open-PR limit stays low. Alerts stay on as well:
-  they cover pseudo-versions (the gvisor module) and transitive modules, where
-  no PR is possible.
-- [ ] Record in the plan that Dependabot does not bump pseudo-versions, so
+- [x] `go get` for the patch/minor set, `go mod tidy`, `go mod verify`. The
+  `go` directive stays at 1.27.3; no dependency demanded a newer one.
+- [x] `mygo` 0.6.4 → 0.7.1. The release notes list no fix for either window
+  hazard, and 0.7.1's source still defers `Close` but not `Hide`; the workarounds
+  stay. The headless smoke rendered the main window and opened the settings
+  window without a GL-context error, and SIGTERM exited 0.
+- [x] `gvisor.dev/gvisor` moves to the newest commit that builds. The 09:48
+  merge ships `pkg/tcpip/stack/bridge_test.go` as package `bridge_test`, which
+  the Go loader rejects when `gonet` imports `stack`; the 09:58 merge removes
+  that file. The packet stack tests pass, and one live login still proves the
+  L3 path.
+- [x] Actions: `checkout` v4 → v7, `setup-go` v5 → v7, `upload-artifact`
+  v4 → v7, `download-artifact` v4 → v8. The inputs this repository uses are
+  unchanged. CI runs on `main`, so the proof is one push.
+- [x] Replace `patrickmn/go-cache`: the resolver's three calls map to
+  `github.com/jellydator/ttlcache/v3`, with touch-on-hit disabled so a lookup
+  does not extend the answer's life and `NoTTL` for the permanent entry. A zero
+  TTL keeps entries forever, as before. `getDNSCache` / `setDNSCache` /
+  `SetPermanentDNS` keep their shape, and their tests cover the TTL, the
+  permanent entry and the zero-TTL case.
+- [x] `.github/dependabot.yml`: daily, `gomod` and `github-actions`, one grouped
+  PR per ecosystem, open-PR limits 3 and 2. Dependabot security alerts were
+  enabled through the repository API (the endpoint answered 404 before and 204
+  after).
+- **Conclusion on PRs:** enable version-update PRs, not alerts alone. By now
+  the fork modules are gone, so the remaining modules are normal releases
+  Dependabot can move. A bot PR proves build, vet, tests and the cross-builds;
+  it cannot prove the live login or the UI smoke, so merging stays manual and
+  the open-PR limit stays low. Alerts stay on as well: they cover
+  pseudo-versions (the gvisor module) and transitive modules, where no PR is
+  possible.
+- [x] Recorded: Dependabot does not bump pseudo-versions, so
   `gvisor.dev/gvisor` stays a manual bump; check it when this phase is revisited.
-- [ ] The `go` directive stays at the installed toolchain unless a dependency
-  demands a newer one.
-- **Commits:** the patch/minor set together, `mygo` alone, `gvisor` alone, the
-  workflows alone, so a regression names its cause.
-- **Gates:** build, vet, gofmt, `go test ./...`, `reuse lint`, cross-builds, one
-  live login, the UI smoke, and a green CI run.
-- **Risk:** the gvisor module is a master commit, not a release. If the stack
-  breaks, pin the newest commit that passes and record why in the plan.
+- **Commits:** the patch/minor set, the cache replacement, `mygo`, `gvisor`, the
+  workflows and Dependabot each have their own commit, so a regression names its
+  cause.
+- **Gates:** build, vet, gofmt, `go test ./...`, `go test -race` on the touched
+  packages, `reuse lint` 185/185, cross-builds, and the UI smoke passed. The
+  live login needs a gateway, and the CI run needs the push.
+- **Status:** code complete. The local test package is `gotrust-git
+  r105.gfd3499a-1`; its binaries carry mygo 0.7.1, ttlcache and the pinned
+  gvisor, and no `go-cache` or `netaddr`.
+- **Risk:** the gvisor module is a branch commit, not a release. If the stack
+  breaks later, pin the newest commit that passes and record why here.
 
 ## Not doing
 

@@ -525,3 +525,49 @@
     builder shared: CIDR prefixes, address ranges, single addresses and DNS
     rules. The granted-resource entries they assert are the same entries the
     lists render, and they did not change.
+
+## Session: 2026-10-27 (dependency refresh)
+
+- **Status:** Phase 9 code complete; the live login needs a gateway and the CI
+  run needs the push
+- Actions taken:
+  - patch/minor set: `things-go/go-socks5` 0.1.3, `x/sys` 0.49.0, `purego`
+    0.11.2, and one minor each for `x/exp`, `x/image`, `x/net` and `x/time`;
+  - `mygo` 0.7.1. Its release notes list no fix for the two window hazards; the
+    0.7.1 source still defers `Close` but not `Hide`, and the missing-context
+    window is still open. The `RunOnMain` workarounds stay, and `AGENTS.md` and
+    `docs/agent-ui-testing.md` now name 0.7.1;
+  - `gvisor.dev/gvisor` moved to `v0.0.0-20261027095827-a68437cfc713`. The
+    09:48 merge carries `pkg/tcpip/stack/bridge_test.go` as package
+    `bridge_test`, which the Go loader rejects while `gonet` imports `stack`;
+    the 09:58 merge removes the file. The newest buildable commit is pinned and
+    the reason is in the plan;
+  - replaced `patrickmn/go-cache` with `jellydator/ttlcache/v3` in
+    `core/atrust/resolve`. Touch-on-hit is disabled, so a lookup does not move
+    the expiry out; `NoTTL` is the permanent entry; a zero TTL keeps entries
+    forever, as before. New tests cover the TTL, the permanent entry, the
+    zero-TTL case and hostname normalization;
+  - workflows: `checkout` v7, `setup-go` v7, `upload-artifact` v7,
+    `download-artifact` v8. Their inputs are unchanged; download v8 treats a
+    digest mismatch as an error;
+  - added `.github/dependabot.yml`: daily, grouped `gomod` and
+    `github-actions`, open-PR limits 3 and 2. Dependabot security alerts were
+    enabled through the API (404 before, 204 after). The config and the
+    version-update PRs take effect after the push;
+  - the `go` directive stays at 1.27.3.
+- Evidence:
+  - build, vet, gofmt, `go test ./...`, `go test -race` on
+    `core/atrust/resolve`, `core/session` and `internal/gui`, `go mod verify`,
+    `reuse lint` 185/185, and the five cross-builds passed;
+  - headless UI smoke on mygo 0.7.1: the main window rendered (540x640), the
+    settings window opened through a synthetic click, stderr had no GL-context
+    error, and SIGTERM exited 0;
+  - `makepkg -fC` built `gotrust-git r105.gfd3499a-1` and
+    `gotrust-cli-git r105.gfd3499a-1` from the local checkout. `namcap` reports
+    only the four documented warnings; the GUI binary lists mygo 0.7.1,
+    ttlcache v3.4.1 and gvisor `a68437cfc713`, and neither binary lists
+    `go-cache` or `netaddr`;
+  - the packaged CLI starts, answers `--status` with exit 0 and renders the
+    cached grant.
+- Open gates: one live login through the refreshed gvisor stack, and one push
+  to `main` for CI with the new actions and for the Dependabot config.
