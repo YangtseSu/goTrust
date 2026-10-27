@@ -1,12 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package main
+// Package gui is the tray front-end: the windows, the tray icon, the event
+// loop and the mapping from session state to what a person sees.
+//
+// Every operation it performs goes through core/session, core/config,
+// core/proxy or core/logging. It never touches the protocol layer under
+// core/atrust, so the same layer can serve a front-end without a toolkit;
+// internal/guards enforces that.
+package gui
 
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log"
 	neturl "net/url"
@@ -18,7 +24,6 @@ import (
 	"syscall"
 	"time"
 
-	atrustlog "github.com/YangtseSu/goTrust/core/atrust/log"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
@@ -28,16 +33,17 @@ import (
 	"github.com/YangtseSu/goTrust/core/profilelock"
 	gotrustproxy "github.com/YangtseSu/goTrust/core/proxy"
 	"github.com/YangtseSu/goTrust/core/session"
+	"github.com/YangtseSu/goTrust/data"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
 )
 
-func main() {
-	configPath := flag.String("config", "", "TOML settings file (default: the user config directory); the stored account material lives beside it")
-	flag.Parse()
-
-	cfg, path, err := config.LoadOrCreate(*configPath)
+// Run starts the tray app against the settings file at configPath, or the
+// default location when it is empty, and blocks until the app quits. The
+// stored account material lives beside the settings file.
+func Run(configPath string) error {
+	cfg, path, err := config.LoadOrCreate(configPath)
 	if err != nil {
-		log.Fatalf("settings: %v", err)
+		return fmt.Errorf("settings: %w", err)
 	}
 
 	application := &app{
@@ -65,7 +71,7 @@ func main() {
 		// so pointing that at the same writer is the whole bridge.
 		log.SetOutput(fileLog)
 		if cfg.Logging.Verbose {
-			atrustlog.EnableDebug()
+			session.SetProtocolDebug(true)
 		}
 	}
 
@@ -90,7 +96,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	application.runUI(ctx)
+	return application.runUI(ctx)
 }
 
 // app ties the session, the proxies and the windows together.
@@ -163,9 +169,9 @@ type attemptCancel struct {
 	cancel context.CancelFunc
 }
 
-func (a *app) runUI(ctx context.Context) {
+func (a *app) runUI(ctx context.Context) error {
 	if !mygo.App.RequestSingleInstanceLock() {
-		return
+		return nil
 	}
 
 	// Quit runs the quit sequence, so the tray disappears, the proxies close
@@ -207,9 +213,10 @@ func (a *app) runUI(ctx context.Context) {
 	}()
 
 	if err := mygo.App.Run(); err != nil {
-		a.logger.Fatalf("ui: %v", err)
+		return fmt.Errorf("ui: %w", err)
 	}
 	a.disconnectNow()
+	return nil
 }
 
 // reconcileAutostart makes the desktop's entry match the settings file. The
@@ -331,7 +338,7 @@ func (a *app) resetSettingsDraft() {
 func (a *app) openTray() bool {
 	tray, err := mygo.NewTray(mygo.TrayOptions{
 		ID:      "goTrust",
-		Icon:    trayIcon(),
+		Icon:    data.TrayPNG(),
 		ToolTip: "goTrust",
 	})
 	if err != nil {
@@ -1302,11 +1309,7 @@ func (a *app) setVerbose(on bool) {
 	if a.log != nil {
 		a.log.SetVerbose(on)
 	}
-	if on {
-		atrustlog.EnableDebug()
-	} else {
-		atrustlog.DisableDebug()
-	}
+	session.SetProtocolDebug(on)
 	a.persistFlag(func(cfg *config.Config) { cfg.Logging.Verbose = on })
 }
 

@@ -35,6 +35,31 @@ const (
 	CodeRadius = authchallenge.CodeRadius
 )
 
+// The challenge and response values are aliases, not copies: Prompter is the
+// protocol handler interface, so a front-end has to name these exact types.
+// Declaring them here lets a front-end implement the interface by importing
+// this package alone, without reaching into the protocol layer.
+type (
+	// CodeChallenge asks for a one-time code.
+	CodeChallenge = authchallenge.CodeChallenge
+	// CodeResponse answers one.
+	CodeResponse = authchallenge.CodeResponse
+	// TextCaptchaChallenge asks for the characters in an image.
+	TextCaptchaChallenge = authchallenge.TextCaptchaChallenge
+	// TextCaptchaResponse answers one.
+	TextCaptchaResponse = authchallenge.TextCaptchaResponse
+	// Point is one clicked coordinate in a click captcha.
+	Point = authchallenge.Point
+	// ClickCaptchaChallenge asks for the characters at their positions.
+	ClickCaptchaChallenge = authchallenge.ClickCaptchaChallenge
+	// ClickCaptchaResponse answers one, in the image's natural pixels.
+	ClickCaptchaResponse = authchallenge.ClickCaptchaResponse
+	// ExternalLoginChallenge asks for a login in the system browser.
+	ExternalLoginChallenge = authchallenge.ExternalLoginChallenge
+	// ExternalLoginResponse carries the pasted callback URL.
+	ExternalLoginResponse = authchallenge.ExternalLoginResponse
+)
+
 // callbackPath is the portal endpoint a callback URL has to point at, and the
 // query key it has to carry.
 func callbackPath(kind ExternalKind) (path, key string, err error) {

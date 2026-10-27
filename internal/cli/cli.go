@@ -18,7 +18,6 @@ import (
 	"strings"
 	"syscall"
 
-	atrustlog "github.com/YangtseSu/goTrust/core/atrust/log"
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/logging"
 	"github.com/YangtseSu/goTrust/core/profilelock"
@@ -240,7 +239,7 @@ func openLog(cfg config.Config, stderr io.Writer) (func(string, ...any), func())
 	// pointing that at the same writer is the whole bridge.
 	log.SetOutput(logger)
 	if cfg.Logging.Verbose {
-		atrustlog.EnableDebug()
+		session.SetProtocolDebug(true)
 	}
 	return logger.Printf, func() {
 		_ = logger.Close()

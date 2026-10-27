@@ -54,7 +54,7 @@ offer its source to the users of that service.
 ## Build
 
 ```sh
-go build -o gotrust .                     # the tray app
+go build -o gotrust ./cmd/gotrust         # the tray app
 go build -o gotrust-cli ./cmd/gotrust-cli # the headless front-end
 go test ./...
 reuse lint
@@ -287,7 +287,7 @@ it. After editing the SVG, regenerate the PNG and rebuild:
 
 ```sh
 go generate ./...   # needs rsvg-convert
-go build -o gotrust .
+go build -o gotrust ./cmd/gotrust
 ```
 
 ## Reliability

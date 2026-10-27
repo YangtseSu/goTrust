@@ -84,14 +84,9 @@ func TestCLIImportsCoreOnly(t *testing.T) {
 		"github.com/egoist/mygo",
 		"github.com/ebitengine/purego",
 		module+"/ui",
+		module+"/internal/gui",
+		module+"/cmd/gotrust",
 	)
-	// The GUI package is package main; a CLI that imported it would link the
-	// whole tray app and its toolkit.
-	for _, dep := range deps {
-		if dep == module {
-			t.Fatalf("the CLI imports the GUI entry point %s", module)
-		}
-	}
 	if !hasPrefix(deps, module+"/internal/cli") {
 		t.Fatal("the CLI does not use internal/cli")
 	}
@@ -100,12 +95,62 @@ func TestCLIImportsCoreOnly(t *testing.T) {
 // TestGUIImportsNoHeadlessFrontEnd is the other direction: the tray app keeps
 // one headless implementation, and it is the CLI.
 func TestGUIImportsNoHeadlessFrontEnd(t *testing.T) {
-	deps := dependencies(t, ".")
-	require(t, ".", deps,
+	deps := dependencies(t, "./cmd/gotrust")
+	require(t, "./cmd/gotrust", deps,
 		module+"/internal/cli",
 		module+"/cmd/gotrust-cli",
 	)
 	if !hasPrefix(deps, module+"/ui") {
 		t.Fatal("the GUI does not reach its own views")
+	}
+	if !hasPrefix(deps, module+"/internal/gui") {
+		t.Fatal("the tray binary does not reach internal/gui")
+	}
+}
+
+// directImports lists the packages one package names in its own files, test
+// files included. A transitive check cannot express "may use the session layer
+// but not the protocol layer": core/session itself is built on the protocol
+// layer, so every front-end reaches it through the session's graph.
+func directImports(t *testing.T, pattern string) []string {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("locate the module root: %v", err)
+	}
+	command := exec.Command("go", "list", "-f", `{{.ImportPath}}: {{join .Imports " "}} {{join .TestImports " "}}`, pattern)
+	command.Dir = root
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("go list %s: %v", pattern, err)
+	}
+
+	var imports []string
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		_, list, found := strings.Cut(line, ":")
+		if !found {
+			t.Fatalf("go list %s: unexpected line %q", pattern, line)
+		}
+		imports = append(imports, strings.Fields(list)...)
+	}
+	if len(imports) == 0 {
+		t.Fatalf("go list %s listed no imports", pattern)
+	}
+	return imports
+}
+
+// TestFrontEndsStayOffTheProtocolLayer is what "every business call goes
+// through core/session" means mechanically: the two front-ends import the
+// session, the config, the proxy and the logging packages, never a package of
+// the protocol layer. core/prompt/web is part of core, not a front-end, and
+// adapts the protocol's own challenge types for the CLI.
+func TestFrontEndsStayOffTheProtocolLayer(t *testing.T) {
+	protocol := module + "/core/atrust"
+	for _, pattern := range []string{"./internal/gui", "./internal/cli"} {
+		imports := directImports(t, pattern)
+		require(t, pattern, imports, protocol)
+		if !hasPrefix(imports, module+"/core/session") {
+			t.Fatalf("%s does not import core/session", pattern)
+		}
 	}
 }

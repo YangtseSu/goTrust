@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package main
+package gui
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/YangtseSu/goTrust/core/atrust/client/authchallenge"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
@@ -20,21 +19,21 @@ import (
 )
 
 // captchaResult is what the window sends back to the login goroutine that is
-// waiting inside authchallenge.Handler.
+// waiting inside Handler.
 type captchaResult struct {
-	response authchallenge.ClickCaptchaResponse
+	response session.ClickCaptchaResponse
 	err      error
 }
 
 // codeResult answers a one-time code challenge.
 type codeResult struct {
-	response authchallenge.CodeResponse
+	response session.CodeResponse
 	err      error
 }
 
 // externalResult answers a CAS/OAuth2 challenge with the pasted callback.
 type externalResult struct {
-	response authchallenge.ExternalLoginResponse
+	response session.ExternalLoginResponse
 	err      error
 }
 
@@ -64,13 +63,13 @@ type uiPrompter struct {
 	ctx context.Context
 }
 
-func (p *uiPrompter) HandleCodeChallenge(challenge authchallenge.CodeChallenge) (authchallenge.CodeResponse, error) {
+func (p *uiPrompter) HandleCodeChallenge(challenge session.CodeChallenge) (session.CodeResponse, error) {
 	reply := make(chan codeResult, 1)
 	p.app.beginCode(&gotrustui.CodePrompt{
 		Kind:            challenge.Kind,
 		Message:         challenge.Message,
 		CanSkip:         challenge.CanSkipSecondaryAuth,
-		AllowTOTPSecret: challenge.Kind == authchallenge.CodeTOTP,
+		AllowTOTPSecret: challenge.Kind == session.CodeTOTP,
 	}, reply)
 	defer p.app.endCode(reply)
 
@@ -78,11 +77,11 @@ func (p *uiPrompter) HandleCodeChallenge(challenge authchallenge.CodeChallenge) 
 	case result := <-reply:
 		return result.response, result.err
 	case <-p.ctx.Done():
-		return authchallenge.CodeResponse{}, p.ctx.Err()
+		return session.CodeResponse{}, p.ctx.Err()
 	}
 }
 
-func (p *uiPrompter) HandleExternalLogin(challenge authchallenge.ExternalLoginChallenge) (authchallenge.ExternalLoginResponse, error) {
+func (p *uiPrompter) HandleExternalLogin(challenge session.ExternalLoginChallenge) (session.ExternalLoginResponse, error) {
 	reply := make(chan externalResult, 1)
 	p.app.beginExternal(&gotrustui.ExternalLogin{
 		Kind:     challenge.Kind,
@@ -105,21 +104,21 @@ func (p *uiPrompter) HandleExternalLogin(challenge authchallenge.ExternalLoginCh
 	case result := <-reply:
 		return result.response, result.err
 	case <-p.ctx.Done():
-		return authchallenge.ExternalLoginResponse{}, p.ctx.Err()
+		return session.ExternalLoginResponse{}, p.ctx.Err()
 	}
 }
 
-func (p *uiPrompter) HandleClickCaptcha(challenge authchallenge.ClickCaptchaChallenge) (authchallenge.ClickCaptchaResponse, error) {
+func (p *uiPrompter) HandleClickCaptcha(challenge session.ClickCaptchaChallenge) (session.ClickCaptchaResponse, error) {
 	if len(challenge.Image) == 0 {
-		return authchallenge.ClickCaptchaResponse{}, errors.New("the gateway sent an empty captcha image")
+		return session.ClickCaptchaResponse{}, errors.New("the gateway sent an empty captcha image")
 	}
 	bitmap, err := ui.DecodeBitmap(challenge.Image)
 	if err != nil {
-		return authchallenge.ClickCaptchaResponse{}, fmt.Errorf("decode the captcha image: %w", err)
+		return session.ClickCaptchaResponse{}, fmt.Errorf("decode the captcha image: %w", err)
 	}
 	width, height := bitmap.Size()
 	if width <= 0 || height <= 0 {
-		return authchallenge.ClickCaptchaResponse{}, fmt.Errorf("the captcha image is %dx%d", width, height)
+		return session.ClickCaptchaResponse{}, fmt.Errorf("the captcha image is %dx%d", width, height)
 	}
 
 	reply := make(chan captchaResult, 1)
@@ -134,15 +133,15 @@ func (p *uiPrompter) HandleClickCaptcha(challenge authchallenge.ClickCaptchaChal
 	case result := <-reply:
 		return result.response, result.err
 	case <-p.ctx.Done():
-		return authchallenge.ClickCaptchaResponse{}, p.ctx.Err()
+		return session.ClickCaptchaResponse{}, p.ctx.Err()
 	}
 }
 
 // HandleTextCaptcha refuses the one challenge the window cannot render: a text
 // captcha has no image and no click coordinates, and the protocol offers no way
 // to type the answer.
-func (p *uiPrompter) HandleTextCaptcha(authchallenge.TextCaptchaChallenge) (authchallenge.TextCaptchaResponse, error) {
-	return authchallenge.TextCaptchaResponse{}, errors.New(
+func (p *uiPrompter) HandleTextCaptcha(session.TextCaptchaChallenge) (session.TextCaptchaResponse, error) {
+	return session.TextCaptchaResponse{}, errors.New(
 		"this gateway asked for a text captcha, which goTrust does not support")
 }
 
@@ -214,13 +213,13 @@ func (a *app) submitCaptcha() {
 		return
 	}
 
-	response := authchallenge.ClickCaptchaResponse{
-		Points: make([]authchallenge.Point, len(captcha.Points)),
+	response := session.ClickCaptchaResponse{
+		Points: make([]session.Point, len(captcha.Points)),
 		Width:  captcha.Width,
 		Height: captcha.Height,
 	}
 	for i, point := range captcha.Points {
-		response.Points[i] = authchallenge.Point{X: point.X, Y: point.Y}
+		response.Points[i] = session.Point{X: point.X, Y: point.Y}
 	}
 	a.view.Captcha = nil
 	a.captcha = nil
@@ -314,7 +313,7 @@ func (a *app) submitCode() {
 
 	a.invalidate()
 	a.setStatus("已提交验证码，正在登录…", true)
-	reply <- codeResult{response: authchallenge.CodeResponse{Code: code, SkipSecondaryAuth: skip}}
+	reply <- codeResult{response: session.CodeResponse{Code: code, SkipSecondaryAuth: skip}}
 }
 
 func (a *app) cancelCode(cause error) {
@@ -453,7 +452,7 @@ func (a *app) submitExternal() {
 
 	a.invalidate()
 	a.setStatus("已提交回调地址，正在登录…", true)
-	reply <- externalResult{response: authchallenge.ExternalLoginResponse{CallbackURL: callback}}
+	reply <- externalResult{response: session.ExternalLoginResponse{CallbackURL: callback}}
 }
 
 func (a *app) cancelExternal(cause error) {

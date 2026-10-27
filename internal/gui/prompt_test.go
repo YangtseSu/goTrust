@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package main
+package gui
 
 import (
 	"bytes"
@@ -17,8 +17,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/YangtseSu/goTrust/core/atrust/client/authchallenge"
 
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/session"
@@ -69,7 +67,7 @@ func TestClickCaptchaSubmitsPoints(t *testing.T) {
 	prompter := &uiPrompter{app: testApp, ctx: ctx}
 	results := make(chan captchaResult, 1)
 	go func() {
-		response, err := prompter.HandleClickCaptcha(authchallenge.ClickCaptchaChallenge{
+		response, err := prompter.HandleClickCaptcha(session.ClickCaptchaChallenge{
 			Image: promptTestPNG(t, 80, 40),
 		})
 		results <- captchaResult{response: response, err: err}
@@ -100,8 +98,8 @@ func TestClickCaptchaSubmitsPoints(t *testing.T) {
 		if len(result.response.Points) != 2 {
 			t.Fatalf("response has %d points, want 2", len(result.response.Points))
 		}
-		if result.response.Points[0] != (authchallenge.Point{X: 1, Y: 2}) ||
-			result.response.Points[1] != (authchallenge.Point{X: 70, Y: 30}) {
+		if result.response.Points[0] != (session.Point{X: 1, Y: 2}) ||
+			result.response.Points[1] != (session.Point{X: 70, Y: 30}) {
 			t.Fatalf("response points = %+v", result.response.Points)
 		}
 	case <-time.After(3 * time.Second):
@@ -146,7 +144,7 @@ func TestClickCaptchaCancelAndContext(t *testing.T) {
 			prompter := &uiPrompter{app: testApp, ctx: ctx}
 			results := make(chan captchaResult, 1)
 			go func() {
-				response, err := prompter.HandleClickCaptcha(authchallenge.ClickCaptchaChallenge{
+				response, err := prompter.HandleClickCaptcha(session.ClickCaptchaChallenge{
 					Image: promptTestPNG(t, 60, 30),
 				})
 				results <- captchaResult{response: response, err: err}
@@ -186,10 +184,10 @@ func TestClickCaptchaRejectsUndecodableImage(t *testing.T) {
 	testApp := promptTestApp()
 	prompter := &uiPrompter{app: testApp, ctx: context.Background()}
 
-	if _, err := prompter.HandleClickCaptcha(authchallenge.ClickCaptchaChallenge{}); err == nil {
+	if _, err := prompter.HandleClickCaptcha(session.ClickCaptchaChallenge{}); err == nil {
 		t.Fatal("an empty image was accepted")
 	}
-	if _, err := prompter.HandleClickCaptcha(authchallenge.ClickCaptchaChallenge{Image: []byte("not an image")}); err == nil {
+	if _, err := prompter.HandleClickCaptcha(session.ClickCaptchaChallenge{Image: []byte("not an image")}); err == nil {
 		t.Fatal("an undecodable image was accepted")
 	}
 
@@ -210,8 +208,8 @@ func TestCodeChallengeSubmits(t *testing.T) {
 	prompter := &uiPrompter{app: testApp, ctx: ctx}
 	results := make(chan codeResult, 1)
 	go func() {
-		response, err := prompter.HandleCodeChallenge(authchallenge.CodeChallenge{
-			Kind:                 authchallenge.CodeSMS,
+		response, err := prompter.HandleCodeChallenge(session.CodeChallenge{
+			Kind:                 session.CodeSMS,
 			Message:              "Please enter the SMS verification code:",
 			CanSkipSecondaryAuth: true,
 		})
@@ -226,7 +224,7 @@ func TestCodeChallengeSubmits(t *testing.T) {
 
 	testApp.mu.Lock()
 	prompt := testApp.view.Code
-	if !prompt.CanSkip || prompt.Kind != authchallenge.CodeSMS {
+	if !prompt.CanSkip || prompt.Kind != session.CodeSMS {
 		testApp.mu.Unlock()
 		t.Fatalf("prompt = %+v", prompt)
 	}
@@ -272,8 +270,8 @@ func TestTOTPChallengeStoresTheSecret(t *testing.T) {
 	prompter := &uiPrompter{app: testApp, ctx: ctx}
 	results := make(chan codeResult, 1)
 	go func() {
-		response, err := prompter.HandleCodeChallenge(authchallenge.CodeChallenge{
-			Kind:    authchallenge.CodeTOTP,
+		response, err := prompter.HandleCodeChallenge(session.CodeChallenge{
+			Kind:    session.CodeTOTP,
 			Message: "Please enter the TOTP token:",
 		})
 		results <- codeResult{response: response, err: err}
@@ -323,7 +321,7 @@ func TestTOTPChallengeStoresTheSecret(t *testing.T) {
 	// A malformed secret must keep the panel up instead of sending a code the
 	// gateway will reject.
 	testApp.mu.Lock()
-	testApp.view.Code = &gotrustui.CodePrompt{Kind: authchallenge.CodeTOTP, AllowTOTPSecret: true, TOTPSecret: "not base32!", StoreSecret: true}
+	testApp.view.Code = &gotrustui.CodePrompt{Kind: session.CodeTOTP, AllowTOTPSecret: true, TOTPSecret: "not base32!", StoreSecret: true}
 	testApp.code = results
 	testApp.mu.Unlock()
 
@@ -371,8 +369,8 @@ func TestCodeChallengeCancelAndContext(t *testing.T) {
 			prompter := &uiPrompter{app: testApp, ctx: ctx}
 			results := make(chan codeResult, 1)
 			go func() {
-				response, err := prompter.HandleCodeChallenge(authchallenge.CodeChallenge{
-					Kind:    authchallenge.CodeRadius,
+				response, err := prompter.HandleCodeChallenge(session.CodeChallenge{
+					Kind:    session.CodeRadius,
 					Message: "Please enter the RADIUS token:",
 				})
 				results <- codeResult{response: response, err: err}
@@ -422,8 +420,8 @@ func TestExternalLoginOpensAndValidatesTheCallback(t *testing.T) {
 	prompter := &uiPrompter{app: testApp, ctx: ctx}
 	results := make(chan externalResult, 1)
 	go func() {
-		response, err := prompter.HandleExternalLogin(authchallenge.ExternalLoginChallenge{
-			Kind:     authchallenge.ExternalLoginCAS,
+		response, err := prompter.HandleExternalLogin(session.ExternalLoginChallenge{
+			Kind:     session.ExternalCAS,
 			LoginURL: "https://sso.example.com/cas/login",
 			Message:  "Please enter the callback url:",
 		})
