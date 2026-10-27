@@ -133,7 +133,7 @@ on stderr is expected.
 
 - Open and hide windows outside their own frame:
   `go func() { mygo.RunOnMain(fn) }()`.
-- mygo 0.6.4 defers a destroy that happens during a frame (upstream PR #674),
+- mygo 0.7.1 defers a destroy that happens during a frame (upstream PR #674),
   but not `Hide`, and a window created inside a frame can still come up without
   a GL context (issue #680, open). On the operator's GNOME Wayland session that
   is a SIGSEGV in `gtk_main` (`addr=0x40`, "signal arrived during cgo

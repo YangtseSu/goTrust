@@ -61,7 +61,7 @@ each release are in `docs/development.md`.
 - A prompt page lives on the loopback interface only, under a single-use token,
   and never logs what was typed into it.
 - mygo quirk: create and hide windows outside their own frame
-  (`go func() { mygo.RunOnMain(fn) }()`). 0.6.4 defers a destroy that happens
+  (`go func() { mygo.RunOnMain(fn) }()`). 0.7.1 defers a destroy that happens
   during a frame (upstream PR #674), but it does not defer `Hide`, and a window
   created in a frame can still come up without a GL context (issue #680). Both
   crash GTK on the operator's Wayland session. See
