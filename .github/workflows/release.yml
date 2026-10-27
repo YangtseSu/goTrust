@@ -69,9 +69,12 @@ jobs:
             archive: tar
     runs-on: ${{ matrix.os }}
     env:
+      # Only the version and the archive kind are job-wide. GOOS/GOARCH are
+      # not: setup-go runs `go env` before the build, and "universal" is not a
+      # GOARCH it accepts.
       VERSION: ${{ github.ref_name }}
-      GOOS: ${{ matrix.goos }}
-      GOARCH: ${{ matrix.goarch }}
+      TARGET_OS: ${{ matrix.goos }}
+      TARGET_ARCH: ${{ matrix.goarch }}
       ARCHIVE: ${{ matrix.archive }}
     steps:
       - uses: actions/checkout@v4
@@ -86,36 +89,38 @@ jobs:
         run: |
           set -euo pipefail
           version="${VERSION#v}"
+          goos="$TARGET_OS"
+          goarch="$TARGET_ARCH"
           ext=""
-          if [ "$GOOS" = windows ]; then ext=".exe"; fi
+          if [ "$goos" = windows ]; then ext=".exe"; fi
           flags=(-trimpath -ldflags "-s -w -X github.com/YangtseSu/goTrust/internal/version.Version=$version")
           # A GUI-subsystem Windows binary opens no console window. The CLI
           # keeps its console so its output is visible.
           gui_flags=("${flags[@]}")
-          if [ "$GOOS" = windows ]; then
+          if [ "$goos" = windows ]; then
             gui_flags=(-trimpath -ldflags "-s -w -H windowsgui -X github.com/YangtseSu/goTrust/internal/version.Version=$version")
           fi
 
           mkdir -p build dist
-          if [ "$GOARCH" = universal ]; then
+          if [ "$goarch" = universal ]; then
             for arch in amd64 arm64; do
-              GOARCH="$arch" CGO_ENABLED=0 go build "${gui_flags[@]}" -o "build/gotrust-$arch" ./cmd/gotrust
-              GOARCH="$arch" CGO_ENABLED=0 go build "${flags[@]}" -o "build/gotrust-cli-$arch" ./cmd/gotrust-cli
+              GOOS="$goos" GOARCH="$arch" CGO_ENABLED=0 go build "${gui_flags[@]}" -o "build/gotrust-$arch" ./cmd/gotrust
+              GOOS="$goos" GOARCH="$arch" CGO_ENABLED=0 go build "${flags[@]}" -o "build/gotrust-cli-$arch" ./cmd/gotrust-cli
             done
             lipo -create build/gotrust-amd64 build/gotrust-arm64 -output "build/gotrust$ext"
             lipo -create build/gotrust-cli-amd64 build/gotrust-cli-arm64 -output "build/gotrust-cli$ext"
           else
-            CGO_ENABLED=0 go build "${gui_flags[@]}" -o "build/gotrust$ext" ./cmd/gotrust
-            CGO_ENABLED=0 go build "${flags[@]}" -o "build/gotrust-cli$ext" ./cmd/gotrust-cli
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build "${gui_flags[@]}" -o "build/gotrust$ext" ./cmd/gotrust
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build "${flags[@]}" -o "build/gotrust-cli$ext" ./cmd/gotrust-cli
           fi
 
-          root="gotrust_${version}_${GOOS}_${GOARCH}"
+          root="gotrust_${version}_${goos}_${goarch}"
           mkdir -p "dist/$root" "dist/${root}-cli"
           cp "build/gotrust$ext" LICENSE "dist/$root/"
           cp "build/gotrust-cli$ext" LICENSE "dist/${root}-cli/"
           # The desktop entry and the icons belong to the Linux archive: a
           # package installs them, and a tarball should carry the same files.
-          if [ "$GOOS" = linux ]; then
+          if [ "$goos" = linux ]; then
             mkdir -p "dist/$root/data"
             cp -r data/gotrust.desktop data/icons "dist/$root/data/"
           fi
