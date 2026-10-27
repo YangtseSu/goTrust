@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# One grouped pull request per ecosystem per day. The remaining modules are
+# normal releases, so Dependabot can move them; gvisor.dev/gvisor is a
+# pseudo-version and stays a manual bump. A bot PR proves the build, the tests
+# and the cross-builds, not the live login or the UI smoke, so the open-PR
+# limits stay low and merging stays manual.
+
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 3
+    groups:
+      go-modules:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns: ["*"]
