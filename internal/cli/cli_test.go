@@ -421,3 +421,27 @@ func TestReportingCommandsAreExclusive(t *testing.T) {
 		t.Fatalf("exit = %d, stderr = %q", code, stderr)
 	}
 }
+
+func TestPrintClashMerge(t *testing.T) {
+	_, path := testSettings(t)
+	seedGrant(t, path)
+	code, stdout, stderr := run(t, "-config", path, "-print-clash-merge")
+	if code != ExitOK {
+		t.Fatalf("exit = %d (stderr %q)", code, stderr)
+	}
+	if !strings.Contains(stdout, "prepend-rules:") || !strings.Contains(stdout, "prepend-proxies:") {
+		t.Fatalf("merge output:\n%s", stdout)
+	}
+}
+
+func TestPrintClashConfig(t *testing.T) {
+	_, path := testSettings(t)
+	seedGrant(t, path)
+	code, stdout, stderr := run(t, "-config", path, "-print-clash-config")
+	if code != ExitOK {
+		t.Fatalf("exit = %d (stderr %q)", code, stderr)
+	}
+	if !strings.Contains(stdout, "mixed-port:") || !strings.Contains(stdout, "MATCH,DIRECT") {
+		t.Fatalf("standalone config:\n%s", stdout)
+	}
+}

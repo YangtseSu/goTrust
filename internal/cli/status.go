@@ -150,22 +150,35 @@ func reportPACURL(stdout, stderr io.Writer, cfg config.Config) int {
 
 // reportRender prints a PAC or a Clash fragment built from the cached grant.
 // The cache is the last login's grant; no gateway is contacted.
-func reportRender(stdout, stderr io.Writer, cfg config.Config, configPath string, clash bool) int {
+func reportRender(stdout, stderr io.Writer, cfg config.Config, configPath string, format string) int {
 	cached, err := session.ReadResourceCache(config.ResourcesPath(configPath))
 	if err != nil {
 		fmt.Fprintf(stderr, "grant: %v\n", err)
 		return ExitFailure
 	}
 	snapshot := handoff.FromCache(cfg, cached)
-	if clash {
-		fragment, err := snapshot.Clash()
-		if err != nil {
-			fmt.Fprintf(stderr, "clash: %v\n", err)
-			return ExitFailure
-		}
-		fmt.Fprint(stdout, fragment)
-		return ExitOK
+
+	var (
+		text string
+		err2 error
+	)
+	switch format {
+	case "pac":
+		text = snapshot.PAC()
+	case "clash":
+		text, err2 = snapshot.Clash()
+	case "clash-merge":
+		text, err2 = snapshot.ClashMerge()
+	case "clash-config":
+		text, err2 = snapshot.ClashConfig()
+	default:
+		fmt.Fprintf(stderr, "handoff: unknown format %q\n", format)
+		return ExitUsage
 	}
-	fmt.Fprint(stdout, snapshot.PAC())
+	if err2 != nil {
+		fmt.Fprintf(stderr, "%s: %v\n", format, err2)
+		return ExitFailure
+	}
+	fmt.Fprint(stdout, text)
 	return ExitOK
 }

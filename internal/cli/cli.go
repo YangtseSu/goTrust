@@ -56,6 +56,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		"print a PAC built from the cached grant, then exit")
 	printClash := flags.Bool("print-clash", false,
 		"print a Clash/Mihomo rule fragment built from the cached grant, then exit")
+	printClashMerge := flags.Bool("print-clash-merge", false,
+		"print a Clash Verge Rev Merge profile built from the cached grant, then exit")
+	printClashConfig := flags.Bool("print-clash-config", false,
+		"print a complete standalone Mihomo config built from the cached grant, then exit")
 	asJSON := flags.Bool("json", false, "encode the reported grant and status as JSON")
 	printURL := flags.Bool("print-url", false,
 		"print the URL of an interactive login step instead of opening a browser")
@@ -72,7 +76,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return ExitUsage
 	}
 	commands := 0
-	for _, command := range []bool{*status, *printResources, *pacURL, *printPAC, *printClash} {
+	for _, command := range []bool{*status, *printResources, *pacURL, *printPAC, *printClash, *printClashMerge, *printClashConfig} {
 		if command {
 			commands++
 		}
@@ -101,9 +105,13 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	case *pacURL:
 		return reportPACURL(stdout, stderr, cfg)
 	case *printPAC:
-		return reportRender(stdout, stderr, cfg, path, false)
+		return reportRender(stdout, stderr, cfg, path, "pac")
 	case *printClash:
-		return reportRender(stdout, stderr, cfg, path, true)
+		return reportRender(stdout, stderr, cfg, path, "clash")
+	case *printClashMerge:
+		return reportRender(stdout, stderr, cfg, path, "clash-merge")
+	case *printClashConfig:
+		return reportRender(stdout, stderr, cfg, path, "clash-config")
 	default:
 		return runSession(stdout, stderr, cfg, path, *asJSON, *printURL)
 	}
