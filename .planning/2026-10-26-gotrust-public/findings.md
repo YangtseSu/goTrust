@@ -237,3 +237,204 @@ code proposed for deletion, and their features stay on their method paths.
 | Renaming paths breaks an installed copy | One documented directory move, and a package rebuild in the same step |
 | A second front-end can fight the GUI over one profile's login state | Per-profile lock in `core`, taken by both front-ends |
 | The web prompt opens a listener | Bind loopback only, single-use token, `no-store`, no external assets, tied to the login attempt's context |
+
+## External proxy handoff: what the other programs need (researched 2026-10-28)
+
+The demand behind the deferred dae phase: reach granted intranet resources, or
+all traffic, through the tunnel without goTrust growing TUN mode, a system proxy
+or elevation. The worked example is the old skeleton plan's phase 8, which only
+emitted one dae config. The scope below is broader: one description of what the
+tunnel can reach, rendered for the tools people actually run.
+
+### What the data path already allows
+
+| Fact | Where | Consequence for a handoff |
+|---|---|---|
+| `dial.NewDialer(…, alwaysUseVPN=false, …)` sends a granted destination through the tunnel and dials everything else directly from this host; `ErrACLDenied` exists because the gateway terminates the session on a non-granted destination | `core/session/session.go`, `core/atrust/dial/dialer.go` | A tool's "global" mode pointed at goTrust makes goTrust the splitter, not a full-tunnel VPN. The tool must not force everything into the tunnel; goTrust already refuses the part the gateway would punish |
+| The listeners are SOCKS5 (CONNECT and UDP ASSOCIATE) and HTTP (CONNECT and forward); an ungranted UDP destination is dialled directly | `core/proxy/server.go` | TUN/global through goTrust carries TCP and granted UDP; the HTTP listener stays TCP-only, so PAC cannot carry UDP |
+| Both listeners pass hostnames to the tunnel: SOCKS5 takes the name and resolves it with `proxy.Options.Resolver`; HTTP CONNECT forwards `host:port` unchanged | `core/proxy/server.go`, `core/session/session.go` | Name access works without touching the system resolver. Chromium sends the hostname to a SOCKS v5 proxy and resolves nothing locally; Firefox does the same with "proxy DNS when using SOCKS v5" |
+| The resolver reaches the gateway DNS through the tunnel with its own `stack.DialUDP`/`DialTCP`, not through the proxy or the dialer's ACL | `core/atrust/resolve/resolver.go` | Nothing outside the process can use that path. dae's upstream schemes have no socks transport; sing-box can detour a DNS server through an outbound, but a query to the gateway DNS reaches the dialer as an ungranted destination and is sent direct, not through the tunnel |
+
+Intranet *names* are therefore the hard part. Two mechanisms were considered:
+
+1. fake-IP plus domain dialing in the tool (Clash/Mihomo fakeip + socks
+   outbound): the tool hands the name to goTrust, which resolves it in the
+   tunnel. No goTrust change; needs the tool's own DNS configured. Chosen.
+2. a loopback DNS relay in goTrust that forwards raw queries through the tunnel
+   to the gateway DNS (a byte relay, not a resolver). Not chosen: an address
+   answer does not preserve a name-only grant, and the chosen targets do not
+   need it.
+
+### Config surfaces verified on 2026-10-28
+
+- **dae 2.1.1** (installed here): `node { 'socks5://127.0.0.1:1080' }`,
+  `group { … policy: fixed(0) }`, `routing { pname(gotrust) -> must_direct; … }`,
+  `global { dial_mode: 'domain' }`. `domain(suffix: a, suffix: b)` and
+  `dip(prefix, …)` are one rule each; rules are first-match, and the example
+  config presets `dip(geoip:private) -> direct`, so intranet prefixes must come
+  before it. `include { … }` exists, but an included file must stay under the
+  entry config's directory, which the packaged service keeps root-owned in
+  `/etc/dae`; goTrust cannot install its own fragment there.
+- **sing-box / Throne**: Throne's `Custom (sing-box outbound)` profile takes one
+  outbound (`{"type":"socks","server":"127.0.0.1","server_port":1080}`), its
+  structured routing profile takes `ip:10.0.0.0/8` and `suffix:example.com`
+  lines plus a default outbound in the UI, and `Custom (sing-box config)` runs a
+  complete config. Throne rule-sets accept only `.srs` URLs, so a JSON rule-set
+  URL helps sing-box itself, not Throne. sing-box route rules since 1.11 use
+  `action`/`outbound`, `final` is the fallback, and a remote `rule_set` can use
+  `format: source` (JSON) or binary.
+- **ZeroOmega / SwitchyOmega**: a PAC profile takes a URL or a raw script; the
+  PAC compiler emits `isInNet` only for literal-IP hosts and hostname matching
+  for names (`omega-pac/src/conditions.coffee`). PAC has no port matching, which
+  is harmless: goTrust enforces the granted port itself and sends the rest
+  direct.
+- **PAC**: `FindProxyForURL` returns `PROXY host:port` or `SOCKS5 host:port`;
+  the script is fetched directly, not through the proxy it selects.
+
+### What a handoff needs to describe
+
+| Item | Source in the tree |
+|---|---|
+| SOCKS5 and HTTP endpoints | `config.Config.ProxyAddresses()` |
+| Granted prefixes | `Resources.IPs` (`from`/`to` ranges, not prefixes) merged to the smallest CIDR set |
+| Granted names | `Resources.Domains` keys (suffix-matched on label boundaries) and `Resources.DNS` names; wildcard `*.` becomes a suffix. `App.WebDomains` is app metadata and never a rule |
+| Ports and protocols | `Resources.IPs`/`Domains`; only informational, goTrust's dialer is the authority |
+| GoTrust's own process name | `gotrust`, for the loop guard every tool needs |
+
+### Risks the design has to carry
+
+| Risk | Mitigation |
+|---|---|
+| Tool captures goTrust's own TLS to the gateway and loops it back | Every rendering starts with a process rule to `direct`/`must_direct`; a test asserts it |
+| Intranet prefixes precede the private-range preset | Renderer emits the prefixes before any `geoip:private`/`ip_is_private` line, with the reason in a comment; test asserts order |
+| Intranet names do not resolve in the tool | The name must reach the proxy; a tool that resolves locally only matches IP grants. Fake-IP is the documented mechanism for TUN; PAC matches only names present in the grant |
+| UDP silently disappears in TUN mode | Documented per target: PAC and the HTTP listener are TCP-only, SOCKS5 carries UDP |
+| A generated Clash fragment goes stale when the grant changes | The PAC is served live; the Clash fragment is regenerated after a login that changes the grant |
+
+## How the reference clients hand traffic to other programs (researched 2026-10-28)
+
+### zju-connect: TUN inside the client, DNS hijack, fake-IP
+
+| Option | What it does | Why it exists |
+|---|---|---|
+| `-tun-mode`, `-add-route` | Creates a TUN device, takes root, installs the granted routes | Full-tunnel use without a second program |
+| `-dns-hijack` | Intercepts UDP/53 inside its own TUN and answers from the resolver (`service/dns.go`, `HandleDnsMsg`) | An application inside the TUN resolves names through the tunnel |
+| `-fake-ip` | The resolver hands out addresses from `198.18.0.0/16`; the TUN stack maps the address back to the name before matching | aTrust grants can be domain-only; a real answer's address is not necessarily a granted address. The README states that with aTrust, TUN traffic by name is unreliable without hijack/fake-IP |
+| `-dns-server-bind` | A standalone DNS listener (UDP, resolver-backed, A/AAAA only) | Other programs can point at the tunnel's resolver without using the TUN |
+| `-remote-dns-server auto`, `-secondary-dns-server`, `-local-dns-server` | The gateway's own DNS through the tunnel, a fallback, and the resolver used to reach the gateway's name | Gateways may or may not issue DNS servers; the local one is for finding the VPN server itself |
+| `-custom-dns`, `-custom-proxy-domain` | Manual name→address overrides and extra proxied names | Deployments whose grants are incomplete or whose split DNS is wrong |
+| `-proxy-all` | Forces every destination into the tunnel | Dangerous with a gateway that terminates the session on a non-granted destination; the OpenWrt notes pair it with an external splitter |
+
+The DNS server there is resolver-backed: each question calls `resolver.Resolve`, which applies the
+gateway's domain rules, the server-issued name→address map, the remote DNS through the tunnel and
+the secondary resolver; it answers A and AAAA only, `dns.NewRR` with TTL 0. It is not a forwarder,
+which is why it still works on gateways that issue no DNS server, and why public names go to the
+system resolver instead of the corporate one.
+
+### EZ4Connect: no TUN, two documented ways to combine with Clash/Mihomo
+
+`docs/ADVANCED_USAGE.md`:
+
+1. The client as the main proxy: system proxy on, and a "direct proxy" sends everything the client
+   does not tunnel to Clash. This mirrors goTrust's split dialer.
+2. Clash/Mihomo as the main proxy: a SOCKS5 proxy entry pointing at the client, a proxy group, and
+   rules: auth/VPN host `DIRECT`, the campus suffix and a private CIDR to the group, and
+   `PROCESS-NAME` of the client and its core before the suffix rule. With Clash TUN, it adds
+   `fake-ip-filter` for the campus suffix, because a fake address defeats the `IP-CIDR` rule.
+   `route-exclude-address` must not contain the campus prefix.
+
+The rule sets there are written by hand and are deployment-specific (one campus suffix, `10/8`).
+Notably the same rule shape is repeated in another GUI's README, so this is the de facto pattern:
+process exclusion first, name rules next, address rules last, and the client does the final split.
+
+### What this means for goTrust
+
+- The external-tool direction is sound and already the documented practice; goTrust can generate
+  the rules from the live grant instead of asking the user to copy a campus suffix and `10/8`.
+- Fake-IP is the mechanism that preserves a *name* across a tool's TUN. Without it, the tool hands
+  an address to goTrust and a domain-only grant cannot match. Generated configurations should
+  therefore (a) route the grant's domain suffixes to the goTrust outbound and (b) tell the user to
+  keep those names out of the tool's fake-IP filter, or better, not filter them at all.
+- A loopback DNS server is the established shape for a tool that resolves locally, but it answers
+  with an address, and an address loses a name-only grant. It is therefore not part of the chosen
+  scope: both chosen targets deliver the name to the proxy, and goTrust resolves it through the
+  tunnel.
+- zju-connect's fake-IP warning confirms the crux: an aTrust grant that names a domain is matched
+  by name at the gateway (`AddrPretend` in `tcptunnel.go`), so the tool must not pre-resolve.
+- A generated rule set must never be derived from `App.WebDomains` alone: that field is the
+  portal's launch hint, not a grant. Only `AddressList` entries become resources.
+
+## aTrust deployments: what varies (researched 2026-10-28)
+
+Evidence: the in-tree parser (`core/atrust/client/atrust/parse.go`), the reference clients' options
+and issue tracker, and the operator's own gateway logs.
+
+| Dimension | What varies | Consequence for goTrust and the handoff |
+|---|---|---|
+| Server version | aTrust 2.5.10 and 2.5.16 seen in the field; login replies differ in optional blocks | Parse defensively; every optional block already degrades to "not available" |
+| Login | Domains `Radius`, `local`, `openldap`, …; `auth/psw`, `auth/cas`, `auth/smsCheckCode`, TOTP; click captcha, SMS, external SSO; device binding; forced password change | Nothing to do with routing; the handoff must not assume a login shape |
+| Access model | Only apps whose `AccessModel` is `L3VPN` produce address rules; other models are skipped | A portal app can appear in the list yet be unreachable through the tunnel. The handoff snapshot must come from parsed rules, never from app names or `WebDomains` |
+| Address shape | Single address, CIDR, `from-to` range, domain, port or port range, protocol `tcp`/`udp`/`all` | Prefixes must be computed from ranges; domains are label-suffix rules; ports decide what the gateway tunnels and what goTrust sends direct |
+| Address family | IPv4 only in the parser; IPv6 entries are logged and skipped | Handoff rules are IPv4 |
+| Public addresses | A ZTNA deployment grants domains that resolve to public addresses (institutional access), and the login reply carries the name→address map | Never assume private ranges in generated rules; it is correct to route a public address through goTrust |
+| Name→address map | `AddressList[].IP` adds both a DNS rule and an IP rule | For such deployments the tool can resolve the name anywhere; the address is granted |
+| `AddrPretend` | Whether the TCP tunnel reports the name or the already-resolved address to the gateway | A tool that pre-resolves can lose a name-only grant; keep names in the tool |
+| `EnableTCPPrefL3` | Per app: TCP prefers the L3 tunnel instead of the per-connection TCP tunnel | Transport choice inside goTrust; invisible to the handoff |
+| DNS issue | The login reply may carry zero, one or two DNS servers (`DNSOption`, `DNSOptionV2`) | The chosen handoff does not need them: the browser or Clash sends the name to the proxy and goTrust resolves it through the tunnel. A tool that resolves locally only matches IP grants |
+| Session lifetime | An idle aTrust session on the operator's gateway expires in ~10 min; only real application traffic extends it; renewal is not traffic | A TUN user with no traffic still needs goTrust's keep-alive; document it |
+| Nodes | Multiple node groups, WAN/LAN addresses, `{{sdpcHost}}`, default port 441, best-node refresh | Only affects goTrust's own connection, not the handoff |
+| ACL | A non-granted destination forced into the tunnel ends the session (gateway SHUTDOWN) | Global mode through goTrust is a split, not a full tunnel; do not set anything equivalent to `proxy_all` |
+
+### Correction to an earlier assumption in this file
+
+`things-go/go-socks5` v0.1.1+ implements UDP ASSOCIATE, and the injected dial is called with
+`network == "udp"`. A scratch test against `core/proxy` proved the relay works end to end: the
+SOCKS5 handshake, the associate reply, the datagram header, the injected dial and the echo all
+behaved. So UDP through goTrust is available on the SOCKS5 listener (HTTP stays TCP-only), and a
+tool's TUN can carry UDP to granted UDP resources; an ungranted UDP destination is dialled direct
+from this host, which is what the reference clients also do and what their issue tracker calls
+intended behaviour.
+
+## Handoff scope decision (2026-10-28)
+
+Chosen targets, and only these:
+
+1. **Browsers and ZeroOmega through a PAC served on loopback.** The PAC is the
+   only live artifact: a stable URL, generated per request from the current
+   grant, so a reconnect or a new grant needs no paste.
+2. **Clash/Mihomo and the GUIs that consume their config (Clash Verge Rev,
+   FlClash) through a pasted rule fragment.** One format covers the family; TUN
+   mode, global mode and fake-IP are the tool's own.
+
+Why not the rest:
+
+* **dae** has no fake-IP and its DNS upstream has no socks scheme, so an
+  intranet name it must resolve would require goTrust to add a DNS listener.
+  That is the only reason dae would cost more than a text renderer, and it is
+  not worth a new service while Clash covers TUN.
+* **sing-box and Throne** would be a third and fourth format for the same
+  consumer group, with no capability the two chosen targets lack.
+* The snapshot JSON endpoint, the scope toggle and the extra rule lists had no
+  consumer of their own.
+
+DNS handling, which is the only non-obvious part:
+
+* A browser request and a Clash request carry the hostname to the HTTP/SOCKS5
+  proxy, and goTrust's resolver answers it through the tunnel. Intranet names
+  therefore need no local DNS server.
+* Clash in TUN mode needs fake-IP so the name survives until the connection
+  reaches the proxy; the granted suffixes must not be placed in
+  `fake-ip-filter`.
+* A tool that resolves first and sends an address matches only the IP grants.
+  That is documented as a boundary, not worked around with a DNS server.
+
+Artifacts:
+
+* One snapshot: proxy endpoints, merged IPv4 prefixes, name suffixes, the
+  gateway host, and the online flag.
+* `handoff.listen` serves `GET /proxy.pac`; the CLI prints the URL, the script,
+  and the Clash fragment from the cached grant.
+* The GUI copies the PAC URL from the tray and the main window.
+* Rules never use a private-range preset and never encode ports; the grant is
+  the authority and goTrust enforces it.
+* Loopback only; no TUN device, no system proxy, no DNAT rule, no elevation.

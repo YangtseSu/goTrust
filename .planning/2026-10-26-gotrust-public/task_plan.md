@@ -10,18 +10,26 @@ as it stands because the repository is going public.
 Naming rule: the project and everything a user reads stays `goTrust`; binaries,
 directories, XDG paths and packaging names are lowercase.
 
-The scope is rearrangement and trimming of code that already works. No new
-protocol capability is added, and the behaviour of the login path stays what
-the gateway has already accepted.
+The scope up to Phase 9 was rearrangement and trimming of code that already
+works. No new protocol capability was added, and the behaviour of the login path
+stayed what the gateway has already accepted. Phase 10 is the first new scope:
+it lets an external program use the tunnel, and it still adds no protocol
+capability, no TUN device, no system proxy and no elevation.
 
 ## Next Step
 
 Phase 9 is complete. CI is green, the installed `r105` package passed its live
 login, and Dependabot's security alerts are on with one grouped update run a
-day per ecosystem. No phase is open; the next work is new scope.
+day per ecosystem. Phase 10 is planned, with 10a as the first step; no code for
+it has started.
 
 ## Current Phase
 
+Phase 10 is planned, narrowed to two targets: browsers and ZeroOmega through a
+PAC served on loopback, and the Clash/Mihomo family (Clash Verge Rev, FlClash)
+through a pasted rule fragment. No DNS listener is added: the chosen targets
+send the name to the proxy and goTrust resolves it through the tunnel; dae is
+out because it has no fake-IP and would force one.
 Phase 9 is code complete. Every declared module is current: the patch/minor set,
 mygo 0.7.1, gvisor's newest buildable `go` branch commit, and ttlcache in place
 of the dormant cache. The workflows use the current action majors, Dependabot
@@ -372,6 +380,116 @@ chased first.
 - **Risk:** the gvisor module is a branch commit, not a release. If the stack
   breaks later, pin the newest commit that passes and record why here.
 
+### Phase 10: Browser and Clash-family handoff (planned)
+
+Goal: a browser (through ZeroOmega or the system proxy) sends only the granted
+intranet destinations to goTrust, and a Clash/Mihomo user can do the same or
+route everything, without goTrust owning a TUN device, the system proxy or
+elevation. Two targets only; anything else is a later phase.
+
+Targets:
+
+* **Browsers and ZeroOmega through a PAC served on loopback.** Covers the
+  operator's own case (resources addressed by IP) and intranet names, because
+  the browser sends the name to the proxy and goTrust resolves it inside the
+  tunnel.
+* **Clash/Mihomo and the GUIs that consume their config (Clash Verge Rev,
+  FlClash) through a rule fragment pasted into an existing config.** One format
+  serves the whole family.
+
+Not in this phase: dae, sing-box, Throne, Xray/v2ray, a snapshot JSON endpoint,
+a scope toggle, extra rule lists. Xray needs a whole JSON document, its core has
+no TUN or system proxy, and a front-end owns the config anyway; sing-box/Throne
+are a third dialect; dae is the one target that would force a DNS service (it
+has no fake-IP and cannot reach the gateway resolver), so it stays out until
+someone needs it. Clash/Mihomo answer the same TUN question with fake-IP and no
+new listener.
+
+Design constraints:
+
+* Routing is per grant: granted destinations go through the tunnel, everything
+  else is dialled directly. A tool's global mode sends everything to goTrust and
+  goTrust splits; nothing forces a non-granted destination into the tunnel.
+* Names must reach goTrust as names. HTTP CONNECT and SOCKS5 do that; a TUN tool
+  needs fake-IP. A name-only grant is lost when the tool resolves first.
+* No DNS listener. For both targets the name arrives at the proxy and goTrust's
+  existing resolver answers it through the tunnel. A DNS server would only help
+  a tool that resolves locally, which is the case this phase declines to paper
+  over.
+* The data path is IPv4; rules and PAC matching are IPv4 only.
+
+**Snapshot**
+
+- [ ] `core/handoff`: `Snapshot{Generated, Profile, Gateway, TunnelIP, Online,
+  SOCKS5, HTTP, Prefixes []netip.Prefix, Domains []string}` built from
+  `config.Config` and `session.State`.
+- [ ] Prefixes: merge `IPRule.From`/`To` into the smallest IPv4 prefix set,
+  dedupe and sort. Ports are ignored: goTrust enforces them and dials an
+  ungranted port directly.
+- [ ] Domains: label-suffix set from `Resources.Domains` and `Resources.DNS`
+  names, `*.` removed, lower-cased, deduped. `App.WebDomains` never becomes a
+  rule.
+- [ ] `Snapshot.PAC()` and `Snapshot.Clash()` are pure and tested.
+
+**PAC endpoint**
+
+- [ ] `handoff.listen` (default `127.0.0.1:1082`, empty disables) serves
+  `GET /proxy.pac`; GET only, `no-store`, loopback only.
+- [ ] PAC: a literal IPv4 inside a granted prefix, or a host equal to or under a
+  granted suffix, returns the HTTP proxy (`PROXY`) when it is configured, or
+  the SOCKS5 proxy (`SOCKS5`) when only SOCKS5 is enabled; `localhost`, loopback
+  and the gateway host return `DIRECT`; everything else `DIRECT`. Never
+  `isInNet` on a hostname.
+- [ ] Generated per request from the live session state; disconnected serves a
+  DIRECT-only script so the browser keeps working while goTrust reconnects.
+- [ ] The server runs for the life of each front-end, before the first login.
+- [ ] CLI: `--pac-url` prints the URL and `--print-pac` prints the script; both
+  read the cached grant and the settings, no login.
+- [ ] GUI: a tray item "复制 PAC 地址" and the same action in the main window.
+
+**Clash/Mihomo fragment**
+
+- [ ] `--print-clash` renders a paste-in fragment: a `socks5` proxy entry
+  (`udp: true`), a selector group `goTrust-routes`, and rules in this order:
+  `PROCESS-NAME,gotrust` and `gotrust-cli` (plus the `.exe` spellings) →
+  `DIRECT`, the gateway host → `DIRECT` (`IP-CIDR,<ip>/32` when the profile
+  address is an IP, `DOMAIN,<host>` when it is a name), granted
+  `DOMAIN-SUFFIX` → the group, granted `IP-CIDR,…,no-resolve` → the group.
+- [ ] The fragment assumes the user's own fallback (usually `DIRECT`) and adds
+  no private-range preset: a grant may be public, and a grant may sit inside a
+  private range.
+- [ ] Docs: where to paste, the `fake-ip` requirement for TUN mode, and “do not
+  put the granted suffixes in `fake-ip-filter`”.
+
+**Docs and gates**
+
+- [ ] README: ZeroOmega PAC profile (URL), system proxy (PAC URL), Clash Verge
+  Rev/FlClash (fragment + fake-IP), and a limits table: IPv4 only; the HTTP
+  proxy is TCP-only and PAC cannot carry UDP; ungranted destinations go direct;
+  a name-only grant needs the name to survive; the endpoint is loopback.
+- [ ] README also documents the zero-artifact usage: point one program at the
+  existing SOCKS5/HTTP proxy (`ALL_PROXY`/`HTTPS_PROXY`, `curl --proxy`, an SSH
+  `ProxyCommand`, a systemd `Environment=`). goTrust already splits by grant, so
+  a consumer needs no rules at all; the PAC and the Clash fragment exist for a
+  browser-only scope or for coexistence with another proxy that owns the default
+  route.
+- [ ] README states the PAC boundary: it matches only names present in the grant
+  (`Resources.Domains` and the gateway's name→IP map). An IP-only grant reached
+  by a name needs the global proxy mode (browser profile or environment), or
+  Clash fake-IP; PAC will not resolve an unknown name to test its prefix.
+- [ ] Tests: prefix merge (ranges, adjacency, duplicates), domain
+  normalisation, PAC matching for suffix, literal IP, loopback and gateway,
+  Clash rule order and `no-resolve`, offline PAC, bind failure, config
+  validation.
+- [ ] Smoke: evaluate the PAC in a JavaScript engine against representative
+  URLs; paste the Clash fragment into a real config and start it; one live login
+  fetching the PAC and reaching a granted resource through the HTTP proxy.
+- **Status:** planned.
+- **Risk:** a static Clash fragment goes stale when the grant changes; the PAC
+  does not. Regenerate the fragment after a login that changes the grant.
+- **Risk:** PAC cannot carry UDP, so QUIC and WebRTC bypass the proxy; the docs
+  say so rather than pretending the browser is fully covered.
+
 ## Not doing
 
 Items that would add code nobody has asked for, or that this machine cannot
@@ -379,7 +497,7 @@ verify.
 
 | Item | Why not |
 |---|---|
-| Local DNS listener (`ServeDNS` on `127.0.0.1`) | No client requires one, and without TUN it only helps an application that resolves names itself and then reaches the proxy by IP. The current implementation answers one A/AAAA record, UDP only, zero TTL, no NXDOMAIN, so building it out is a feature with no consumer |
+| Local DNS listener (`ServeDNS` on `127.0.0.1`) | Not needed for the chosen targets: the browser or Clash sends the name to the proxy and goTrust resolves it through the tunnel. A DNS answer is an address, so it would not help a name-only grant anyway. dae would need one; that is why dae is not a target |
 | A `--resolve` subcommand | Convenience, not a requirement |
 | Remote AAAA lookups | The resolver asks `ip4` only, but the data plane is IPv4 throughout: `dial.Dial` and `DialIPPort` send every IPv6 target to `dialDirectIP`, `ipresource` folds addresses with `To4()` into a uint32 trie, and the gvisor endpoint dials `header.IPv4ProtocolNumber`. An AAAA answer would resolve an internal name and then connect around the tunnel. Revisit when a deployment grants IPv6 resources and the path can be exercised end to end |
 | `dns_ttl` / `custom_dns` configuration | The TTL is a constant and the portal supplies the name entries; no deployment has asked for either knob |
