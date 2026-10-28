@@ -19,6 +19,7 @@ import (
 	"syscall"
 
 	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/handoff"
 	"github.com/YangtseSu/goTrust/core/logging"
 	"github.com/YangtseSu/goTrust/core/profilelock"
 	"github.com/YangtseSu/goTrust/core/prompt/web"
@@ -49,6 +50,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		"report whether the active profile is in use and print the cached grant, then exit")
 	printResources := flags.Bool("print-resources", false,
 		"print the grant cached by the last login, then exit")
+	pacURL := flags.Bool("pac-url", false,
+		"print the PAC URL served while goTrust runs, then exit")
+	printPAC := flags.Bool("print-pac", false,
+		"print a PAC built from the cached grant, then exit")
+	printClash := flags.Bool("print-clash", false,
+		"print a Clash/Mihomo rule fragment built from the cached grant, then exit")
 	asJSON := flags.Bool("json", false, "encode the reported grant and status as JSON")
 	printURL := flags.Bool("print-url", false,
 		"print the URL of an interactive login step instead of opening a browser")
@@ -64,8 +71,14 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "%s: unexpected argument %q\n", program, flags.Arg(0))
 		return ExitUsage
 	}
-	if *status && *printResources {
-		fmt.Fprintf(stderr, "%s: -status and -print-resources are separate commands\n", program)
+	commands := 0
+	for _, command := range []bool{*status, *printResources, *pacURL, *printPAC, *printClash} {
+		if command {
+			commands++
+		}
+	}
+	if commands > 1 {
+		fmt.Fprintf(stderr, "%s: the reporting commands are separate\n", program)
 		return ExitUsage
 	}
 	if *showVersion {
@@ -85,6 +98,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return reportStatus(stdout, stderr, cfg.ActiveProfile, path, *asJSON)
 	case *printResources:
 		return reportCachedGrant(stdout, stderr, path, *asJSON)
+	case *pacURL:
+		return reportPACURL(stdout, stderr, cfg)
+	case *printPAC:
+		return reportRender(stdout, stderr, cfg, path, false)
+	case *printClash:
+		return reportRender(stdout, stderr, cfg, path, true)
 	default:
 		return runSession(stdout, stderr, cfg, path, *asJSON, *printURL)
 	}
@@ -154,6 +173,18 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 		},
 		ResourceCachePath: config.ResourcesPath(configPath),
 	})
+
+	if listen := strings.TrimSpace(cfg.Handoff.Listen); listen != "" {
+		pac := handoff.New(listen, func() handoff.Snapshot {
+			return handoff.FromState(cfg, manager.State())
+		}, logf)
+		if err := pac.Start(context.Background()); err != nil {
+			logf("handoff: %v", err)
+		} else {
+			defer func() { _ = pac.Close() }()
+			logf("PAC at %s", pac.URL())
+		}
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

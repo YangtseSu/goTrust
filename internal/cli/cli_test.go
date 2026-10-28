@@ -355,3 +355,69 @@ func TestLiveGrantJSON(t *testing.T) {
 		t.Fatalf("resources = %+v", decoded.Resources)
 	}
 }
+
+func TestPACURLPrintsTheEndpoint(t *testing.T) {
+	_, path := testSettings(t)
+	code, stdout, stderr := run(t, "-config", path, "-pac-url")
+	if code != ExitOK {
+		t.Fatalf("exit = %d (stderr %q)", code, stderr)
+	}
+	if got := strings.TrimSpace(stdout); got != "http://127.0.0.1:1082/proxy.pac" {
+		t.Fatalf("PAC URL = %q", got)
+	}
+}
+
+func TestPACURLRefusesADisabledEndpoint(t *testing.T) {
+	cfg, path := testSettings(t)
+	cfg.Handoff.Listen = ""
+	if err := config.SaveFile(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	code, _, stderr := run(t, "-config", path, "-pac-url")
+	if code != ExitFailure || !strings.Contains(stderr, "disabled") {
+		t.Fatalf("exit = %d, stderr = %q", code, stderr)
+	}
+}
+
+func TestPrintPACUsesTheCache(t *testing.T) {
+	_, path := testSettings(t)
+	seedGrant(t, path)
+	code, stdout, stderr := run(t, "-config", path, "-print-pac")
+	if code != ExitOK {
+		t.Fatalf("exit = %d (stderr %q)", code, stderr)
+	}
+	for _, want := range []string{
+		"PROXY 127.0.0.1:1081",
+		`isInNet(host, "192.0.2.20", "255.255.255.255")`,
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("PAC is missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+func TestPrintClashUsesTheCache(t *testing.T) {
+	_, path := testSettings(t)
+	seedGrant(t, path)
+	code, stdout, stderr := run(t, "-config", path, "-print-clash")
+	if code != ExitOK {
+		t.Fatalf("exit = %d (stderr %q)", code, stderr)
+	}
+	for _, want := range []string{
+		"type: socks5",
+		"PROCESS-NAME,gotrust,DIRECT",
+		"IP-CIDR,192.0.2.20/32,goTrust-routes,no-resolve",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("fragment is missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+func TestReportingCommandsAreExclusive(t *testing.T) {
+	_, path := testSettings(t)
+	code, _, stderr := run(t, "-config", path, "-status", "-print-pac")
+	if code != ExitUsage || !strings.Contains(stderr, "separate") {
+		t.Fatalf("exit = %d, stderr = %q", code, stderr)
+	}
+}

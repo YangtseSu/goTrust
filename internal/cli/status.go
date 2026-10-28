@@ -11,9 +11,11 @@ import (
 	"io/fs"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/handoff"
 	"github.com/YangtseSu/goTrust/core/profilelock"
 	"github.com/YangtseSu/goTrust/core/session"
 )
@@ -132,4 +134,38 @@ func writeJSON(w io.Writer, value any) {
 	// A closed stdout (a pipe that was read and dropped) must not end the
 	// session: the log still carries everything the operator needs.
 	_ = encoder.Encode(value)
+}
+
+// reportPACURL prints the address the running front-end serves the PAC from.
+// It does not start a server: the URL is useful only while goTrust is running.
+func reportPACURL(stdout, stderr io.Writer, cfg config.Config) int {
+	listen := strings.TrimSpace(cfg.Handoff.Listen)
+	if listen == "" {
+		fmt.Fprintf(stderr, "handoff: the PAC endpoint is disabled in the settings\n")
+		return ExitFailure
+	}
+	fmt.Fprintf(stdout, "http://%s/proxy.pac\n", listen)
+	return ExitOK
+}
+
+// reportRender prints a PAC or a Clash fragment built from the cached grant.
+// The cache is the last login's grant; no gateway is contacted.
+func reportRender(stdout, stderr io.Writer, cfg config.Config, configPath string, clash bool) int {
+	cached, err := session.ReadResourceCache(config.ResourcesPath(configPath))
+	if err != nil {
+		fmt.Fprintf(stderr, "grant: %v\n", err)
+		return ExitFailure
+	}
+	snapshot := handoff.FromCache(cfg, cached)
+	if clash {
+		fragment, err := snapshot.Clash()
+		if err != nil {
+			fmt.Fprintf(stderr, "clash: %v\n", err)
+			return ExitFailure
+		}
+		fmt.Fprint(stdout, fragment)
+		return ExitOK
+	}
+	fmt.Fprint(stdout, snapshot.PAC())
+	return ExitOK
 }
