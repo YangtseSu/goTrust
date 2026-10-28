@@ -235,13 +235,18 @@ func resourceSearchShown(state *State) bool {
 	return !panelOpen(state) && resourceSearchNeeded(state.Session.Resources.Entries)
 }
 
+// panelMaxWidth bounds a pre-login form. At the window's own width it changes
+// nothing; a maximized window must not stretch three fields across 2000 DIPs,
+// where a label and its value stop reading as one row.
+const panelMaxWidth float32 = 560
+
 // panelSlot composes a login panel with the one line the resource list leaves
 // behind: the panel takes the room the question needs, and the count of what
 // the gateway already granted stays on screen under it. A question hides the
 // list, not the fact that the account holds resources.
 func panelSlot(c *ui.Context, state *State, panel func()) {
 	ui.Column(c).Grow(1).Shrink(1).Children(func() {
-		ui.Column(c).Grow(1).Shrink(1).Children(panel)
+		ui.Column(c).Grow(1).Shrink(1).MaxWidth(panelMaxWidth).Children(panel)
 		grantedLine(c, state)
 	})
 }

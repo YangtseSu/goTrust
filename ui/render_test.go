@@ -370,6 +370,15 @@ func renderStates(t *testing.T, dir, lang string) {
 		save("main-setup-small", ui.NewTester(View(&state, Actions{}), 440, 480))
 	})
 
+	t.Run("main-setup-wide", func(t *testing.T) {
+		state := State{
+			Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
+			Config:  fresh,
+			Setup:   NewSetupDraft(fresh.Active()),
+		}
+		save("main-setup-wide", ui.NewTester(View(&state, Actions{}), 900, 640))
+	})
+
 	t.Run("settings-password", func(t *testing.T) {
 		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
 		state.Online = true
