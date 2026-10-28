@@ -27,8 +27,8 @@ Phase 19 is complete. The live trigger was a new account's first login
 change, the credential rewrite and the recovery after the portal closed the
 pending chain all ran against the gateway.
 Phase 17 is complete apart from the manual expiry→reconnect case, Phase 16 is
-closed, Phase 8 (dae export) stays deferred, and Phase 18's double-click waits
-on mygo.
+closed, Phase 8 (dae export) is superseded by Phase 10 of the public plan, and
+Phase 18's double-click waits on mygo.
 
 ## Phases
 
@@ -85,10 +85,13 @@ on mygo.
 - [x] SOCKS5 resolves hostnames through the tunnel resolver (regression test)
 - **Status:** complete
 
-### Phase 8: Transparent proxy via dae (deferred, last)
+### Phase 8: Transparent proxy via dae (superseded)
 
-Deferred by the operator: nice-to-have, after the product phases below. Research
-is in `findings.md`; dae stays a separate daemon.
+Deferred here, then replaced by Phase 10 of `../2026-10-26-gotrust-public/`:
+the browser PAC and the Clash/Mihomo rule fragment reach the same goal from
+the live grant, and no dae-specific emitter is implemented. dae would need a
+DNS service as well, because it has no fake-IP and its DNS upstream has no
+socks transport; the Clash family covers TUN with fake-IP and needs none.
 
 - [ ] `--print-dae-config` emits `node`/`group`/`routing` for the configured listeners
 - [ ] Intranet prefixes derived from the session's IP resources, not hardcoded
@@ -96,7 +99,7 @@ is in `findings.md`; dae stays a separate daemon.
 - [ ] Intranet prefixes precede any private-range preset, and the reason is a comment in the output
 - [ ] Tests: prefix derivation, loop rule present, ordering, an unconnected session still emits a usable template
 - [ ] README section "Transparent proxy (optional)" with the daemon boundary and the DNS caveat
-- **Status:** pending
+- **Status:** superseded and closed. The items above are not implemented as written; the capability ships as the PAC and Clash handoff in the public plan.
 
 ### Phase 9: Live gateway verification (complete)
 
@@ -675,7 +678,7 @@ seeds it into every profile before the login.
 | Keep-alive is a real HTTP request | CONNECT-only and HTTPS targets do not renew the session (tested in atrust-keepalive and atrust-quadlet); manual targets come first, derived targets next |
 | Resource list derives URLs when names are absent | The fork keeps address/port rules and app IDs, not necessarily names; showing `http://IP[:port]` is useful even without a portal label |
 | Arch package builds from the local checkout first | The repository is private until publication; `gotrust-git` stays self-use and switches its source URL at release |
-| dae remains last | The operator deferred transparent-proxy export; it is nice-to-have after the product phases |
+| dae export superseded | Transparent-proxy export moved to the public plan as a PAC and a Clash/Mihomo fragment; a dae-only emitter would also need a DNS service that the chosen targets make unnecessary |
 | Review remediation before new features, P0 first | In the tree reviewed then the UI can freeze, manual reconnect can never rebind, and deleting a profile crashes the process; no feature can be trusted until those are gone. Each fix gets a regression test |
 
 ## Errors Encountered
