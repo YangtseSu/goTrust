@@ -236,9 +236,39 @@ semantic colours were measured, rather than judged from the source alone.
 
 ### Phase 7: Login panels
 
-- **Status:** pending
-- Actions taken: none
-- Files created/modified: none
+- **Status:** complete
+- Actions taken:
+  - `panelSlot` wraps every pre-login panel (choice, captcha, code, SSO,
+    device bind, password, first run) in the window body: the header keeps the
+    state and its controls, and `grantedLine` pins the count of granted
+    resources to the bottom of the panel, just above the footer. A session with
+    no grants draws no line.
+  - `panelActions` is one shared foot for the panels: 取消登录 on the left,
+    through `textButton`, and the panel's own answers right-aligned with the
+    primary last. The choice panel passes no answers, so its 取消登录 stays on
+    the left of an otherwise empty row.
+  - `textButton` (`ui/theme.go`) is `ui.ButtonBase` with the theme's padding,
+    radius and a hover tint; the label is body text, so 撤销 and 清空 read as
+    corrections rather than as two more buttons.
+  - `panelActions` draws 取消登录 even when no cancel callback is wired and
+    disables it instead: the render harness passes `Actions{}`, and the row it
+    writes should be the row the app draws.
+  - The captcha marker is 26px (`captchaMarkerSize`), the web prompt page's
+    disc, with its number at `captionScale`. 取消 left the picked-count row,
+    which is now its own caption, and 撤销/清空 became text buttons.
+  - 取消登录 is a new catalog key (`cancelLogin`); `resourcesGranted` carries the
+    count line's plural. `go tool mygo generate` rewrote the accessors.
+  - Tests: the code panel keeps 连接中 and 已获授权 3 项资源 while its question is
+    up; 取消登录 sits left of 提交, and in the captcha panel left of 撤销, which
+    is left of 提交. The existing panel tests now click 取消登录; the settings
+    password panel keeps 取消 because it is not a login.
+  - One new render, `main-code-granted`, where a code challenge meets an
+    account with five rows, so the count line is visible above the footer.
+- Files created/modified:
+  - `ui/view.go`, `ui/prompt.go`, `ui/password.go`, `ui/theme.go`
+  - `ui/prompt_test.go`, `ui/captcha_test.go`, `ui/password_test.go`,
+    `ui/render_test.go`
+  - `locales/zh.json`, `locales/en.json`, `locales/catalog_gen.go`
 
 ### Phase 8: Keyboard, feedback, tray
 
@@ -290,6 +320,12 @@ semantic colours were measured, rather than judged from the source alone.
 | The actions stay reachable with Tab | `go test ./ui -run TestSettingsTabOrderReachesTheActions` (with an edited draft) | Tab reaches 保存 then 放弃修改 | pass; a disabled control takes no focus, so the test edits first | pass |
 | The real window, six pages | headless mutter (Wayland) + mygo's automation plugin: 更多设置… → the six tabs → port 8443 | six tabs in order, every page drawn, marker on after the edit | `tabs ['连接', '代理', '保活', '启动', '高级', '终端']`, 10 captures, app exit 0 | pass |
 | 放弃修改 and 保存 in the real window | same run | discard restores 443 and clears the marker; save writes the file and clears the marker | `port after discard: 443`; `config.toml` then reads `port = 8443` | pass |
+| A panel keeps the header and the grant | `go test ./ui -run TestLoginPanelKeepsHeaderAndGrantedCount` | 连接中 and 已获授权 3 项资源 both on screen | pass | pass |
+| Action hierarchy | `go test ./ui -run TestPanelActionsPutCancelAwayFromSubmit` | 取消登录 left of 提交; captcha order 取消登录 < 撤销 < 提交 | pass | pass |
+| Every state rendered | `GOTRUST_RENDER_DIR=/tmp/gotrust-ui-phase7 go test ./ui -run TestRenderEveryState -count=1` | every PNG, both languages, panel rows with 取消登录 | 58 PNGs; `main-code-granted` shows the count line above the footer | pass |
+| Panel layouts read | `main-captcha.png`, `main-code-granted-en.png`, `main-sso-en.png`, `main-choice.png`, `main-password-small.png` | cancel left, plain 撤销/清空, 26px markers, grant line | the captcha row reads 取消登录 … 撤销 清空 提交; the count line sits above the divider | pass |
+| Whole suite after Phase 7 | `go test ./...`, `go vet ./...`, `gofmt -l .`, `go tool mygo vet .`, `reuse lint` | clean | all packages ok; 208/208 files with license information | pass |
+| CGO-free UI build after Phase 7 | `CGO_ENABLED=0 go test ./ui ./internal/gui ./internal/cli` | pass | `ok` | pass |
 
 ## Error Log
 
@@ -311,3 +347,4 @@ semantic colours were measured, rather than judged from the source alone.
 | 2026-10-28 | `resourceListMinHeight` mixed an untyped const with `Theme.FontSize` and did not compile | 1 | `line := float32(resourceIconSize)` before comparing |
 | 2026-10-28 | The row-menu test could not click a second `⋯`: `Tester.Click` takes the first element with that text, which is the header's overflow | 1 | Each row menu carries `Label("<title> 的操作")`, its accessible name, which is also what the test clicks |
 | 2026-10-29 | The smoke-test client hung: `act press` on the header's ⋯ opened a GTK popup with a loop of its own, and the app stopped answering the socket | 1 | Opened the settings window from the first-run panel's 更多设置… (a plain button) instead; an open context menu is out of the protocol's reach |
+| 2026-10-29 | `panelActions` omitted 取消登录 when the callback was nil, so the render harness's `Actions{}` drew a row the app never draws | 1 | The control is always drawn and disabled without a callback, like the header's primary button, whose presence does not depend on its wiring |

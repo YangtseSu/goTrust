@@ -12,19 +12,20 @@ new dependency and no change to `core/session`.
 
 ## Next Step
 
-Phase 7: bring the login panels inside the window — the header stays, the
-granted resource count stays as one line, the buttons get a hierarchy (提交
-primary, 取消登录 left of the action row), and the captcha markers share the web
-page's 26px marker and 13px number. Phase 6 is complete: the settings window is
-six pages under a fixed profile bar, each page states when its edits take
-effect, and the heading marks unsaved changes with 保存 / 放弃修改 at the foot.
+Phase 8: keyboard, feedback and the tray — `Ctrl+Enter` for 连接/断开, `Ctrl+,`
+for 设置, `Esc` for the panel's 取消登录, `/` for the resource filter, one owner
+per copy action between the window and the tray, and `ui.Toast` for copy and
+save results. Phase 7 is complete: every login panel renders inside the window
+under the untouched header, the granted count stays as one line above the
+footer, and 取消登录 sits left of the answers while 提交 stays the only filled
+control.
 
 ## Current Phase
 
-Phase 7: Login panels. Phase 6 is complete: `settingsTabBar` draws the six
-pages with `ui.TabsBase` in a wrapped row, `SettingsState.Tab` chooses the page,
-`Changed()` compares the folded draft with the loaded file, and
-`SettingsActions.Discard` throws the draft away.
+Phase 8: Keyboard, feedback, tray. Phase 7 is complete: `panelSlot` keeps the
+header and pins `grantedLine` above the footer, `panelActions` puts 取消登录 on
+the left and the panel's answers on the right, `textButton` draws 撤销/清空
+without a face, and the captcha marker is 26px in both surfaces.
 
 ## Phases
 
@@ -221,14 +222,29 @@ diagnostics and the device identity.
 
 ### Phase 7: Login panels
 
-- [ ] Panels render inside the window with the header intact, instead of
+- [x] Panels render inside the window with the header intact, instead of
       replacing `controls` and `resources` wholesale; the granted resource count
       stays visible as one line
-- [ ] Button hierarchy: 提交 primary, 撤销/清空 as text buttons, 取消 left of
+- [x] Button hierarchy: 提交 primary, 撤销/清空 as text buttons, 取消 left of
       the action row and labelled 取消登录
-- [ ] Captcha markers share the web page's 26px marker and 13px number, and the
+- [x] Captcha markers share the web page's 26px marker and 13px number, and the
       number uses `captionScale` rather than a literal
-- **Status:** pending
+- **Status:** complete
+
+Details: `panelSlot` gives the panel the room the question needs and pins
+`grantedLine` under it, so the header, the state and the count of granted
+resources outlive the panel; the list itself still needs the height the
+question does. `panelActions` is the shared foot: 取消登录 on the left through
+`textButton`, the panel's own controls right-aligned with 提交 last and the only
+filled control. Abandoning the login is a different intent from answering it,
+which is why it no longer sits beside the primary button where a mis-click ends
+the flow. `textButton` is `ui.ButtonBase` with the theme's padding, radius and a
+hover tint, so 撤销/清空 stay labels rather than a second and third button.
+`panelActions` draws 取消登录 even when the window has no cancel callback and
+disables it instead, so a tester render shows the same row the app draws; the
+callback presence no longer changes the layout. The captcha marker is now the
+web page's 26px disc, with the number at `captionScale` (the literal 13 is the
+web page's own, where the browser scales it).
 
 ### Phase 8: Keyboard, feedback, tray
 
@@ -319,6 +335,10 @@ diagnostics and the device identity.
 | Resources group by kind instead of a flat list | `ResourceEntry.Kind` already exists and apps/domains/addresses are read differently; grouping costs no new data |
 | Semantic colours split into fill and text variants | mygo's `Success`/`Warning` are Meter colours, measured 3.30:1 and 3.19:1 on white, 2.89/2.81 on the chip's tint. `toneInk` mixes the fill toward the far end of the appearance until it clears 4.8:1 against that tint, so a theme change or the desktop's own accent cannot reintroduce a failing colour |
 | Login panels stay in the window instead of a second dialog | A prompt asks about a specific account and gateway; the header must stay visible, and a new window frame is the documented crash risk |
+| A panel keeps the granted count, not the list | The question needs the height; the count is the one fact from the list that a login cannot lose, and a fresh session has no rows yet |
+| 取消登录 sits left, away from 提交 | Abandoning the login is not a variant of answering it; beside the primary button it was the easiest control to mis-click |
+| 撤销/清空 are `ButtonBase` with a label, not filled buttons | Four filled controls in one row gave the two corrections the same weight as the answer; a plain label with a hover tint keeps the keyboard target and the hierarchy |
+| 取消登录 renders disabled without a callback | The control's presence follows the panel, not the wiring; a tester render then shows the row the app draws, and the click still guards on the callback |
 | The title strip names the profile | The subline's job is the session; the account is static, so it belongs where it does not compete, and a fresh install still shows which profile is being filled |
 | The header row wraps instead of clipping | At 440 DIP the English labels of three controls plus the headline exceed the width; a wrapped second row keeps `⋯` reachable, where a clipped row would hide settings and quit |
 | The first-run panel hides the header's 连接 and the subline | The panel owns the connect action and says what is missing; two controls for one intent, and a line repeating its heading, only cost the form height |
