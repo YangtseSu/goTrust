@@ -29,6 +29,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/handoff"
 	"github.com/YangtseSu/goTrust/core/logging"
 	"github.com/YangtseSu/goTrust/core/profilelock"
 	gotrustproxy "github.com/YangtseSu/goTrust/core/proxy"
@@ -95,6 +96,19 @@ func Run(configPath string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if listen := strings.TrimSpace(cfg.Handoff.Listen); listen != "" {
+		pac := handoff.New(listen, application.pacSnapshot, application.logf)
+		if err := pac.Start(ctx); err != nil {
+			application.logf("handoff: %v", err)
+		} else {
+			application.mu.Lock()
+			application.view.PACURL = pac.URL()
+			application.mu.Unlock()
+			application.logf("PAC at %s", pac.URL())
+			defer func() { _ = pac.Close() }()
+		}
+	}
 
 	return application.runUI(ctx)
 }
@@ -388,7 +402,30 @@ func (a *app) actions() gotrustui.Actions {
 
 		OpenResource: a.openResource,
 		CopyResource: a.copyResource,
+		CopyPAC:      a.copyPAC,
 	}
+}
+
+// pacSnapshot builds the PAC from the settings and whatever the session holds
+// now. The endpoint calls this per request, so a reconnect needs no restart.
+func (a *app) pacSnapshot() handoff.Snapshot {
+	a.mu.RLock()
+	cfg := a.cfg
+	a.mu.RUnlock()
+	return handoff.FromState(cfg, a.manager.State())
+}
+
+// copyPAC puts the PAC URL on the clipboard. The URL is fixed for the life of
+// the process, so a user points ZeroOmega or the system proxy at it once.
+func (a *app) copyPAC() {
+	a.mu.RLock()
+	url := a.view.PACURL
+	a.mu.RUnlock()
+	if url == "" {
+		a.setStatusError("PAC 地址尚未开启")
+		return
+	}
+	a.copyResource(url)
 }
 
 // openResource opens a granted application or address in the browser. A

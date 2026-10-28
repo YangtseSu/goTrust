@@ -29,6 +29,9 @@ type State struct {
 	Config config.Config
 	// Addresses are the bound proxy listeners.
 	Addresses []string
+	// PACURL is the loopback PAC a browser or extension can use, empty while
+	// the endpoint is disabled.
+	PACURL string
 	// Status is a one-line message about the last user action. StatusError
 	// paints it as a failure instead of a note.
 	Status      string
@@ -87,9 +90,11 @@ type Actions struct {
 	SubmitPassword func()
 	CancelPassword func()
 	// OpenResource opens a granted resource's suggested URL in the browser;
-	// CopyResource puts an entry's copy value on the clipboard.
+	// CopyResource puts an entry's copy value on the clipboard. CopyPAC copies
+	// the PAC URL.
 	OpenResource func(string)
 	CopyResource func(string)
+	CopyPAC      func()
 }
 
 // View renders one frame of the main window.
@@ -317,6 +322,9 @@ func controls(c *ui.Context, state *State, actions Actions) {
 			if ui.Button(c, "设置").Clicked() && actions.Settings != nil {
 				actions.Settings()
 			}
+			if ui.Button(c, "复制 PAC 地址").Disabled(state.PACURL == "").Clicked() && actions.CopyPAC != nil {
+				actions.CopyPAC()
+			}
 			if ui.Button(c, "退出").Clicked() && actions.Quit != nil {
 				actions.Quit()
 			}
@@ -421,6 +429,9 @@ func footer(c *ui.Context, state *State) {
 			for _, address := range state.Addresses {
 				caption(c, "代理监听 "+address)
 			}
+		}
+		if state.PACURL != "" {
+			caption(c, "PAC "+state.PACURL)
 		}
 		if summary := KeepAliveSummary(state.Session.KeepAlive); summary != "" {
 			captionTone(c, "保活 "+summary, keepAliveTone(state.Session.KeepAlive))
@@ -538,6 +549,15 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		openApp.Disabled = true
 	}
 
+	copyPAC := &mygo.MenuItem{ID: "copy-pac", Label: "复制 PAC 地址"}
+	if state.PACURL != "" && actions.CopyPAC != nil {
+		copyPAC.Click = func(*mygo.MenuItem, *mygo.Window) {
+			actions.CopyPAC()
+		}
+	} else {
+		copyPAC.Disabled = true
+	}
+
 	settingsItem := &mygo.MenuItem{ID: "settings", Label: "设置…", Click: func(*mygo.MenuItem, *mygo.Window) {
 		if actions.Settings != nil {
 			actions.Settings()
@@ -557,6 +577,7 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		mygo.Separator(),
 		show,
 		openApp,
+		copyPAC,
 		settingsItem,
 		mygo.Separator(),
 		quit,
