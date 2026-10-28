@@ -173,6 +173,29 @@ make. `core/atrust/resolve` is the single resolver, and its order is:
 Step 3 asks for IPv4 only, so an AAAA name is answered by step 4. The proxy
 starts a connection only once the resolver has returned an address.
 
+## Handoff to external programs
+
+`core/handoff` turns one grant into a PAC and a Clash/Mihomo rule fragment. It
+holds no socket: `handoff.Server` serves `GET /proxy.pac` from a `Source` the
+front-end supplies, and `gotrust-cli` renders the same snapshot on demand.
+
+- The snapshot merges `IPRule` ranges into IPv4 prefixes, collects the suffix
+  set from `Resources.Domains` and `Resources.DNS`, and ignores ports: the
+  dialer already enforces them and sends an ungranted port direct.
+- `App.WebDomains` is a portal launch hint and never becomes a rule.
+- PAC tests literal IPv4 against `isInNet` and names against `dnsDomainIs`; a
+  hostname is never handed to `isInNet`, because that would invoke the browser's
+  resolver. PAC has no UDP notion.
+- The Clash fragment starts with `PROCESS-NAME` for both binaries and with the
+  gateway host, so a TUN capture cannot send goTrust's own TLS back through the
+  proxy; then come the granted suffixes and prefixes. It adds no private-range
+  preset.
+- Both listeners are loopback only. The PAC server starts before the first login
+  and serves a direct-only script while no data path is usable.
+- No DNS listener exists. The browser or Clash sends the name to the proxy and
+  the resolver answers it through the tunnel; a tool that resolves first only
+  matches IP grants.
+
 ## Password change requests
 
 Both password changes reuse the login password's encryption and the shared

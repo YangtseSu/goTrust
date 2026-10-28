@@ -70,6 +70,40 @@ curl -x http://127.0.0.1:1081 http://内网地址/
 
 两个监听只绑定回环地址；填 `0.0.0.0:1080` 这类对外地址会被拒绝。
 
+## 分流给浏览器或 Clash（可选）
+
+goTrust 本身已经按授权分流：被授权的目的走隧道，其余从本机直连。所以最简单的用法是把
+程序直接指向上面的代理端口，不需要任何规则。
+
+需要只让浏览器走 goTrust、或者和另一个代理共存时，可以用 PAC：
+
+* 运行期间默认在 `http://127.0.0.1:1082/proxy.pac` 提供 PAC；托盘和主窗口里有
+  “复制 PAC 地址”。`gotrust-cli --pac-url` 打印它，`--print-pac` 从上次登录的缓存
+  打印脚本。设置文件里 `[handoff] listen = ""` 可以关闭该端点。
+* ZeroOmega：新建 PAC profile，URL 填上面的地址；系统代理也可以直接填这个 URL。
+* PAC 只把授权里出现的 IP 段和域名交给代理；`localhost`、回环和网关本身直连。PAC
+  不覆盖 UDP，QUIC/WebRTC 会绕过代理。
+* 如果资源只授权了 IP、你却用域名访问，PAC 不知道这个名字对应哪个 IP；把浏览器全局
+  指向 goTrust（或 Clash 的 fake-IP）即可，让 goTrust 在隧道内解析。
+
+Clash / Mihomo（Clash Verge Rev、FlClash 等）：
+
+```sh
+gotrust-cli --print-clash
+```
+
+把输出粘进现有配置的 `proxies`、`proxy-groups`、`rules`。片段先放 goTrust 进程和网关
+直连，防止 TUN 把 goTrust 自己的连接再送回来；然后才是授权域名和 IP 段，不写私有段
+预设。TUN 模式需要 fake-IP，并且不要把授权域名放进 `fake-ip-filter`。
+
+不经过外部程序的用法：
+
+```sh
+ALL_PROXY=socks5h://127.0.0.1:1080 curl https://内网地址/
+HTTPS_PROXY=http://127.0.0.1:1081 git clone https://内网地址/repo
+ssh -o ProxyCommand="nc -X 5 -x 127.0.0.1:1080 %h %p" user@内网主机
+```
+
 ## 登录时会遇到什么
 
 * **图形验证码**：窗口显示图片，按顺序点中字符后提交。可以撤销、清空或取消；取消即
@@ -152,6 +186,9 @@ IP 地址与网段、DNS 名称映射。单个主机允许 TCP 443 或 80 时，
 gotrust-cli [--config 文件]                  # 登录并保持运行，直到 Ctrl-C 或 SIGTERM
 gotrust-cli [--config 文件] --status         # 该配置是否正被某个进程使用
 gotrust-cli [--config 文件] --print-resources
+gotrust-cli --pac-url                        # 运行中的 PAC 地址
+gotrust-cli --print-pac                      # 用缓存的授权打印 PAC
+gotrust-cli --print-clash                    # 用缓存的授权打印 Clash 片段
 gotrust-cli --json                           # 资源与状态以 JSON 输出
 gotrust-cli --version
 ```
@@ -176,7 +213,7 @@ gotrust-cli --version
   验证。
 * 主认证方式只支持密码、CAS 和 OAuth2。网关如果只提供短信主认证，goTrust 无法登录。
 * 不提供 TUN 模式，也不修改系统代理。需要全局代理时，自行把程序或系统代理指向本地
-  监听。
+  监听；浏览器和 Clash 系的分流见上文。
 * 会话只在本次连接内有效：断开后再连接就是重新登录，保存的登录数据无法恢复旧会话。
   所以自动连接需要保存密码。
 
