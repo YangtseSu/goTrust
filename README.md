@@ -72,45 +72,19 @@ curl -x http://127.0.0.1:1081 http://内网地址/
 
 ## 分流给浏览器或 Clash（可选）
 
-goTrust 本身已经按授权分流：被授权的目的走隧道，其余从本机直连。所以最简单的用法是把
-程序直接指向上面的代理端口，不需要任何规则。
+goTrust 已经按授权分流：把程序直接指向上面的代理端口即可，不需要规则。需要只让浏览器
+走 goTrust，或与 Clash/Mihomo 共存时：
 
-需要只让浏览器走 goTrust、或者和另一个代理共存时，可以用 PAC：
+- **浏览器 / ZeroOmega**：用运行期的 PAC URL，默认 `http://127.0.0.1:1082/proxy.pac`；
+  GUI 和 `gotrust-cli --pac-url` 都能给出。
+- **Clash / Mihomo**：`gotrust-cli --print-clash`（普通片段）、`--print-clash-merge`
+  （Clash Verge Rev 的 Merge）、`--print-clash-config`（完整本地配置）。GUI 的托盘和
+  主窗口有同样的三项。
+- **不经过外部程序**：直接把程序指向 SOCKS5/HTTP，例如
+  `ALL_PROXY=socks5h://127.0.0.1:1080`。
 
-* 运行期间默认在 `http://127.0.0.1:1082/proxy.pac` 提供 PAC；托盘和主窗口里有
-  “复制 PAC 地址”。`gotrust-cli --pac-url` 打印它，`--print-pac` 从上次登录的缓存
-  打印脚本。设置文件里 `[handoff] listen = ""` 可以关闭该端点。
-* ZeroOmega：新建 PAC profile，URL 填上面的地址；系统代理也可以直接填这个 URL。
-* PAC 只把授权里出现的 IP 段和域名交给代理；`localhost`、回环和网关本身直连。PAC
-  不覆盖 UDP，QUIC/WebRTC 会绕过代理。
-* 如果资源只授权了 IP、你却用域名访问，PAC 不知道这个名字对应哪个 IP；把浏览器全局
-  指向 goTrust（或 Clash 的 fake-IP）即可，让 goTrust 在隧道内解析。
-
-Clash / Mihomo 分三种输出，按客户端选，不需要改键名：
-
-| 命令 | 用法 |
-|---|---|
-| `gotrust-cli --print-clash` | 普通片段：粘进 Mihomo/Clash 配置的 `proxies`、`proxy-groups`、`rules` |
-| `gotrust-cli --print-clash-merge` | Clash Verge Rev 的 Merge 配置：原样粘贴并启用（`prepend-*` 已生成） |
-| `gotrust-cli --print-clash-config` | 完整的本地 Mihomo 配置：任何客户端都可作为本地配置导入（只含 goTrust） |
-
-GUI 里也有同样的三项：托盘“复制 Clash 片段”子菜单，以及主窗口的“普通片段 / Verge Merge /
-完整配置”按钮；用的是实时授权，不是缓存。
-
-片段先放 goTrust 进程和网关直连，防止 TUN 把 goTrust 自己的连接再送回来；然后才是
-授权域名和 IP 段，不写私有段预设。TUN 模式需要 fake-IP，并且不要把授权域名放进
-`fake-ip-filter`。
-
-FlClash 的标准覆写只能追加规则，不能新增代理和策略组；用 `--print-clash-config` 作为
-本地配置导入，或在它的自定义配置里手工加 SOCKS5 `127.0.0.1:1080`。
-
-不经过外部程序的用法：
-
-```sh
-ALL_PROXY=socks5h://127.0.0.1:1080 curl https://内网地址/
-HTTPS_PROXY=http://127.0.0.1:1081 git clone https://内网地址/repo
-ssh -o ProxyCommand="nc -X 5 -x 127.0.0.1:1080 %h %p" user@内网主机
-```
+ZeroOmega、Clash Verge Rev、FlClash 的步骤、fake-IP、UDP 限制和常见问题见
+[`docs/handoff.md`](docs/handoff.md)。
 
 ## 登录时会遇到什么
 
