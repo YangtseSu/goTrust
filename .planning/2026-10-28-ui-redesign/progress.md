@@ -309,7 +309,7 @@ semantic colours were measured, rather than judged from the source alone.
 
 ### Phase 9: Verification and docs
 
-- **Status:** in_progress (the real-mouse drag is the operator's check)
+- **Status:** complete
 - Actions taken:
   - `/tmp/gotrust-ui-before` had been cleared with `/tmp`, so the set was
     regenerated from `db0f05d` (end of Phase 2) in a temporary worktree:
@@ -329,8 +329,9 @@ semantic colours were measured, rather than judged from the source alone.
     plugin) with the process alive. The drag itself is not driveable by
     synthetic input: mygo calls `gtk_window_begin_move_drag` from the platform's
     own GdkEvent, and ydotool's absolute pointer mispositioned the real pointer
-    (one run opened GNOME's overview). The operator's mouse is left for that one
-    check.
+    (one run opened GNOME's overview). The operator then ran `./gotrust` and
+    confirmed the title-strip drag with a real mouse, which closes the phase.
+    The synthetic-input limit is a fact about the instrument, not the app.
   - The maximized first-run capture showed the form stretched across 2300 DIPs;
     `panelSlot` now caps every panel at `panelMaxWidth` (560) and
     `main-setup-wide` renders the result.
@@ -400,7 +401,8 @@ semantic colours were measured, rather than judged from the source alone.
 | Real-session first run | tray app on the operator's Wayland session, empty config, `flameshot full` | the form in the centred window | captured at 540x640 | pass |
 | Double-click maximize | automation `input` double-click on the title strip | the window manager maximizes | bounds 2304x1264; capture 4608x2528 | pass |
 | Close-to-tray | real `Alt+F4` from ydotool | window hidden, process alive | `visible:false`, pid alive, SIGTERM 0 | pass |
-| Drag by the title strip | automation `input` pointerDown/move/up and a real ydotool device | the window moves | not driveable: `gtk_window_begin_move_drag` needs the platform's own event; ydotool mispositioned | not verified |
+| Drag by the title strip | `./gotrust` on the operator's session, real mouse | the window moves | confirmed by the operator | pass (operator) |
+| Drag by synthetic input | automation `input` pointerDown/move/up, then ydotool | the window moves | not driveable: `gtk_window_begin_move_drag` needs the platform's own event | instrument limit |
 | Wide first-run form | `main-setup-wide.png` (900x640) | fields read as rows, not full-width | form capped at 560, left-aligned | pass |
 
 ## Error Log

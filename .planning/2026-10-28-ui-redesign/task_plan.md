@@ -12,19 +12,17 @@ new dependency and no change to `core/session`.
 
 ## Next Step
 
-Operator check: with the tray app open on the desktop, drag the window by the
-34 DIP strip at its top with a real mouse, the way a window is moved
-everywhere; then Phase 9 closes. Everything else is done: the renders are
-compared with the pre-redesign set, the whole check list passes, first run,
-maximize and close-to-tray are verified on the operator's Wayland session, and
-`docs/design.md` carries the rules.
+None. All nine phases are complete: the redesign is verified against its
+pre-redesign renders, the check list passes, the operator confirmed the
+title-strip drag with a real mouse, and the rules live in `docs/design.md`.
+The next work is a new plan, not another phase of this one.
 
 ## Current Phase
 
-Phase 9: Verification and docs, open only for the real-mouse drag. The renders,
-the check list, the first-run capture, double-click maximize, close-to-tray and
-the design rules are done; the drag is the one check synthetic input cannot
-serve, because mygo starts it from the platform's own pointer event.
+Complete. The session is the headline, one primary action per screen, login
+questions stay in the window, semantic colour is text-safe in both appearances,
+the settings form is pages, keyboard and trays have one owner per action, and
+every result is a toast.
 
 ## Phases
 
@@ -277,28 +275,26 @@ progress message was dropped because the picker already says 正在获取….
       TestRenderEveryState`) and compare against `/tmp/gotrust-ui-before`
 - [x] `CGO_ENABLED=0 go test ./...`, `go vet ./...`, `go tool mygo vet .`,
       `gofmt -l .`, `reuse lint`
-- [ ] Run the tray app on the operator's Wayland session: drag by the new title
+- [x] Run the tray app on the operator's Wayland session: drag by the new title
       bar strip, double-click maximize, close-to-tray, and the first-run panel
       from an empty config
 - [x] Record the design rules (state first, one primary action, text-safe tones,
       four sizes, first run never sends the user to a second window) in `docs/`
-- **Status:** in_progress
+- **Status:** complete
 
 Details: the before set was regenerated from `db0f05d` (the end of Phase 2) in
 a worktree, because `/tmp` had been cleared. All 19 states that still exist
 changed — 10-34% of pixels in the main window, 27-37% in the settings window,
 at the high end where the form became pages — plus three states resized with
 the 440x480 minimum and one (`settings-full`) replaced by the six pages, which
-is the intended shape of the redesign. The
-whole check list passes. On the operator's Wayland session the first-run window
-was captured from the desktop, double-click on the strip maximized the window
-(2304x1264 at the 2304x1296 logical screen), and a real Alt+F4 hid it to the
-tray with the process still alive. The drag itself could not be driven: mygo
-starts it with `gtk_window_begin_move_drag` from the real GdkEvent, which the
-automation plugin's synthetic input does not produce, and ydotool's absolute
-pointer moved the real pointer to the wrong place (one run opened the GNOME
-overview through the hot corner). The check needs the operator's mouse; the
-phase stays open for it.
+is the intended shape of the redesign. The whole check list passes. On the
+operator's Wayland session the first-run window was captured from the desktop,
+double-click on the strip maximized the window (2304x1264 at the 2304x1296
+logical screen), a real Alt+F4 hid it to the tray with the process still alive,
+and the operator dragged the window by the strip with a real mouse. The drag
+cannot be driven by the automation plugin or a synthetic pointer: mygo starts
+it with `gtk_window_begin_move_drag` from the platform's own GdkEvent, which
+none of them produce; that is why it was the operator's check.
 
 The real-session capture also showed a defect the renders at 540 DIP hid: a
 maximized window stretched the first-run form across 2300 DIPs. `panelSlot` now
