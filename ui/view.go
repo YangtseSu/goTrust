@@ -10,6 +10,7 @@ package ui
 
 import (
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -459,10 +460,102 @@ func phaseActive(phase session.Phase) bool {
 	}
 }
 
-// resources lists what the gateway granted this account: the portal's
-// applications first, then the address rules they are reached through. The
-// list scrolls, because an account can be granted far more entries than the
-// window is tall.
+// Resource rows are one line each: a glyph for the kind, the title, the ports
+// or the group beside it, and one menu that holds the actions. The list scrolls
+// and keeps room for three rows even at the window's minimum, because an
+// account can be granted far more entries than the window is tall and a list
+// that collapses to its heading hides the thing the window is for.
+const (
+	resourceIconSize     = 18 // the kind glyph, and so the height of a row's line
+	resourceRowPadY      = 6  // above and below a row's line
+	resourceSearchAt     = 8  // rows in one group that still read without a filter
+	resourceGroupSpacing = 12 // above a group's heading, except the first
+	resourceHeadingSpace = 4  // between a group's heading and its rows
+	resourceListMinRows  = 3
+)
+
+// resourceGroup is one kind's rows, in the order the window lists the kinds.
+type resourceGroup struct {
+	kind    session.ResourceKind
+	label   string
+	entries []session.ResourceEntry
+}
+
+// resourceKinds fixes the order of the groups and where a row of that kind
+// belongs: the portal's applications first, then the names and addresses they
+// are reached through.
+var resourceKinds = []struct {
+	kind  session.ResourceKind
+	label func() string
+	glyph *ui.SVG
+}{
+	{session.ResourceApp, locales.ResourceGroupApp, iconResourceApp},
+	{session.ResourceDomain, locales.ResourceGroupDomain, iconResourceDomain},
+	{session.ResourceIP, locales.ResourceGroupAddress, iconResourceAddress},
+	{session.ResourceDNS, locales.ResourceGroupDNS, iconResourceDNS},
+}
+
+// resourceKindStyle is a kind's heading and glyph. A kind this build does not
+// know still gets rows, under 其他, so a newer gateway adds data the window can
+// show instead of data it drops.
+func resourceKindStyle(kind session.ResourceKind) (label string, glyph *ui.SVG) {
+	for _, style := range resourceKinds {
+		if style.kind == kind {
+			return style.label(), style.glyph
+		}
+	}
+	return locales.ResourceGroupOther(), iconResourceOther
+}
+
+// resourceKindRank orders the groups: the declared kinds in their own order,
+// and any other kind after them.
+func resourceKindRank(kind session.ResourceKind) int {
+	for index, style := range resourceKinds {
+		if style.kind == kind {
+			return index
+		}
+	}
+	return len(resourceKinds)
+}
+
+// groupResources sorts the granted rows into their kinds and applies the
+// filter. A row matches on its title or its detail, the two things it shows, so
+// what the user reads is what the search looks at. Empty groups disappear, so
+// every heading counts rows that are on screen.
+func groupResources(entries []session.ResourceEntry, query string) []resourceGroup {
+	filter := strings.ToLower(strings.TrimSpace(query))
+	groups := make([]resourceGroup, 0, len(resourceKinds)+1)
+	at := make(map[session.ResourceKind]int, len(resourceKinds)+1)
+
+	for _, entry := range entries {
+		if filter != "" && !matchesResource(entry, filter) {
+			continue
+		}
+		index, seen := at[entry.Kind]
+		if !seen {
+			label, _ := resourceKindStyle(entry.Kind)
+			groups = append(groups, resourceGroup{kind: entry.Kind, label: label})
+			index = len(groups) - 1
+			at[entry.Kind] = index
+		}
+		groups[index].entries = append(groups[index].entries, entry)
+	}
+
+	// A stable sort keeps unknown kinds in the order they arrived, which is the
+	// order the gateway listed them in.
+	sort.SliceStable(groups, func(i, j int) bool {
+		return resourceKindRank(groups[i].kind) < resourceKindRank(groups[j].kind)
+	})
+	return groups
+}
+
+// matchesResource reports whether a row answers a filter already in lower case.
+func matchesResource(entry session.ResourceEntry, filter string) bool {
+	return strings.Contains(strings.ToLower(entry.Title), filter) ||
+		strings.Contains(strings.ToLower(entry.Detail), filter)
+}
+
+// resources lists what the gateway granted this account, one group per kind.
 func resources(c *ui.Context, state *State, actions Actions) {
 	granted := state.Session.Resources
 
@@ -484,37 +577,102 @@ func resources(c *ui.Context, state *State, actions Actions) {
 			return
 		}
 
-		ui.Scroll(c).Grow(1).Shrink(1).Children(func() {
+		var filter string
+		if resourceSearchNeeded(granted.Entries) {
+			filter = resourceSearch(c)
+		}
+		groups := groupResources(granted.Entries, filter)
+		if len(groups) == 0 {
+			caption(c, locales.ResourceSearchEmpty())
+			return
+		}
+
+		ui.Scroll(c).Grow(1).Shrink(1).MinHeight(resourceListMinHeight(c)).Children(func() {
 			ui.Column(c).Gap(2).Children(func() {
-				for index, entry := range granted.Entries {
-					if index > 0 {
-						ui.Divider(c)
+				for index, group := range groups {
+					resourceGroupHeading(c, group, index == 0)
+					for _, entry := range group.entries {
+						resourceRow(c, entry, actions)
 					}
-					resourceRow(c, entry, actions)
 				}
 			})
 		})
 	})
 }
 
+// resourceSearchNeeded reports whether one kind holds more rows than the list
+// shows at once. A filter over a short list costs a line and a click and saves
+// neither.
+func resourceSearchNeeded(entries []session.ResourceEntry) bool {
+	counts := make(map[session.ResourceKind]int, len(resourceKinds))
+	for _, entry := range entries {
+		if counts[entry.Kind]++; counts[entry.Kind] > resourceSearchAt {
+			return true
+		}
+	}
+	return false
+}
+
+// resourceSearch is the filter above the list. What the user types belongs to
+// the field, not to the app state: no other part of the window reads it, and a
+// new login can replace the rows without carrying a stale query.
+func resourceSearch(c *ui.Context) string {
+	row := ui.Row(c).AlignItems(ui.Center)
+	query := ui.Local(row, "resource-query", func() string { return "" })
+	row.Children(func() {
+		ui.SearchField(c, query).Label(locales.ResourceSearch()).Grow(1)
+	})
+	return *query
+}
+
+// resourceListMinHeight is the height of three rows at the theme's size: the
+// list keeps that much of the window when the footer and the header have taken
+// theirs.
+func resourceListMinHeight(c *ui.Context) float32 {
+	line := float32(resourceIconSize)
+	if text := c.Theme().FontSize * 1.3; text > line {
+		line = text
+	}
+	return resourceListMinRows * (line + 2*resourceRowPadY)
+}
+
+// resourceGroupHeading names one kind and counts the rows under it. The count
+// is what the filter leaves, so a heading never claims rows that are hidden.
+func resourceGroupHeading(c *ui.Context, group resourceGroup, first bool) {
+	heading := ui.Row(c).AlignItems(ui.Center)
+	if first {
+		heading.Margin(0, 0, resourceHeadingSpace, 0)
+	} else {
+		heading.Margin(resourceGroupSpacing, 0, resourceHeadingSpace, 0)
+	}
+	heading.Children(func() {
+		sectionHeading(c, locales.ResourceGroupCount(group.label, len(group.entries)))
+	})
+}
+
+// resourceRow is one granted entry: the kind's glyph, the title, its detail at
+// the right, and the menu with 打开 and 复制. The actions sit in the menu
+// because two buttons on every row of a long list outshout the rows.
 func resourceRow(c *ui.Context, entry session.ResourceEntry, actions Actions) {
-	ui.Row(c).AlignItems(ui.Center).Gap(rowGap).PaddingY(6).Children(func() {
-		ui.Column(c).Grow(1).Gap(2).Children(func() {
-			ui.Text(c, entry.Title).FontSize(c.Theme().FontSize)
-			if entry.Detail != "" {
-				caption(c, entry.Detail)
+	_, glyph := resourceKindStyle(entry.Kind)
+
+	ui.Row(c).AlignItems(ui.Center).Gap(rowGap).PaddingY(resourceRowPadY).Children(func() {
+		ui.Icon(c, glyph).Size(resourceIconSize, resourceIconSize).Shrink(0).TextColor(c.Theme().TextMuted)
+		ui.Text(c, entry.Title).FontSize(c.Theme().FontSize).MaxLines(1).Grow(1)
+		if entry.Detail != "" {
+			caption(c, entry.Detail).MaxLines(1).Shrink(0)
+		}
+		menu := ui.Icon(c, iconRowMenu).Size(resourceIconSize, resourceIconSize).Shrink(0).
+			TextColor(c.Theme().TextMuted).Padding(4).
+			Label(locales.ResourceMenu(entry.Title))
+		menu.Menu(func(menu *ui.Menu) {
+			if menu.Item(locales.CommonOpen()).Disabled(entry.URL == "").Chosen() && actions.OpenResource != nil {
+				actions.OpenResource(entry.URL)
+			}
+			if menu.Item(locales.CommonCopy()).Chosen() && actions.CopyResource != nil {
+				actions.CopyResource(entry.Copy)
 			}
 		})
-		if entry.URL != "" {
-			url := entry.URL
-			if ui.Button(c, locales.CommonOpen()).Description(locales.ResourceOpen(entry.Title)).Clicked() && actions.OpenResource != nil {
-				actions.OpenResource(url)
-			}
-		}
-		value := entry.Copy
-		if ui.Button(c, locales.CommonCopy()).Description(locales.ResourceCopy(entry.Title)).Clicked() && actions.CopyResource != nil {
-			actions.CopyResource(value)
-		}
 	})
 }
 

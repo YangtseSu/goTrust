@@ -4,6 +4,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -192,8 +193,9 @@ func TestListenersAndKeepAliveAreListed(t *testing.T) {
 	}
 }
 
-// The granted resources are the point of the window after a login: the rows
-// and their buttons have to reach the browser and the clipboard.
+// The granted resources are the point of the window after a login. They are
+// grouped by kind with a count each, and the row's menu has to reach the
+// browser and the clipboard.
 func TestResourceListRendersAndActs(t *testing.T) {
 	resources := session.Resources{Entries: []session.ResourceEntry{
 		{Kind: session.ResourceApp, Title: "Wiki", Detail: "Portal · web", URL: "https://wiki.example.com", Copy: "https://wiki.example.com"},
@@ -211,7 +213,7 @@ func TestResourceListRendersAndActs(t *testing.T) {
 
 	rendered := ui.NewTester(View(&state, Actions{}), 520, 560)
 	rendered.Frame()
-	for _, want := range []string{"已获授权的资源", "2 项", "Wiki", "Portal · web", "192.0.2.10", "tcp 443"} {
+	for _, want := range []string{"已获授权的资源", "2 项", "应用 · 1 项", "IP 地址 · 1 项", "Wiki", "Portal · web", "192.0.2.10", "tcp 443"} {
 		if !rendered.HasText(want) {
 			t.Fatalf("%q is missing from the resource list; texts: %v", want, rendered.Texts())
 		}
@@ -219,8 +221,11 @@ func TestResourceListRendersAndActs(t *testing.T) {
 
 	var opened string
 	openTester := ui.NewTester(View(&state, Actions{OpenResource: func(url string) { opened = url }}), 520, 560)
-	if err := openTester.Click("打开"); err != nil {
-		t.Fatalf("click 打开: %v", err)
+	if err := openTester.Click("Wiki 的操作"); err != nil {
+		t.Fatalf("open the row menu: %v", err)
+	}
+	if err := openTester.ChooseMenuItem("打开"); err != nil {
+		t.Fatalf("choose 打开: %v", err)
 	}
 	if opened != "https://wiki.example.com" {
 		t.Fatalf("opened %q, want the app URL", opened)
@@ -228,11 +233,149 @@ func TestResourceListRendersAndActs(t *testing.T) {
 
 	var copied string
 	copyTester := ui.NewTester(View(&state, Actions{CopyResource: func(value string) { copied = value }}), 520, 560)
-	if err := copyTester.Click("复制"); err != nil {
-		t.Fatalf("click 复制: %v", err)
+	// The address rule has no suggested URL, so 打开 is disabled there; the copy
+	// value is the row's own text.
+	if err := copyTester.Click("192.0.2.10 的操作"); err != nil {
+		t.Fatalf("open the row menu: %v", err)
 	}
-	if copied != "https://wiki.example.com" {
-		t.Fatalf("copied %q, want the app copy value", copied)
+	if err := copyTester.ChooseMenuItem("打开"); err == nil {
+		t.Fatal("打开 is enabled on a row with no URL")
+	}
+	if err := copyTester.ChooseMenuItem("复制"); err != nil {
+		t.Fatalf("choose 复制: %v", err)
+	}
+	if copied != "192.0.2.10" {
+		t.Fatalf("copied %q, want the row's copy value", copied)
+	}
+}
+
+// A kind the window does not know still gets a group, so a newer gateway adds
+// rows instead of losing them.
+func TestResourceListGroupsUnknownKinds(t *testing.T) {
+	state := State{
+		Session: session.State{
+			Phase:  session.PhaseOnline,
+			Detail: "vpn.example.com:443",
+			Resources: session.Resources{Entries: []session.ResourceEntry{
+				{Kind: "tunnel", Title: "db-tunnel", Copy: "db-tunnel"},
+				{Kind: session.ResourceDNS, Title: "db.example.com", Detail: "192.0.2.20", Copy: "db.example.com"},
+			}},
+		},
+		Config: config.Default(),
+	}
+
+	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
+	tester.Frame()
+	for _, want := range []string{"其他 · 1 项", "DNS · 1 项", "db-tunnel", "db.example.com"} {
+		if !tester.HasText(want) {
+			t.Fatalf("%q is missing from the grouped list; texts: %v", want, tester.Texts())
+		}
+	}
+}
+
+// A group longer than the list shows at once gets a filter; typing in it keeps
+// the matching rows and drops the rest, and the headings follow the filter.
+func TestResourceSearchFiltersLongGroups(t *testing.T) {
+	entries := make([]session.ResourceEntry, 0, 10)
+	for i := 1; i <= 9; i++ {
+		entries = append(entries, session.ResourceEntry{
+			Kind:  session.ResourceApp,
+			Title: fmt.Sprintf("App %d", i),
+			Copy:  fmt.Sprintf("https://app%d.example.com", i),
+		})
+	}
+	entries = append(entries, session.ResourceEntry{Kind: session.ResourceIP, Title: "192.0.2.10", Detail: "tcp 443", Copy: "192.0.2.10"})
+
+	state := State{
+		Session: session.State{
+			Phase:     session.PhaseOnline,
+			Detail:    "vpn.example.com:443",
+			Resources: session.Resources{Entries: entries},
+		},
+		Config: config.Default(),
+	}
+
+	tester := ui.NewTester(View(&state, Actions{}), 520, 640)
+	tester.Frame()
+	if !tester.HasText("应用 · 9 项") {
+		t.Fatalf("the app heading is missing; texts: %v", tester.Texts())
+	}
+	if !tester.HasText("搜索资源") {
+		t.Fatal("a group of nine rows has no filter")
+	}
+
+	if err := tester.Click("搜索资源"); err != nil {
+		t.Fatalf("focus the filter: %v", err)
+	}
+	tester.Type("app 3")
+	tester.Frame()
+
+	if !tester.HasText("应用 · 1 项") || !tester.HasText("App 3") {
+		t.Fatalf("the filter kept the wrong rows; texts: %v", tester.Texts())
+	}
+	if tester.HasText("App 4") || tester.HasText("IP 地址") {
+		t.Fatalf("the filter kept rows it should drop; texts: %v", tester.Texts())
+	}
+
+	tester.Type("zzz")
+	tester.Frame()
+	if !tester.HasText("没有匹配的资源") {
+		t.Fatalf("an empty match is not explained; texts: %v", tester.Texts())
+	}
+}
+
+// Eight rows in a group still read without a filter; a ninth adds one.
+func TestResourceSearchAppearsOnlyForLongGroups(t *testing.T) {
+	entries := make([]session.ResourceEntry, 0, resourceSearchAt+1)
+	for i := 1; i <= resourceSearchAt; i++ {
+		entries = append(entries, session.ResourceEntry{Kind: session.ResourceApp, Title: fmt.Sprintf("App %d", i), Copy: fmt.Sprintf("App %d", i)})
+	}
+	state := State{
+		Session: session.State{Phase: session.PhaseOnline, Detail: "vpn.example.com:443", Resources: session.Resources{Entries: entries}},
+		Config:  config.Default(),
+	}
+
+	short := ui.NewTester(View(&state, Actions{}), 520, 640)
+	short.Frame()
+	if short.HasText("搜索资源") {
+		t.Fatal("eight rows in one group got a filter")
+	}
+
+	state.Session.Resources.Entries = append(entries, session.ResourceEntry{Kind: session.ResourceApp, Title: "App 9", Copy: "App 9"})
+	long := ui.NewTester(View(&state, Actions{}), 520, 640)
+	long.Frame()
+	if !long.HasText("搜索资源") {
+		t.Fatalf("nine rows in one group got no filter; texts: %v", long.Texts())
+	}
+}
+
+// At the window's minimum the list keeps three rows and the footer: the window
+// is for the resources, so it may not collapse to a heading under them.
+func TestResourceListKeepsThreeRowsAtTheMinimumSize(t *testing.T) {
+	entries := make([]session.ResourceEntry, 0, 20)
+	for i := 1; i <= 20; i++ {
+		title := fmt.Sprintf("App %02d", i)
+		entries = append(entries, session.ResourceEntry{Kind: session.ResourceApp, Title: title, Copy: title})
+	}
+	state := State{
+		Session: session.State{Phase: session.PhaseOnline, Detail: "vpn.example.com:443", Resources: session.Resources{Entries: entries}},
+		Config:  config.Default(),
+	}
+
+	tester := ui.NewTester(View(&state, Actions{}), 440, 480)
+	tester.Frame()
+	if !tester.HasText("代理端口尚未开启") {
+		t.Fatalf("the footer left the window; texts: %v", tester.Texts())
+	}
+	height := float32(tester.Image().Bounds().Max.Y)
+	for _, title := range []string{"App 01", "App 02", "App 03"} {
+		rect, ok := tester.Find(title)
+		if !ok {
+			t.Fatalf("%q is not in the list; texts: %v", title, tester.Texts())
+		}
+		if rect.Y+rect.H > height {
+			t.Fatalf("%q is below the window: %+v", title, rect)
+		}
 	}
 }
 

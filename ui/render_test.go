@@ -84,6 +84,10 @@ func renderStates(t *testing.T, dir, lang string) {
 			name += "-" + lang
 		}
 		tester.SetTitleBar(testerTitleBar)
+		// MyGo's own widget strings read the window's language, while the views
+		// read the app's catalog through i18n: the harness has to say both, or a
+		// search field keeps its English placeholder in the Chinese window.
+		tester.SetLocale(lang)
 		tester.Frame()
 		// The toast fades in; one frame at its start is transparent.
 		tester.Advance(250 * time.Millisecond)
@@ -259,6 +263,24 @@ func renderStates(t *testing.T, dir, lang string) {
 		save("main-small", ui.NewTester(View(&state, Actions{}), 440, 480))
 	})
 
+	t.Run("main-resources", func(t *testing.T) {
+		state := State{
+			Session:   longGrant(),
+			Config:    cfg,
+			Listeners: renderListeners(),
+		}
+		save("main-resources", ui.NewTester(View(&state, Actions{}), 540, 640))
+	})
+
+	t.Run("main-resources-small", func(t *testing.T) {
+		state := State{
+			Session:   longGrant(),
+			Config:    cfg,
+			Listeners: renderListeners(),
+		}
+		save("main-resources-small", ui.NewTester(View(&state, Actions{}), 440, 480))
+	})
+
 	t.Run("settings-small", func(t *testing.T) {
 		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
 		save("settings-small", ui.NewTester(SettingsView(state, SettingsActions{}), 560, 440))
@@ -308,6 +330,32 @@ func renderListeners() []proxy.Listener {
 	return []proxy.Listener{
 		{Protocol: proxy.ProtocolSOCKS5, Address: "127.0.0.1:1080"},
 		{Protocol: proxy.ProtocolHTTP, Address: "127.0.0.1:1081"},
+	}
+}
+
+// longGrant is an account with more rows than one screen: a portal application
+// list long enough for the filter, and rules of every other kind under it.
+func longGrant() session.State {
+	entries := make([]session.ResourceEntry, 0, 20)
+	for _, app := range []string{"知识库", "代码仓库", "构建平台", "监控面板", "工单系统", "数据分析", "日志检索", "制品库", "配置中心", "消息队列", "调度平台", "接口文档"} {
+		url := "https://portal.example.com/" + app
+		entries = append(entries, session.ResourceEntry{Kind: session.ResourceApp, Title: app, Detail: "门户应用 · Web", URL: url, Copy: url})
+	}
+	entries = append(entries,
+		session.ResourceEntry{Kind: session.ResourceDomain, Title: "build.example.com", Detail: "tcp 22", Copy: "build.example.com"},
+		session.ResourceEntry{Kind: session.ResourceDomain, Title: "git.example.com", Detail: "tcp 443", Copy: "git.example.com"},
+		session.ResourceEntry{Kind: session.ResourceIP, Title: "192.0.2.10", Detail: "tcp 443, 8080", Copy: "192.0.2.10"},
+		session.ResourceEntry{Kind: session.ResourceIP, Title: "192.0.2.0 – 192.0.2.255", Detail: "tcp 1-65535", Copy: "192.0.2.0 – 192.0.2.255"},
+		session.ResourceEntry{Kind: session.ResourceDNS, Title: "db.example.com", Detail: "192.0.2.20", Copy: "db.example.com"},
+	)
+
+	return session.State{
+		Phase:     session.PhaseOnline,
+		Detail:    "vpn.example.com:443",
+		ClientIP:  "203.0.113.4",
+		Since:     time.Now().Add(-17 * time.Minute),
+		Resources: session.Resources{Entries: entries},
+		KeepAlive: session.KeepAliveState{Target: "http://192.0.2.10/", Status: 200, OK: true, At: time.Now()},
 	}
 }
 

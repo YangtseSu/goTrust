@@ -634,24 +634,96 @@ func (msgs Messages) ResourcesEmpty() string {
 	return Catalog.Format(msgs.locale, "resourcesEmpty", nil)
 }
 
-// ResourceOpen says "打开 {title}"
+// ResourceGroupApp says "应用"
 // in the language the app shows.
-func ResourceOpen(title string) string { return In(i18n.Locale()).ResourceOpen(title) }
+func ResourceGroupApp() string { return In(i18n.Locale()).ResourceGroupApp() }
 
-// ResourceOpen says "打开 {title}"
+// ResourceGroupApp says "应用"
 // in the language of msgs.
-func (msgs Messages) ResourceOpen(title string) string {
-	return Catalog.Format(msgs.locale, "resourceOpen", map[string]any{"title": title})
+func (msgs Messages) ResourceGroupApp() string {
+	return Catalog.Format(msgs.locale, "resourceGroupApp", nil)
 }
 
-// ResourceCopy says "复制 {title}"
+// ResourceGroupDomain says "域名"
 // in the language the app shows.
-func ResourceCopy(title string) string { return In(i18n.Locale()).ResourceCopy(title) }
+func ResourceGroupDomain() string { return In(i18n.Locale()).ResourceGroupDomain() }
 
-// ResourceCopy says "复制 {title}"
+// ResourceGroupDomain says "域名"
 // in the language of msgs.
-func (msgs Messages) ResourceCopy(title string) string {
-	return Catalog.Format(msgs.locale, "resourceCopy", map[string]any{"title": title})
+func (msgs Messages) ResourceGroupDomain() string {
+	return Catalog.Format(msgs.locale, "resourceGroupDomain", nil)
+}
+
+// ResourceGroupAddress says "IP 地址"
+// in the language the app shows.
+func ResourceGroupAddress() string { return In(i18n.Locale()).ResourceGroupAddress() }
+
+// ResourceGroupAddress says "IP 地址"
+// in the language of msgs.
+func (msgs Messages) ResourceGroupAddress() string {
+	return Catalog.Format(msgs.locale, "resourceGroupAddress", nil)
+}
+
+// ResourceGroupDNS says "DNS"
+// in the language the app shows.
+func ResourceGroupDNS() string { return In(i18n.Locale()).ResourceGroupDNS() }
+
+// ResourceGroupDNS says "DNS"
+// in the language of msgs.
+func (msgs Messages) ResourceGroupDNS() string {
+	return Catalog.Format(msgs.locale, "resourceGroupDNS", nil)
+}
+
+// ResourceGroupOther says "其他"
+// in the language the app shows.
+func ResourceGroupOther() string { return In(i18n.Locale()).ResourceGroupOther() }
+
+// ResourceGroupOther says "其他"
+// in the language of msgs.
+func (msgs Messages) ResourceGroupOther() string {
+	return Catalog.Format(msgs.locale, "resourceGroupOther", nil)
+}
+
+// ResourceGroupCount says "{group} · {count, plural, other {# 项}}"
+// in the language the app shows.
+func ResourceGroupCount(group string, count int) string {
+	return In(i18n.Locale()).ResourceGroupCount(group, count)
+}
+
+// ResourceGroupCount says "{group} · {count, plural, other {# 项}}"
+// in the language of msgs.
+func (msgs Messages) ResourceGroupCount(group string, count int) string {
+	return Catalog.Format(msgs.locale, "resourceGroupCount", map[string]any{"group": group, "count": count})
+}
+
+// ResourceSearch says "搜索资源"
+// in the language the app shows.
+func ResourceSearch() string { return In(i18n.Locale()).ResourceSearch() }
+
+// ResourceSearch says "搜索资源"
+// in the language of msgs.
+func (msgs Messages) ResourceSearch() string {
+	return Catalog.Format(msgs.locale, "resourceSearch", nil)
+}
+
+// ResourceSearchEmpty says "没有匹配的资源"
+// in the language the app shows.
+func ResourceSearchEmpty() string { return In(i18n.Locale()).ResourceSearchEmpty() }
+
+// ResourceSearchEmpty says "没有匹配的资源"
+// in the language of msgs.
+func (msgs Messages) ResourceSearchEmpty() string {
+	return Catalog.Format(msgs.locale, "resourceSearchEmpty", nil)
+}
+
+// ResourceMenu says "{title} 的操作"
+// in the language the app shows.
+func ResourceMenu(title string) string { return In(i18n.Locale()).ResourceMenu(title) }
+
+// ResourceMenu says "{title} 的操作"
+// in the language of msgs.
+func (msgs Messages) ResourceMenu(title string) string {
+	return Catalog.Format(msgs.locale, "resourceMenu", map[string]any{"title": title})
 }
 
 // ProxyDisabled says "代理端口尚未开启"
