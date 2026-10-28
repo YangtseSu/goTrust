@@ -52,6 +52,9 @@ func Run(configPath string) error {
 		configPath: path,
 		view:       gotrustui.State{Config: cfg},
 	}
+	// A fresh installation has neither a gateway nor an account, so the main
+	// window opens on the first-run form instead of failing on 连接.
+	application.refreshSetup()
 
 	fileLog, logErr := logging.New(logging.Options{
 		Verbose: cfg.Logging.Verbose,
@@ -373,12 +376,13 @@ func (a *app) openTray() bool {
 // actions are the callbacks the main window and the tray share.
 func (a *app) actions() gotrustui.Actions {
 	return gotrustui.Actions{
-		Login:         func() { a.async(a.connect) },
+		Login:         a.startLogin,
 		Logout:        a.disconnect,
 		Settings:      func() { go func() { mygo.RunOnMain(a.openSettings) }() },
 		ShowWindow:    a.showWindow,
 		SelectProfile: a.selectProfile,
 		Quit:          func() { mygo.App.Quit() },
+		SaveSetup:     a.saveSetup,
 
 		AddCaptchaPoint: a.addCaptchaPoint,
 		UndoCaptcha:     a.undoCaptchaPoint,
@@ -873,11 +877,88 @@ func (a *app) async(fn func(context.Context) error) {
 	}()
 }
 
+// startLogin is 连接. An incomplete profile cannot produce a login, and the
+// library's validation message names a field the window does not offer, so the
+// first-run form takes the place of the connection controls instead.
+func (a *app) startLogin() {
+	if problem := gotrustui.ProfileProblem(a.currentConfig().Active()); problem != "" {
+		a.refreshSetup()
+		a.showWindow()
+		return
+	}
+	a.async(a.connect)
+}
+
+// refreshSetup keeps the first-run form in step with the active profile: it
+// appears while a login cannot be built, keeps what the user typed for the same
+// profile, and goes away once the profile is complete.
+func (a *app) refreshSetup() {
+	profile := a.currentConfig().Active()
+	problem := gotrustui.ProfileProblem(profile)
+
+	a.mu.Lock()
+	switch {
+	case problem == "" || sessionActive(a.view.Session.Phase):
+		a.view.Setup = nil
+	case a.view.Setup == nil || a.view.Setup.Profile != setupName(profile):
+		a.view.Setup = gotrustui.NewSetupDraft(profile)
+	}
+	a.mu.Unlock()
+
+	a.invalidate()
+}
+
+// setupName is the key a draft belongs to: the profile's name, or the default
+// when a hand-edited file leaves it empty.
+func setupName(profile config.Profile) string {
+	if profile.Name != "" {
+		return profile.Name
+	}
+	return config.DefaultProfileName
+}
+
+// saveSetup writes the first-run form. The settings file goes first, so a failed
+// write leaves the running app as it was; the live configuration follows.
+func (a *app) saveSetup(draft gotrustui.SetupDraft, connect bool) {
+	cfg := a.mutableConfig()
+	if err := draft.Apply(&cfg); err != nil {
+		a.setSetupError(err.Error())
+		return
+	}
+	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
+		a.setSetupError("保存失败: " + err.Error())
+		a.logf("save setup: %v", err)
+		return
+	}
+
+	a.setSetupError("")
+	a.applyConfig(cfg)
+	if connect {
+		a.async(a.connect)
+	}
+}
+
+// setSetupError puts the reason under the first-run form's buttons.
+func (a *app) setSetupError(message string) {
+	a.mu.Lock()
+	if a.view.Setup != nil {
+		a.view.Setup.Error = message
+	}
+	a.mu.Unlock()
+	a.invalidate()
+}
+
 func (a *app) connect(ctx context.Context) error {
 	// 断开 joins the session on another goroutine. Building a new session
 	// before that join finishes would let the old Logout tear it down.
 	if err := a.waitForLogout(ctx); err != nil {
 		return err
+	}
+	// The window hides the connection controls while the profile is incomplete,
+	// so this only fires for an auto-connect or a caller racing a settings
+	// change. It answers in the window's words, not the library's.
+	if problem := gotrustui.ProfileProblem(a.currentConfig().Active()); problem != "" {
+		return errors.New(problem)
 	}
 	if err := a.acquireProfileLock(); err != nil {
 		return err
@@ -1479,6 +1560,7 @@ func (a *app) applyConfig(cfg config.Config) {
 	a.view.Config = cfg
 	a.mu.Unlock()
 
+	a.refreshSetup()
 	a.refreshTray()
 	a.invalidate()
 }

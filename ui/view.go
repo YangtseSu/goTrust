@@ -51,6 +51,10 @@ type State struct {
 	DeviceBind *DeviceBindPrompt
 	// Password is the gateway's forced password change, shown in the same slot.
 	Password *PasswordPrompt
+	// Setup is the first-run form. It is set while the active profile has no
+	// gateway or account yet, and replaces the connection controls and the
+	// resource list until it does.
+	Setup *SetupDraft
 }
 
 // ClashFormat selects one of the three Clash/Mihomo renderings. It mirrors the
@@ -70,6 +74,9 @@ type Actions struct {
 	Settings   func()
 	ShowWindow func()
 	Quit       func()
+	// SaveSetup writes the first-run form and, when connect is set, logs in
+	// with it right away.
+	SaveSetup func(draft SetupDraft, connect bool)
 	// SelectProfile switches the active account. The application disconnects
 	// first and reconnects when auto-connect is on.
 	SelectProfile func(string)
@@ -126,6 +133,8 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 				deviceBindPanel(c, state, actions)
 			case state.Password != nil:
 				passwordPanel(c, state, actions)
+			case state.Setup != nil:
+				setupPanel(c, state, actions)
 			default:
 				controls(c, state, actions)
 				resources(c, state, actions)

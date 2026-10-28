@@ -669,3 +669,93 @@ func TestProfileLockIsHeldForOneLiveLogin(t *testing.T) {
 	}
 	application.releaseProfileLock()
 }
+
+// A fresh installation cannot log in: 连接 reveals the first-run form instead of
+// reporting an error the window offers no way to fix, and the connect path
+// answers in the window's words rather than the library's English.
+func TestFirstRunSetupReplacesTheConnectingError(t *testing.T) {
+	cfg := config.Default()
+	application := &app{cfg: cfg, configPath: filepath.Join(t.TempDir(), "config.toml")}
+	application.view.Config = cfg
+
+	application.startLogin()
+
+	if application.view.Setup == nil {
+		t.Fatal("连接 on an incomplete profile did not reveal the first-run form")
+	}
+	if application.attempt != nil {
+		t.Fatal("an incomplete profile started a login")
+	}
+
+	err := application.connect(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "请填写网关地址") {
+		t.Fatalf("connect error = %v", err)
+	}
+}
+
+// The first-run form writes the settings file, applies it, and clears itself.
+func TestFirstRunSetupWritesTheConfiguration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg := config.Default()
+	application := &app{cfg: cfg, configPath: path}
+	application.view.Config = cfg
+	application.refreshSetup()
+
+	if application.view.Setup == nil {
+		t.Fatal("no first-run form for an empty profile")
+	}
+	draft := *application.view.Setup
+	draft.Address = "vpn.example.com"
+	draft.Port = "8443"
+	draft.Username = "alice"
+	draft.Password = "s3cret"
+	draft.StorePass = true
+
+	application.saveSetup(draft, false)
+
+	if application.view.Setup != nil {
+		t.Fatal("the first-run form stayed after a successful save")
+	}
+	onDisk, err := config.LoadFile(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	profile := onDisk.Active()
+	if profile.Server.Address != "vpn.example.com" || profile.Server.Port != 8443 ||
+		profile.Auth.Username != "alice" {
+		t.Fatalf("on-disk profile = %+v", profile)
+	}
+	if profile.Auth.Password != "s3cret" || !profile.Auth.StorePass {
+		t.Fatalf("stored password = %q", profile.Auth.Password)
+	}
+	if live := application.currentConfig().Active(); live.Server.Port != 8443 || live.Auth.Username != "alice" {
+		t.Fatalf("live profile = %+v", live)
+	}
+}
+
+// A form that cannot be applied is reported inside the form and leaves both the
+// file and the live settings alone.
+func TestFirstRunSetupReportsARejectedSave(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg := config.Default()
+	application := &app{cfg: cfg, configPath: path}
+	application.view.Config = cfg
+	application.refreshSetup()
+
+	draft := *application.view.Setup
+	draft.Address = "vpn.example.com"
+	draft.Username = "alice"
+	draft.Port = "0"
+
+	application.saveSetup(draft, false)
+
+	if application.view.Setup == nil || application.view.Setup.Error == "" {
+		t.Fatalf("a rejected save left no reason in the form: %+v", application.view.Setup)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("a rejected save wrote the file: %v", err)
+	}
+	if application.currentConfig().Active().Server.Address != "" {
+		t.Fatal("a rejected save changed the live settings")
+	}
+}

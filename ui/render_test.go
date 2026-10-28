@@ -38,6 +38,9 @@ func TestRenderEveryState(t *testing.T) {
 	cfg.Profiles[0].Server.Address = "vpn.example.com"
 	cfg.Profiles[0].Auth.Username = "alice"
 
+	// A fresh installation: no gateway, no account.
+	fresh := config.Default()
+
 	resources := session.Resources{Entries: []session.ResourceEntry{
 		{Kind: session.ResourceApp, Title: "知识库", Detail: "门户应用 · Web", URL: "https://wiki.example.com", Copy: "https://wiki.example.com"},
 		{Kind: session.ResourceApp, Title: "代码仓库", Detail: "研发 · Web", URL: "https://git.example.com", Copy: "https://git.example.com"},
@@ -113,6 +116,14 @@ func TestRenderEveryState(t *testing.T) {
 				Config:      cfg,
 				Status:      "登录失败，请检查设置",
 				StatusError: true,
+			},
+		},
+		{
+			name: "main-setup",
+			state: State{
+				Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
+				Config:  fresh,
+				Setup:   NewSetupDraft(fresh.Active()),
 			},
 		},
 		{
@@ -236,6 +247,15 @@ func TestRenderEveryState(t *testing.T) {
 			},
 		}
 		save("main-password-small", ui.NewTester(View(&state, Actions{}), 440, 400))
+	})
+
+	t.Run("main-setup-small", func(t *testing.T) {
+		state := State{
+			Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
+			Config:  fresh,
+			Setup:   NewSetupDraft(fresh.Active()),
+		}
+		save("main-setup-small", ui.NewTester(View(&state, Actions{}), 440, 400))
 	})
 
 	t.Run("settings-password", func(t *testing.T) {
