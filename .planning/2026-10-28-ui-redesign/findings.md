@@ -104,6 +104,17 @@ The app follows the desktop's light/dark appearance through mygo's
 `ThemeModule`; there is no app-level `SetTheme` call, and the redesign does not
 add one. Any new colour must therefore be derived for both appearances.
 
+## Layout: Fill is not Grow
+
+Measured while adding the title strip: `Element.Fill()` sets height to 100% of
+the parent, so a content column under a 34px strip was 480 tall in a 480 window
+and ended 34px past the bottom: the footer and the pinned action rows fell off
+the screen at every size. `Grow(1).Shrink(1)` sizes the column to what the strip
+leaves. Also, mygo's default flex-shrink is 0 (`layout.go` shrinks only items
+whose `shrink` is set), so the list column, every `Scroll` and the panel columns
+declare `Shrink(1)`; otherwise they keep their content height and push the
+footer out.
+
 ## Constraints confirmed in the tree
 
 * `internal/guards` forbids `core/*` reaching mygo and either front-end reaching

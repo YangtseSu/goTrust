@@ -12,20 +12,21 @@ new dependency and no change to `core/session`.
 
 ## Next Step
 
-Phase 4: window chrome and main window information architecture. Phase 3 is
-complete: semantic tones have a derived ink that clears 4.5:1 in both
-appearances, the chip's label is `Theme.Text` on the 12% tint, no literal font
-sizes remain, and the render command is unchanged:
-`GOTRUST_RENDER_DIR=/tmp/gotrust-ui go test ./ui -run TestRenderEveryState`.
+Phase 5: group the granted resources by kind, give each row one icon and one
+menu, and make the list scroll at the declared minimum size. Phase 4 is
+complete: both windows draw their own 34px title strip under the desktop's
+controls, the state is the headline with one subline of session facts, three
+controls replace nine, the footer is one line with its detail in a tooltip, and
+an action result shows once as a toast.
 
 ## Current Phase
 
-Phase 4: Window chrome and main window information architecture. Phase 3 is
-complete: `toneInk` mixes each semantic fill toward the far end of the
-appearance until it clears 4.8:1 on the chip's own tint (light Success
-2.89:1 → 5.06:1), the chip's dot carries that ink while its label reads in
-`Theme.Text` (≥13:1 in both appearances), and `TestToneInkPassesAA` holds the
-line for every tone.
+Phase 5: Resource list. Phase 4 is complete: `TitleBarHidden` with a 34px
+strip, the phase as the headline (`statusChip` at title size), one subline
+(`host:port · 内网地址 · 已保持 N 分钟`), `连接/断开` + `复制配置 ▾` + `⋯`, a
+single footer line, and `State.Status` shown once through `ui.Toast`
+(`StatusSeq`). `listeners()` from `core/proxy` now tells the footer which
+protocol each bound address speaks.
 
 ## Phases
 
@@ -128,22 +129,24 @@ accessors, and one locale the whole app reads.
 The title bar becomes the window's own: mygo 0.7.1 hides the frame and keeps
 the desktop's window controls, so the view draws a 34px strip under them.
 
-- [ ] Both windows: `TitleBarStyle: mygo.TitleBarHidden`, `TitleBarHeight: 34`;
+- [x] Both windows: `TitleBarStyle: mygo.TitleBarHidden`, `TitleBarHeight: 34`;
       GTK keeps its own buttons (`HideWindowButtons` stays false, so the desktop
       decides the layout and the side)
-- [ ] One `titleBar(c)` helper: the room `c.TitleBar()` reports, `DragWindow`,
-      brand at 12px muted, no interactive child inside the drag region
-- [ ] Header: state as the headline (22px, `Theme.Text`), one subline
-      `host:port · 内网地址 · 已保持 N 分钟`; drop the duplicate phase line and
-      the chip's repeated label
-- [ ] Collapse nine buttons into `连接/断开` (primary), `复制配置 ▾`
+- [x] One `titleBar(c, profile)` helper: the room `c.TitleBar()` reports,
+      `DragWindow`, brand and the active profile at caption size muted, no
+      interactive child inside the drag region
+- [x] Header: the state as the headline (`statusChip` at title size, label in
+      `Theme.Text`), one subline `host:port · 内网地址 · 已保持 N 分钟`; the
+      duplicate phase line is gone and the profile name moved to the strip
+- [x] Collapse nine buttons into `连接/断开` (primary), `复制配置 ▾`
       (`ui.MenuButton`: PAC, Clash 片段, Verge 脚本, 完整配置), and `⋯`
-      (设置, 打开日志目录, 退出)
-- [ ] Footer: one line `SOCKS5 … · HTTP … · 保活 N 秒前`, addresses and probe
-      detail behind `ui.Tooltip`; transient `State.Status` moves to `ui.Toast`
-- [ ] Raise the main window's `MinHeight` to 480 and re-check 440×400-era states
-      in the new chrome
-- **Status:** pending
+      (设置, 打开日志目录, 退出); the header row wraps at the minimum width
+- [x] Footer: one line `SOCKS5 127.0.0.1:1080 · HTTP 127.0.0.1:1081 · 保活 N
+      秒前`, with the PAC URL and the probe's own result behind `ui.Tooltip`;
+      `State.Status` moves to `ui.Toast`, emitted once per `StatusSeq`
+- [x] Raise the main window's `MinHeight` to 480 and re-check the 440×400-era
+      states in the new chrome (440×480)
+- **Status:** complete
 
 ### Phase 5: Resource list
 
@@ -268,6 +271,10 @@ the desktop's window controls, so the view draws a 34px strip under them.
 | Resources group by kind instead of a flat list | `ResourceEntry.Kind` already exists and apps/domains/addresses are read differently; grouping costs no new data |
 | Semantic colours split into fill and text variants | mygo's `Success`/`Warning` are Meter colours, measured 3.30:1 and 3.19:1 on white, 2.89/2.81 on the chip's tint. `toneInk` mixes the fill toward the far end of the appearance until it clears 4.8:1 against that tint, so a theme change or the desktop's own accent cannot reintroduce a failing colour |
 | Login panels stay in the window instead of a second dialog | A prompt asks about a specific account and gateway; the header must stay visible, and a new window frame is the documented crash risk |
+| The title strip names the profile | The subline's job is the session; the account is static, so it belongs where it does not compete, and a fresh install still shows which profile is being filled |
+| The header row wraps instead of clipping | At 440 DIP the English labels of three controls plus the headline exceed the width; a wrapped second row keeps `⋯` reachable, where a clipped row would hide settings and quit |
+| The first-run panel hides the header's 连接 and the subline | The panel owns the connect action and says what is missing; two controls for one intent, and a line repeating its heading, only cost the form height |
+| `listeners()` in `core/proxy` reports the protocol | The footer names SOCKS5 and HTTP; deriving the protocol from order would tie the window to the order the server binds in |
 | Contrast becomes a test, not a review note | The failure is numeric and cheap to assert from the tokens the views paint with |
 | Localize to zh-CN + en-US | The product already mixes them: Chinese GUI and docs, English CLI and library errors. "Chinese only" is not true today |
 | Use mygo's catalog and generated accessors, not a hand-rolled table | The toolkit already ships catalog parsing, ICU formatting, locale resolution, a persisted override and the widget strings; a second mechanism would have to be kept in step with it |

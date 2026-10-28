@@ -117,9 +117,41 @@ semantic colours were measured, rather than judged from the source alone.
 
 ### Phase 4: Window chrome and main window information architecture
 
-- **Status:** pending
-- Actions taken: none
-- Files created/modified: none
+- **Status:** complete
+- Actions taken:
+  - Both windows: `TitleBarStyle: mygo.TitleBarHidden` with `TitleBarHeight:
+    gotrustui.TitleBarHeight` (34); GTK keeps its own buttons. The main window's
+    `MinHeight` is 480.
+  - `ui.view`: `titleBar(c, profile)` draws the strip in the room `c.TitleBar()`
+    reports, pads by `Left`/`Right`, drags with `DragWindow`, and shows
+    `goTrust · 配置 默认` at caption size muted; it holds no control.
+  - Header: `statusChip` is now the headline (title size, dot and tint in the
+    tone ink, label in `Theme.Text`); one subline joins the endpoint, `内网地址`,
+    and `已保持 N 分钟`, or the reconnect ladder / failure reason in its tone.
+    `phaseDetail`, `profileSummary` and `detailLine` are gone.
+  - Controls: `连接/断开` (primary), `复制配置 ▾` (`ui.MenuButton`: PAC, Clash
+    片段, Verge 脚本, Clash 完整配置), `⋯` (设置, 打开日志目录, 退出). The row
+    wraps so the overflow stays reachable at 440 DIP. The first-run panel hides
+    the header's 连接 and the subline: the panel already owns both.
+  - Footer: one line from `core/proxy`'s new `Listeners()` (`SOCKS5 … · HTTP …
+    · 保活 N 秒前`), coloured only by a failing probe; the PAC URL and
+    `KeepAliveSummary` sit in a `ui.TooltipBase` tip, and the anchor carries them
+    as its description. `State.Status` is shown once as `ui.Toast`, gated by the
+    new `State.StatusSeq` the app increments in `setStatus`/`setStatusError`.
+  - Layout: the content column is `Grow(1).Shrink(1)` (not `Fill`, which is
+    100% of the parent and overflowed by the strip's height); every scroll and
+    the panel columns shrink, so the footer and pinned action rows stay on
+    screen at the minimum size.
+  - `ui.Actions.OpenLogs` wired to `app.openLogs` for the overflow menu.
+  - `core/proxy`: `Addresses() []string` became `Listeners() []Listener`
+    (`Protocol`, `Address`), with `boundListener` recording the protocol at
+    bind; the CLI logs and the app's state follow.
+- Files created/modified:
+  - `ui/{view,theme,settings,password,setup}.go`, `ui/render_test.go`,
+    `ui/view_test.go`, `ui/a11y_test.go`
+  - `core/proxy/server.go`, `core/proxy/server_test.go`
+  - `internal/gui/{gui,gui_test}.go`, `internal/cli/cli.go`
+  - `locales/{zh,en}.json`, `locales/catalog_gen.go`
 
 ### Phase 5: Resource list
 
@@ -164,6 +196,9 @@ semantic colours were measured, rather than judged from the source alone.
 | First-run view tests | `go test ./ui -run 'TestProfileProblem\|TestSetup\|TestCompleteProfile'` | pass | `ok` | pass |
 | First-run app tests | `go test ./internal/gui -run TestFirstRun` | pass | `ok` | pass |
 | Whole suite | `go test ./...` | pass | all packages ok | pass |
+| Header, menus and footer | `go test ./ui -run 'TestListenersAndKeepAliveAreListed\|TestSettingsButtonOpensTheWindow\|TestClashButtonsCopyEachFormat\|TestActionResultsShowAsToasts\|TestMainWindowTabOrder'` | menu paths reach the actions, tooltip holds the probe | pass | pass |
+| Minimum size, 440×480 | `main-small.png`, `main-small-en.png`, `main-setup-small.png`, `main-password-small.png` | footer on screen, `⋯` reachable, form scrolls | footer intact, header wraps to two rows in English, form scrolls under its pinned row | pass |
+| Window chrome in a real session | headless mutter + Xwayland, empty config, `import -window root` | strip above the content, no crash | strip shows `goTrust · 配置 默认`, window alive, no stderr beyond the appindicator deprecation notice | pass |
 | Static checks | `go vet ./...`, `gofmt -l .`, `reuse lint`, `go tool mygo vet .` | clean | no output; reuse 198/198 | pass |
 | CGO-free build of the UI packages | `CGO_ENABLED=0 go test ./ui ./internal/gui` | pass | `ok` | pass |
 
@@ -185,3 +220,7 @@ semantic colours were measured, rather than judged from the source alone.
 | 2026-10-28 | Converting accessor names: `TOTPSection`, `SOCKS5Listen`, `PACURL` are generated as `TotpSection`, `Socks5Listen`, `PacURL` | 1 | Build errors named each; call sites fixed |
 | 2026-10-28 | `settings-full` at 600×1500 still clips after 详细日志: the scroll content is taller than the view; the language field lies below the fold | 1 | Inspected the language field through a 600×2200 tester instead of a PNG |
 | 2026-10-28 | The password hint rendered under the 保存密码 checkbox and read as if it explained the checkbox | 1 | Moved the caption inside the 密码 field, above the checkbox |
+| 2026-10-28 | With the strip added, the footer and the pinned action rows fell below the window at every size | 1 | The content column used `Fill()`, which is 100% of the parent and ignored the strip above it; `Grow(1).Shrink(1)` sizes it to the remaining room |
+| 2026-10-28 | The resource list still pushed the footer out at 440×480 | 1 | Nothing shrank: mygo's default is shrink 0. The list column, its `Scroll`, the panel columns and the settings body now shrink |
+| 2026-10-28 | English at 440 DIP clipped the `⋯` button | 1 | The header row wraps; the actions take a second line only when they do not fit beside the headline |
+| 2026-10-28 | The first-run form scrolled at 540×640 once the header grew | 1 | Dropped the subline (it repeated the panel) and the header's 连接 (the panel owns it); the form fits again |
