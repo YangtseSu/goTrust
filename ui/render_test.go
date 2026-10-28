@@ -34,6 +34,21 @@ func TestRenderEveryState(t *testing.T) {
 		t.Fatalf("create the render directory: %v", err)
 	}
 
+	// Both languages, because a label that fits in Chinese may not fit in
+	// English. The source language keeps the plain names, so the images before
+	// a change stay comparable.
+	for _, lang := range []string{"zh", "en"} {
+		t.Run(lang, func(t *testing.T) {
+			t.Setenv("MYGO_LOCALE", lang)
+			renderStates(t, dir, lang)
+		})
+	}
+}
+
+// renderStates writes every window state in one language.
+func renderStates(t *testing.T, dir, lang string) {
+	t.Helper()
+
 	cfg := config.Default()
 	cfg.Profiles[0].Server.Address = "vpn.example.com"
 	cfg.Profiles[0].Auth.Username = "alice"
@@ -60,6 +75,9 @@ func TestRenderEveryState(t *testing.T) {
 
 	save := func(name string, tester *ui.Tester) {
 		t.Helper()
+		if lang != "zh" {
+			name += "-" + lang
+		}
 		tester.Frame()
 		file, err := os.Create(filepath.Join(dir, name+".png"))
 		if err != nil {

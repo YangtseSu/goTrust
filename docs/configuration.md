@@ -1,3 +1,5 @@
+中文 | [English](configuration.en.md)
+
 # 配置参考
 
 goTrust 的设置保存在 `config.toml`，位置随系统：

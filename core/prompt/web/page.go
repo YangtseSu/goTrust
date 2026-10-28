@@ -32,14 +32,14 @@ func (p *page[T]) path() string {
 // with a failure to show, if any; parse turns a submitted form into an answer
 // and returns the reason to show when the form is not usable. A page answers
 // once: a second submission is a conflict.
-func addForm[T any](p *page[T], render func(failure string) []byte, parse func(r *http.Request) (T, error)) {
+func addForm[T any](p *page[T], t texts, render func(failure string) []byte, parse func(r *http.Request) (T, error)) {
 	p.mux.HandleFunc("GET "+p.path()+"{$}", func(w http.ResponseWriter, r *http.Request) {
 		writePage(w, http.StatusOK, render(""))
 	})
 	p.mux.HandleFunc("POST "+p.path()+"{$}", func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
 		if err := r.ParseForm(); err != nil {
-			writePage(w, http.StatusBadRequest, render("表单无法解析，请重试。"))
+			writePage(w, http.StatusBadRequest, render(t.ParseFailure))
 			return
 		}
 		answer, err := parse(r)
@@ -49,7 +49,7 @@ func addForm[T any](p *page[T], render func(failure string) []byte, parse func(r
 		}
 		select {
 		case p.answers <- answer:
-			writePage(w, http.StatusOK, []byte(successHTML))
+			writePage(w, http.StatusOK, renderPage("success", struct{ T texts }{t}))
 		default:
 			http.Error(w, "this prompt has already been answered", http.StatusConflict)
 		}

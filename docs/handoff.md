@@ -1,3 +1,5 @@
+中文 | [English](handoff.en.md)
+
 # 外部程序接入：PAC、ZeroOmega、Clash 与 Mihomo
 
 goTrust 不创建 TUN，也不改系统代理。它只提供本地 SOCKS5/HTTP 代理，并按授权分流：

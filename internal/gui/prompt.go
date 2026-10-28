@@ -15,6 +15,7 @@ import (
 
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/session"
+	"github.com/YangtseSu/goTrust/locales"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
 )
 
@@ -96,7 +97,7 @@ func (p *uiPrompter) HandleExternalLogin(challenge session.ExternalLoginChalleng
 	if challenge.LoginURL != "" {
 		if err := p.app.openBrowser(challenge.LoginURL); err != nil {
 			p.app.logf("open the login URL: %v", err)
-			p.app.setStatusError("无法自动打开浏览器，请手动复制链接: " + err.Error())
+			p.app.setStatusError(locales.OpenBrowserHint(err.Error()))
 		}
 	}
 
@@ -153,7 +154,7 @@ func (a *app) beginCaptcha(captcha *gotrustui.Captcha, reply chan captchaResult)
 	a.captcha = reply
 	a.mu.Unlock()
 
-	a.setStatus("请在窗口中点击图形验证码", false)
+	a.setStatus(locales.CaptchaClick(), false)
 	a.revealWindow()
 	a.invalidate()
 }
@@ -208,7 +209,7 @@ func (a *app) submitCaptcha() {
 	if captcha == nil || reply == nil || len(captcha.Points) == 0 {
 		a.mu.Unlock()
 		if captcha != nil {
-			a.setStatus("请先在验证码图片上点击字符", false)
+			a.setStatus(locales.CaptchaPickFirst(), false)
 		}
 		return
 	}
@@ -226,7 +227,7 @@ func (a *app) submitCaptcha() {
 	a.mu.Unlock()
 
 	a.invalidate()
-	a.setStatus("已提交验证码，正在登录…", true)
+	a.setStatus(locales.CaptchaSubmitted(), true)
 	reply <- captchaResult{response: response}
 }
 
@@ -252,7 +253,7 @@ func (a *app) beginCode(prompt *gotrustui.CodePrompt, reply chan codeResult) {
 	a.code = reply
 	a.mu.Unlock()
 
-	a.setStatus("请在窗口中输入验证码", false)
+	a.setStatus(locales.CodeEnter(), false)
 	a.revealWindow()
 	a.invalidate()
 }
@@ -286,7 +287,7 @@ func (a *app) submitCode() {
 	a.mu.Unlock()
 
 	if code == "" && !storeSecret {
-		a.setStatus("请输入验证码", false)
+		a.setStatus(locales.CodeEmpty(), false)
 		return
 	}
 	if storeSecret {
@@ -312,7 +313,7 @@ func (a *app) submitCode() {
 	}
 
 	a.invalidate()
-	a.setStatus("已提交验证码，正在登录…", true)
+	a.setStatus(locales.CodeSubmitted(), true)
 	reply <- codeResult{response: session.CodeResponse{Code: code, SkipSecondaryAuth: skip}}
 }
 
@@ -344,7 +345,7 @@ func (a *app) storeChangedPassword(profileName, newPassword string) {
 	cfg.Profiles[index].Auth.Password = newPassword
 	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
 		a.logf("save the changed password: %v", err)
-		a.setStatusError("保存新密码失败: " + err.Error())
+		a.setStatusError(locales.SavePasswordFailed(err.Error()))
 		return
 	}
 	a.applyConfig(cfg)
@@ -375,13 +376,13 @@ func (a *app) storeTOTPSecret(secret string) {
 	}
 	if !cfg.Profiles[index].Auth.StorePass {
 		a.logf("TOTP secret not stored: the profile does not store its password")
-		a.setStatus("未保存 TOTP 密钥：请先在设置中勾选保存密码", false)
+		a.setStatus(locales.TotpNotStored(), false)
 		return
 	}
 	cfg.Profiles[index].Auth.TOTPSecret = strings.TrimSpace(secret)
 	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
 		a.logf("save the TOTP secret: %v", err)
-		a.setStatusError("保存 TOTP 密钥失败: " + err.Error())
+		a.setStatusError(locales.SaveTOTPFailed(err.Error()))
 		return
 	}
 	a.applyConfig(cfg)
@@ -396,7 +397,7 @@ func (a *app) beginExternal(prompt *gotrustui.ExternalLogin, reply chan external
 	a.external = reply
 	a.mu.Unlock()
 
-	a.setStatus("请在浏览器中完成登录", false)
+	a.setStatus(locales.ExternalWait(), false)
 	a.revealWindow()
 	a.invalidate()
 }
@@ -421,7 +422,7 @@ func (a *app) openExternal() {
 		return
 	}
 	if err := a.openBrowser(prompt.LoginURL); err != nil {
-		a.setStatusError("打开浏览器失败: " + err.Error())
+		a.setStatusError(locales.OpenBrowserFailed(err.Error()))
 		a.logf("open the login URL: %v", err)
 	}
 }
@@ -451,7 +452,7 @@ func (a *app) submitExternal() {
 	a.mu.Unlock()
 
 	a.invalidate()
-	a.setStatus("已提交回调地址，正在登录…", true)
+	a.setStatus(locales.CallbackSubmitted(), true)
 	reply <- externalResult{response: session.ExternalLoginResponse{CallbackURL: callback}}
 }
 
@@ -495,7 +496,7 @@ func (a *app) beginChoice(choice *gotrustui.AuthChoice, reply chan choiceResult)
 	a.choice = reply
 	a.mu.Unlock()
 
-	a.setStatus("请选择认证方式", false)
+	a.setStatus(locales.ChooseMethod(), false)
 	a.revealWindow()
 	a.invalidate()
 }
@@ -526,7 +527,7 @@ func (a *app) chooseAuthIndex(index int) {
 	a.mu.Unlock()
 
 	a.invalidate()
-	a.setStatus("认证方式："+gotrustui.MethodLabel(method), true)
+	a.setStatus(locales.AuthChosen(gotrustui.MethodLabel(method)), true)
 	reply <- choiceResult{method: method}
 }
 
@@ -555,7 +556,7 @@ func (a *app) beginDeviceBind(prompt *gotrustui.DeviceBindPrompt, reply chan dev
 	a.deviceBind = reply
 	a.mu.Unlock()
 
-	a.setStatus("网关要求绑定此设备", false)
+	a.setStatus(locales.BindRequested(), false)
 	a.revealWindow()
 	a.invalidate()
 }
@@ -628,7 +629,7 @@ func (a *app) beginPassword(prompt *gotrustui.PasswordPrompt, reply chan passwor
 	a.password = reply
 	a.mu.Unlock()
 
-	a.setStatus("网关要求重置密码", false)
+	a.setStatus(locales.PasswordRequested(), false)
 	a.revealWindow()
 	a.invalidate()
 }
@@ -680,11 +681,11 @@ func (a *app) submitPassword() {
 
 	a.invalidate()
 	if answer.Skip {
-		a.setStatus("已跳过密码重置，正在登录…", true)
+		a.setStatus(locales.PasswordSkipped(), true)
 		reply <- passwordResult{answer: answer}
 		return
 	}
-	a.setStatus("正在重置密码，随后完成登录…", true)
+	a.setStatus(locales.PasswordSubmitting(), true)
 	reply <- passwordResult{answer: answer}
 }
 

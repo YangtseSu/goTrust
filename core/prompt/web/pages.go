@@ -9,8 +9,10 @@ import (
 	"github.com/YangtseSu/goTrust/core/session"
 )
 
-// pageData is what every page carries.
+// pageData is what every page carries: the words of its language, the heading
+// and the failure to show, if any.
 type pageData struct {
+	T       texts
 	Title   string
 	Failure string
 }
@@ -51,37 +53,6 @@ type methodData struct {
 	pageData
 	Methods []session.AuthMethod
 }
-
-// successHTML is what an answered page shows. It is a whole document because
-// nothing more happens on that page: the login has the answer.
-const successHTML = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>已提交 · goTrust</title>
-<style>
-body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-  padding: 24px; background: #f0f2f5; color: #1f2329;
-  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "PingFang SC", sans-serif; }
-.card { width: min(420px, 100%); background: #fff; border-radius: 12px; padding: 28px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, .1); text-align: center; }
-h1 { margin: 0 0 12px; font-size: 20px; }
-p { margin: 0; color: #555; }
-@media (prefers-color-scheme: dark) {
-  body { background: #16181d; color: #e6e8eb; }
-  .card { background: #202329; }
-  p { color: #a4a9b1; }
-}
-</style>
-</head>
-<body>
-<main class="card">
-<h1>已提交</h1>
-<p>可以关闭此页面，登录会继续。</p>
-</main>
-</body>
-</html>`
 
 const pageCSS = `:root { color-scheme: light dark; }
 * { box-sizing: border-box; }
@@ -131,7 +102,7 @@ a { color: #1890ff; word-break: break-all; }
 // pageTemplates holds the pages. The templates are parsed once; a page is
 // escaped by the template engine, so a gateway's message cannot inject markup.
 var pageTemplates = template.Must(template.New("pages").Parse(`{{define "head"}}<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{.T.HTML}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -148,45 +119,74 @@ var pageTemplates = template.Must(template.New("pages").Parse(`{{define "head"}}
 </body>
 </html>{{end}}
 
+{{define "success"}}<!DOCTYPE html>
+<html lang="{{.T.HTML}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.T.SuccessTitle}} · goTrust</title>
+<style>
+body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 24px; background: #f0f2f5; color: #1f2329;
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "PingFang SC", sans-serif; }
+.card { width: min(420px, 100%); background: #fff; border-radius: 12px; padding: 28px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .1); text-align: center; }
+h1 { margin: 0 0 12px; font-size: 20px; }
+p { margin: 0; color: #555; }
+@media (prefers-color-scheme: dark) {
+  body { background: #16181d; color: #e6e8eb; }
+  .card { background: #202329; }
+  p { color: #a4a9b1; }
+}
+</style>
+</head>
+<body>
+<main class="card">
+<h1>{{.T.SuccessTitle}}</h1>
+<p>{{.T.SuccessBody}}</p>
+</main>
+</body>
+</html>{{end}}
+
 {{define "code"}}{{template "head" .}}
 <p class="message">{{.Message}}</p>
 <form method="post">
-  <label for="code">验证码
+  <label for="code">{{.T.CodeLabel}}
     <input id="code" name="code" type="text" autocomplete="one-time-code" autofocus>
   </label>
   {{if .CanSkip}}
-  <label class="check"><input type="checkbox" name="skip" value="1"> 跳过二次认证</label>
+  <label class="check"><input type="checkbox" name="skip" value="1"> {{.T.CodeSkip}}</label>
   {{end}}
-  <button type="submit">提交</button>
+  <button type="submit">{{.T.Submit}}</button>
 </form>
-{{if .CanSkip}}<p class="hint">勾选“跳过二次认证”后可以不填验证码，是否放行由网关决定。</p>{{end}}
+{{if .CanSkip}}<p class="hint">{{.T.CodeSkipHint}}</p>{{end}}
 {{template "foot"}}{{end}}
 
 {{define "text-captcha"}}{{template "head" .}}
-<p class="message">请输入图片中的字符。</p>
-<img class="captcha" src="image" alt="验证码">
+<p class="message">{{.T.TextCaptchaPrompt}}</p>
+<img class="captcha" src="image" alt="{{.T.CaptchaAlt}}">
 <form method="post">
-  <label for="code">图中字符
+  <label for="code">{{.T.CaptchaCharsLabel}}
     <input id="code" name="code" type="text" autocomplete="off" autofocus>
   </label>
-  <button type="submit">提交</button>
+  <button type="submit">{{.T.Submit}}</button>
 </form>
 {{template "foot"}}{{end}}
 
 {{define "click-captcha"}}{{template "head" .}}
-<p class="message">请按图片要求的顺序点击图中的字符。</p>
-<div class="stage" id="stage"><img class="captcha" id="image" src="image" alt="验证码"></div>
+<p class="message">{{.T.ClickPrompt}}</p>
+<div class="stage" id="stage"><img class="captcha" id="image" src="image" alt="{{.T.CaptchaAlt}}"></div>
 <form method="post" id="form">
   <input type="hidden" name="points" id="points">
   <input type="hidden" name="width" id="width">
   <input type="hidden" name="height" id="height">
   <div class="row">
-    <button type="button" class="secondary" id="undo">撤销</button>
-    <button type="button" class="secondary" id="clear">全部清除</button>
+    <button type="button" class="secondary" id="undo">{{.T.Undo}}</button>
+    <button type="button" class="secondary" id="clear">{{.T.ClearAll}}</button>
   </div>
-  <button type="submit" id="submit" disabled>提交</button>
+  <button type="submit" id="submit" disabled>{{.T.Submit}}</button>
 </form>
-<p class="status" id="status">已选 0 个点</p>
+<p class="status" id="status" data-format="{{.T.Selected}}">{{printf .T.Selected 0}}</p>
 <script>
 (function () {
   var stage = document.getElementById('stage');
@@ -197,6 +197,7 @@ var pageTemplates = template.Must(template.New("pages").Parse(`{{define "head"}}
   var heightField = document.getElementById('height');
   var submitButton = document.getElementById('submit');
   var statusLine = document.getElementById('status');
+  var statusFormat = statusLine.getAttribute('data-format');
   var points = [];
 
   function metrics() {
@@ -218,7 +219,7 @@ var pageTemplates = template.Must(template.New("pages").Parse(`{{define "head"}}
       marker.style.top = (points[j][1] * box.rect.height / box.height) + 'px';
       stage.appendChild(marker);
     }
-    statusLine.textContent = '已选 ' + points.length + ' 个点';
+    statusLine.textContent = statusFormat.replace('%d', String(points.length));
     submitButton.disabled = points.length === 0;
   }
 
@@ -259,55 +260,55 @@ var pageTemplates = template.Must(template.New("pages").Parse(`{{define "head"}}
 
 {{define "external"}}{{template "head" .}}
 <p class="message">{{.Message}}</p>
-{{if .LoginURL}}<p>登录页面：<a href="{{.LoginURL}}" target="_blank" rel="noopener noreferrer">{{.LoginURL}}</a></p>{{end}}
-<p class="hint">完成登录后浏览器会停在一个打不开的地址；把地址栏里的完整链接粘贴到下面。</p>
+{{if .LoginURL}}<p>{{.T.LoginPage}}<a href="{{.LoginURL}}" target="_blank" rel="noopener noreferrer">{{.LoginURL}}</a></p>{{end}}
+<p class="hint">{{.T.ExternalHint}}</p>
 <form method="post">
-  <label for="callback">回调地址
+  <label for="callback">{{.T.CallbackLabel}}
     <input id="callback" name="callback" type="url" autocomplete="off" autofocus>
   </label>
-  <button type="submit">提交</button>
+  <button type="submit">{{.T.Submit}}</button>
 </form>
 {{template "foot"}}{{end}}
 
 {{define "password"}}{{template "head" .}}
 {{if .Message}}<p class="message">{{.Message}}</p>{{end}}
-{{if or .Username .Domain}}<p class="hint">账号：{{.Username}}{{if .Domain}} · {{.Domain}}{{end}}</p>{{end}}
+{{if or .Username .Domain}}<p class="hint">{{.T.AccountLabel}}{{.Username}}{{if .Domain}} · {{.Domain}}{{end}}</p>{{end}}
 {{if .Prompt}}<p class="hint">{{.Prompt}}</p>{{end}}
-{{if .Rules}}<p class="rules-title">密码要求</p>
+{{if .Rules}}<p class="rules-title">{{.T.RulesTitle}}</p>
 <ul class="rules">{{range .Rules}}<li>{{.}}</li>{{end}}</ul>{{end}}
 <form method="post">
   {{if .ShowAccount}}
-  <label for="username">新账号名
+  <label for="username">{{.T.NewUsername}}
     <input id="username" name="username" type="text" autocomplete="username">
   </label>
   {{end}}
-  <label for="old">旧密码
+  <label for="old">{{.T.OldPassword}}
     <input id="old" name="old" type="password" autocomplete="current-password" required>
   </label>
-  <label for="new">新密码
+  <label for="new">{{.T.NewPassword}}
     <input id="new" name="new" type="password" autocomplete="new-password" required>
   </label>
-  <label for="confirm">确认新密码
+  <label for="confirm">{{.T.ConfirmPassword}}
     <input id="confirm" name="confirm" type="password" autocomplete="new-password" required>
   </label>
-  <button type="submit">修改密码</button>
+  <button type="submit">{{.T.ChangeButton}}</button>
   {{if .CanSkip}}
-  <button type="submit" class="secondary" name="skip" value="1" formnovalidate>跳过，稍后再改</button>
+  <button type="submit" class="secondary" name="skip" value="1" formnovalidate>{{.T.SkipButton}}</button>
   {{end}}
 </form>
 {{template "foot"}}{{end}}
 
 {{define "bind"}}{{template "head" .}}
-<p class="message">网关要求把这台设备绑定到当前账号。绑定后它出现在终端管理里。</p>
-<p class="hint">设备 ID：<span class="mono">{{.DeviceID}}</span></p>
+<p class="message">{{.T.BindMessage}}</p>
+<p class="hint">{{.T.DeviceIDLabel}}<span class="mono">{{.DeviceID}}</span></p>
 <form method="post">
-  <button type="submit" name="decision" value="allow">允许绑定</button>
-  <button type="submit" class="secondary" name="decision" value="deny">拒绝</button>
+  <button type="submit" name="decision" value="allow">{{.T.AllowBind}}</button>
+  <button type="submit" class="secondary" name="decision" value="deny">{{.T.DenyBind}}</button>
 </form>
 {{template "foot"}}{{end}}
 
 {{define "method"}}{{template "head" .}}
-<p class="message">网关提供多种认证方式，请选择一种。</p>
+<p class="message">{{.T.MethodMessage}}</p>
 <form method="post">
   {{range $index, $method := .Methods}}<button type="submit" name="method" value="{{$index}}">{{$method}}</button>{{end}}
 </form>

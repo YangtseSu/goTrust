@@ -11,6 +11,7 @@ import (
 
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/session"
+	"github.com/YangtseSu/goTrust/locales"
 )
 
 func TestSettingsApplyBuildsAProfile(t *testing.T) {
@@ -423,7 +424,7 @@ func TestSettingsMethodOptionsKeepAStalePair(t *testing.T) {
 	state.Draft.Profiles[0].Auth.Domain = "local"
 
 	options := methodOptions(state.Methods, "auth/radius", "local")
-	if len(options) != 2 || options[0] != authAutoLabel {
+	if len(options) != 2 || options[0] != locales.AuthAutoLabel() {
 		t.Fatalf("options = %v", options)
 	}
 	if !strings.Contains(options[1], "网关未提供") {

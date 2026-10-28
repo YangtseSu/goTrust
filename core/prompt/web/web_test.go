@@ -51,7 +51,7 @@ func TestCodePage(t *testing.T) {
 		Message:              "验证码已发送到 138****0000",
 		CanSkipSecondaryAuth: true,
 	}
-	p := newCodePage(challenge, testToken)
+	p := newCodePage(challenge, testToken, chinese)
 
 	body := getPage(p.mux, "/"+testToken+"/").Body.String()
 	for _, want := range []string{"验证码已发送到 138****0000", `name="code"`, `name="skip"`, "输入验证码"} {
@@ -92,7 +92,7 @@ func TestTextCaptchaPage(t *testing.T) {
 	p := newTextCaptchaPage(authchallenge.TextCaptchaChallenge{
 		Image:   image,
 		Message: "输入图中的字符",
-	}, testToken)
+	}, testToken, chinese)
 
 	body := getPage(p.mux, "/"+testToken+"/").Body.String()
 	for _, want := range []string{`src="image"`, "请输入图片中的字符", `name="code"`} {
@@ -123,7 +123,7 @@ func TestTextCaptchaPage(t *testing.T) {
 
 func TestClickCaptchaPage(t *testing.T) {
 	image := []byte("\x89PNG\r\n\x1a\n")
-	p := newClickCaptchaPage(authchallenge.ClickCaptchaChallenge{Image: image}, testToken)
+	p := newClickCaptchaPage(authchallenge.ClickCaptchaChallenge{Image: image}, testToken, chinese)
 
 	body := getPage(p.mux, "/"+testToken+"/").Body.String()
 	for _, want := range []string{`id="image"`, `name="points"`, "已选 0 个点"} {
@@ -165,7 +165,7 @@ func TestExternalPage(t *testing.T) {
 	p := newExternalPage(authchallenge.ExternalLoginChallenge{
 		Kind:     authchallenge.ExternalLoginCAS,
 		LoginURL: "https://idp.example/login",
-	}, testToken)
+	}, testToken, chinese)
 
 	body := getPage(p.mux, "/"+testToken+"/").Body.String()
 	for _, want := range []string{`href="https://idp.example/login"`, `name="callback"`} {
@@ -199,7 +199,7 @@ func TestExternalPage(t *testing.T) {
 func TestExternalPageOAuth2(t *testing.T) {
 	p := newExternalPage(authchallenge.ExternalLoginChallenge{
 		Kind: authchallenge.ExternalLoginOAuth2,
-	}, testToken)
+	}, testToken, chinese)
 	callback := "https://vpn.example/passport/v1/auth/httpsOauth2?code=abc"
 	if code := postForm(p.mux, "/"+testToken+"/", url.Values{"callback": {callback}}).Code; code != http.StatusOK {
 		t.Fatalf("callback = %d", code)
@@ -218,7 +218,7 @@ func TestPasswordPage(t *testing.T) {
 		Prompt:   "请设置新密码",
 		CanSkip:  true,
 	}
-	p := newPasswordPage(challenge, testToken)
+	p := newPasswordPage(challenge, testToken, chinese)
 
 	body := getPage(p.mux, "/"+testToken+"/").Body.String()
 	for _, want := range []string{"初始密码需要修改", "alice", "请设置新密码", `name="old"`, `name="new"`, `name="confirm"`, "跳过"} {
@@ -258,7 +258,7 @@ func TestPasswordPage(t *testing.T) {
 
 func TestPasswordPageSkips(t *testing.T) {
 	challenge := session.PasswordChangeChallenge{CanSkip: true}
-	p := newPasswordPage(challenge, testToken)
+	p := newPasswordPage(challenge, testToken, chinese)
 	if code := postForm(p.mux, "/"+testToken+"/", url.Values{"skip": {"1"}}).Code; code != http.StatusOK {
 		t.Fatalf("skip = %d", code)
 	}
@@ -270,7 +270,7 @@ func TestPasswordPageSkips(t *testing.T) {
 
 func TestPasswordPageRequiresTheNewAccountName(t *testing.T) {
 	challenge := session.PasswordChangeChallenge{ShowAccount: true, Username: "alice"}
-	p := newPasswordPage(challenge, testToken)
+	p := newPasswordPage(challenge, testToken, chinese)
 	form := url.Values{"old": {"now"}, "new": {"next"}, "confirm": {"next"}}
 	if code := postForm(p.mux, "/"+testToken+"/", form).Code; code != http.StatusBadRequest {
 		t.Fatalf("missing account name = %d", code)
@@ -287,7 +287,7 @@ func TestPasswordPageRequiresTheNewAccountName(t *testing.T) {
 
 func TestBindPage(t *testing.T) {
 	challenge := session.DeviceBindChallenge{DeviceID: "device-0001", AuthID: "auth-1"}
-	p := newBindPage(challenge, testToken)
+	p := newBindPage(challenge, testToken, chinese)
 
 	body := getPage(p.mux, "/"+testToken+"/").Body.String()
 	for _, want := range []string{"device-0001", `value="allow"`, `value="deny"`} {
@@ -306,7 +306,7 @@ func TestBindPage(t *testing.T) {
 		t.Fatalf("answer = %v ok=%v", allowed, ok)
 	}
 
-	deny := newBindPage(challenge, testToken)
+	deny := newBindPage(challenge, testToken, chinese)
 	if code := postForm(deny.mux, "/"+testToken+"/", url.Values{"decision": {"deny"}}).Code; code != http.StatusOK {
 		t.Fatalf("deny = %d", code)
 	}
@@ -320,7 +320,7 @@ func TestMethodPage(t *testing.T) {
 		{Name: "密码", Type: "auth/psw", Domain: "local"},
 		{Name: "CAS", Type: "auth/cas", Domain: "example", URL: "https://idp.example/login"},
 	}
-	p := newMethodPage(methods, testToken)
+	p := newMethodPage(methods, testToken, chinese)
 
 	body := getPage(p.mux, "/"+testToken+"/").Body.String()
 	for _, want := range []string{"密码", "auth/psw", "CAS", `value="1"`} {
@@ -605,12 +605,60 @@ func TestPasswordRuleLabels(t *testing.T) {
 	}
 	var labels []string
 	for _, rule := range rules {
-		labels = append(labels, passwordRuleLabel(rule))
+		labels = append(labels, passwordRuleLabel(rule, chinese))
 	}
 	want := []string{"密码长度至少 8 位", "密码需同时包含大小写字母", "密码不能包含 3 位连续重复字符", "新密码不能与历史前 5 次密码重复"}
 	for index, label := range labels {
 		if label != want[index] {
 			t.Fatalf("label[%d] = %q, want %q", index, label, want[index])
 		}
+	}
+}
+
+// The pages speak the language the prompter was built with, from the heading
+// to the confirmation a submitted form shows.
+func TestPagesSpeakEnglish(t *testing.T) {
+	p := newCodePage(authchallenge.CodeChallenge{Kind: authchallenge.CodeSMS}, testToken, english)
+
+	body := getPage(p.mux, "/"+testToken+"/").Body.String()
+	for _, want := range []string{`lang="en"`, "Enter the code", "The gateway asks for a one-time SMS code.", ">Code\n", ">Submit</button>"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("page = %q, want %q", body, want)
+		}
+	}
+
+	rejected := postForm(p.mux, "/"+testToken+"/", url.Values{})
+	if rejected.Code != http.StatusBadRequest || !strings.Contains(rejected.Body.String(), "Enter the code") {
+		t.Fatalf("empty form = %d %q", rejected.Code, rejected.Body.String())
+	}
+
+	accepted := postForm(p.mux, "/"+testToken+"/", url.Values{"code": {"123456"}})
+	if !strings.Contains(accepted.Body.String(), "Submitted") {
+		t.Fatalf("confirmation = %q, want the English success page", accepted.Body.String())
+	}
+}
+
+// The language of the pages follows an explicit tag, else the POSIX locale
+// environment, else the source language.
+func TestResolveLanguage(t *testing.T) {
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LC_MESSAGES", "")
+	t.Setenv("LANG", "zh_CN.UTF-8")
+	if got := resolveLanguage(""); got != "zh" {
+		t.Fatalf("empty tag with LANG=zh_CN.UTF-8 = %q, want zh", got)
+	}
+	t.Setenv("LANG", "en_US.UTF-8")
+	if got := resolveLanguage(""); got != "en" {
+		t.Fatalf("empty tag with LANG=en_US.UTF-8 = %q, want en", got)
+	}
+	t.Setenv("LC_ALL", "C")
+	if got := resolveLanguage(""); got != "en" {
+		t.Fatalf("empty tag with LC_ALL=C = %q, want en", got)
+	}
+	if got := resolveLanguage("en-GB"); got != "en" {
+		t.Fatalf("en-GB = %q, want en", got)
+	}
+	if got := resolveLanguage("fr"); got != "zh" {
+		t.Fatalf("an unsupported language = %q, want the source language zh", got)
 	}
 }

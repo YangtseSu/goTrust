@@ -4,12 +4,12 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/core/session"
+	"github.com/YangtseSu/goTrust/locales"
 )
 
 // CodePrompt is a one-time code challenge. SMS and RADIUS have no other way to
@@ -43,13 +43,13 @@ func (p *CodePrompt) CanSubmit() bool {
 func CodeTitle(kind session.CodeKind) string {
 	switch kind {
 	case session.CodeSMS:
-		return "短信验证码"
+		return locales.CodeTitleSMS()
 	case session.CodeTOTP:
-		return "动态验证码"
+		return locales.CodeTitleTOTP()
 	case session.CodeRadius:
-		return "RADIUS 口令"
+		return locales.CodeTitleRadius()
 	default:
-		return "二次验证"
+		return locales.CodeTitleGeneric()
 	}
 }
 
@@ -66,11 +66,11 @@ type ExternalLogin struct {
 func ExternalTitle(kind session.ExternalKind) string {
 	switch kind {
 	case session.ExternalCAS:
-		return "统一身份认证（CAS）"
+		return locales.ExternalTitleCAS()
 	case session.ExternalOAuth2:
-		return "外部登录（OAuth2）"
+		return locales.ExternalTitleOAuth2()
 	default:
-		return "外部登录"
+		return locales.ExternalTitleGeneric()
 	}
 }
 
@@ -108,8 +108,8 @@ func codePanel(c *ui.Context, state *State, actions Actions) {
 		})
 
 		ui.Column(c).Gap(rowGap).Children(func() {
-			ui.Field(c, "验证码", func() {
-				ui.TextInput(c, &prompt.Code).Placeholder("输入收到的验证码").
+			ui.Field(c, locales.CodeField(), func() {
+				ui.TextInput(c, &prompt.Code).Placeholder(locales.CodePlaceholder()).
 					OnSubmit(func() {
 						if prompt.CanSubmit() && actions.SubmitCode != nil {
 							actions.SubmitCode()
@@ -117,24 +117,24 @@ func codePanel(c *ui.Context, state *State, actions Actions) {
 					})
 			})
 			if prompt.CanSkip {
-				ui.Checkbox(c, &prompt.Skip, "跳过以后的二次认证")
+				ui.Checkbox(c, &prompt.Skip, locales.CodeSkip())
 			}
 			if prompt.AllowTOTPSecret {
-				ui.Checkbox(c, &prompt.StoreSecret, "保存 TOTP 密钥，以后由 goTrust 自动生成验证码")
+				ui.Checkbox(c, &prompt.StoreSecret, locales.CodeStoreTOTP())
 				if prompt.StoreSecret {
-					ui.Field(c, "TOTP 密钥", func() {
-						ui.TextInput(c, &prompt.TOTPSecret).Placeholder("Base32 密钥，例如 JBSWY3DPEHPK3PXP")
+					ui.Field(c, locales.CodeTOTPField(), func() {
+						ui.TextInput(c, &prompt.TOTPSecret).Placeholder(locales.CodeTOTPPlaceholder())
 					})
-					caption(c, "密钥保存在配置文件中（0600），只在你勾选后写入。")
+					caption(c, locales.CodeTOTPHint())
 				}
 			}
 		})
 
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
-			if ui.PrimaryButton(c, "提交").Disabled(!prompt.CanSubmit()).Clicked() && actions.SubmitCode != nil {
+			if ui.PrimaryButton(c, locales.CommonSubmit()).Disabled(!prompt.CanSubmit()).Clicked() && actions.SubmitCode != nil {
 				actions.SubmitCode()
 			}
-			if ui.Button(c, "取消").Clicked() && actions.CancelCode != nil {
+			if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelCode != nil {
 				actions.CancelCode()
 			}
 		})
@@ -151,20 +151,20 @@ func externalPanel(c *ui.Context, state *State, actions Actions) {
 			if prompt.Message != "" {
 				caption(c, prompt.Message)
 			}
-			caption(c, "在浏览器中完成登录后，把地址栏里的完整回调地址粘贴到下面。")
+			caption(c, locales.ExternalHint())
 		})
 
 		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 			ui.Text(c, prompt.LoginURL).FontSize(textSize(c, captionScale)).
 				TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).MaxLines(2).
-				Ellipsis("…").Label("登录地址：" + prompt.LoginURL)
-			if ui.Button(c, "在浏览器中打开").Shrink(0).Description("在浏览器中打开登录地址").
+				Ellipsis("…").Label(locales.ExternalURLLabel(prompt.LoginURL))
+			if ui.Button(c, locales.ExternalOpen()).Shrink(0).Description(locales.ExternalOpenDesc()).
 				Clicked() && actions.OpenExternal != nil {
 				actions.OpenExternal()
 			}
 		})
 
-		ui.Field(c, "回调地址", func() {
+		ui.Field(c, locales.CallbackField(), func() {
 			ui.TextInput(c, &prompt.Callback).Placeholder("https://…/passport/v1/auth/…?…").
 				OnSubmit(func() {
 					if strings.TrimSpace(prompt.Callback) != "" && actions.SubmitExternal != nil {
@@ -174,11 +174,11 @@ func externalPanel(c *ui.Context, state *State, actions Actions) {
 		})
 
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
-			if ui.PrimaryButton(c, "提交").Disabled(strings.TrimSpace(prompt.Callback) == "").Clicked() &&
+			if ui.PrimaryButton(c, locales.CommonSubmit()).Disabled(strings.TrimSpace(prompt.Callback) == "").Clicked() &&
 				actions.SubmitExternal != nil {
 				actions.SubmitExternal()
 			}
-			if ui.Button(c, "取消").Clicked() && actions.CancelExternal != nil {
+			if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelExternal != nil {
 				actions.CancelExternal()
 			}
 		})
@@ -193,8 +193,8 @@ func deviceBindPanel(c *ui.Context, state *State, actions Actions) {
 
 	ui.Column(c).Gap(sectionGap).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
-			panelHeading(c, "绑定此设备")
-			caption(c, "网关要求把这台设备绑定到当前账号。确认后，它会出现在终端管理的设备列表中。")
+			panelHeading(c, locales.BindTitle())
+			caption(c, locales.BindHint())
 			if prompt.Message != "" {
 				caption(c, prompt.Message)
 			}
@@ -202,7 +202,7 @@ func deviceBindPanel(c *ui.Context, state *State, actions Actions) {
 
 		ui.Column(c).Gap(rowGap).Children(func() {
 			if prompt.DeviceID != "" {
-				ui.Field(c, "设备 ID", func() {
+				ui.Field(c, locales.DeviceID(), func() {
 					ui.Text(c, prompt.DeviceID).FontSize(textSize(c, captionScale)).
 						TextColor(c.Theme().TextMuted)
 				})
@@ -210,10 +210,10 @@ func deviceBindPanel(c *ui.Context, state *State, actions Actions) {
 		})
 
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
-			if ui.PrimaryButton(c, "允许绑定").Clicked() && actions.AllowDeviceBind != nil {
+			if ui.PrimaryButton(c, locales.BindAllow()).Clicked() && actions.AllowDeviceBind != nil {
 				actions.AllowDeviceBind()
 			}
-			if ui.Button(c, "取消").Clicked() && actions.CancelDeviceBind != nil {
+			if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelDeviceBind != nil {
 				actions.CancelDeviceBind()
 			}
 		})
@@ -226,8 +226,8 @@ func choicePanel(c *ui.Context, state *State, actions Actions) {
 
 	ui.Column(c).Gap(sectionGap).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
-			panelHeading(c, "选择认证方式")
-			caption(c, fmt.Sprintf("网关提供 %d 种认证方式，请选择一种登录。", len(choice.Methods)))
+			panelHeading(c, locales.ChoiceTitle())
+			caption(c, locales.ChoiceHint(len(choice.Methods)))
 		})
 		ui.Column(c).Gap(rowGap).Children(func() {
 			for index, method := range choice.Methods {
@@ -238,7 +238,7 @@ func choicePanel(c *ui.Context, state *State, actions Actions) {
 			}
 		})
 		ui.Row(c).Justify(ui.End).Children(func() {
-			if ui.Button(c, "取消").Clicked() && actions.CancelChoice != nil {
+			if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelChoice != nil {
 				actions.CancelChoice()
 			}
 		})

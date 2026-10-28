@@ -3,7 +3,8 @@
 goTrust 是 aTrust 的桌面客户端。它常驻托盘，登录 Sangfor aTrust 网关并保持会话，
 同时在本机回环地址上提供 SOCKS5 和 HTTP 代理，供浏览器或其他程序访问内网。
 
-支持 Linux、macOS 和 Windows，界面为中文。功能范围有意收窄：
+支持 Linux、macOS 和 Windows，界面有中文和 English 两种语言，默认跟随桌面语言，
+可在“设置 → 语言”里固定一种。功能范围有意收窄：
 
 * **只支持 aTrust**，不兼容 EasyConnect。
 * **不创建 TUN 设备，不修改系统代理，不需要管理员权限。** 程序以当前用户身份运行；
@@ -46,7 +47,12 @@ yay -S gotrust-cli    # 无界面版，只依赖 glibc
 3. 点“保存并连接”。网关要求图形验证码时，窗口会显示验证码图片。
 4. 连接成功后，主窗口会列出这个账号能访问的资源，代理地址也显示在窗口里。
 5. 其余项在“设置”里改：认证方式（含“获取认证方式”，用来提前查询网关支持哪些登录
-   方式）、代理端口、保活、开机启动。
+   方式）、代理端口、保活、开机启动，以及界面语言。
+
+语言默认跟随桌面：系统的语言是中文时显示中文，是英文时显示 English，其他语言回退到
+中文。在“设置 → 语言”里可以选“跟随系统”“中文”或“English”，选择立即生效，并在下次
+启动时保留。`gotrust-cli` 的输出仍然是英文，因为它在终端和日志里阅读；它的登录提示页
+跟随 `LC_ALL`、`LC_MESSAGES` 或 `LANG`。
 
 ## 代理怎么用
 
@@ -86,7 +92,7 @@ goTrust 已经按授权分流：把程序直接指向上面的代理端口即可
   `ALL_PROXY=socks5h://127.0.0.1:1080`。
 
 ZeroOmega、Clash Verge Rev、FlClash 的步骤、fake-IP、UDP 限制和常见问题见
-[`docs/handoff.md`](docs/handoff.md)。
+[`docs/handoff.md`](docs/handoff.md)（[English](docs/handoff.en.md)）。
 
 ## 登录时会遇到什么
 
@@ -115,8 +121,10 @@ ZeroOmega、Clash Verge Rev、FlClash 的步骤、fake-IP、UDP 限制和常见�
 | 启动 | 登录系统时启动、启动后自动连接、只显示托盘、断线后自动重连 |
 | 终端管理 | 门户里该账号的设备列表：受信设备和临时登录记录，可刷新、信任或取消信任本机 |
 | 高级 | 详细日志、日志目录、登录数据文件路径、设备标识 |
+| 语言 | 跟随系统、中文或 English；立即生效并记住选择 |
 
-完整的配置字段说明见 [`docs/configuration.md`](docs/configuration.md)。
+完整的配置字段说明见 [`docs/configuration.md`](docs/configuration.md)
+（[English](docs/configuration.en.md)）。
 
 保活默认每 90 秒向内网发一个真实的 HTTP 请求。手工填写的目标优先于自动推导的目标。
 保活目标要用 `http://` 地址：`https://` 请求会走 CONNECT 隧道，不算应用流量，无法

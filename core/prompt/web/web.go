@@ -54,12 +54,17 @@ type Options struct {
 	Logf func(format string, args ...any)
 	// Timeout bounds one page. Zero uses DefaultTimeout.
 	Timeout time.Duration
+	// Language is the BCP 47 tag the pages are written in, "zh" or "en".
+	// Empty reads the POSIX locale environment, so a terminal's own language
+	// picks the pages' language.
+	Language string
 }
 
 // Prompter serves the login's questions. One value serves every attempt of a
 // front-end; Handler binds it to one attempt.
 type Prompter struct {
 	options Options
+	texts   texts
 }
 
 // New returns a prompter that serves the configured pages.
@@ -70,7 +75,7 @@ func New(options Options) *Prompter {
 	if options.Logf == nil {
 		options.Logf = func(string, ...any) {}
 	}
-	return &Prompter{options: options}
+	return &Prompter{options: options, texts: textsFor(resolveLanguage(options.Language))}
 }
 
 // Handler returns the prompter for one login attempt. The login goroutine is
@@ -94,7 +99,7 @@ func (p *Prompter) ChooseAuth(ctx context.Context, methods []session.AuthMethod)
 		return session.AuthMethod{}, errors.New("the gateway offered no authentication method")
 	}
 	return ask(ctx, p, "", func(token string) *page[session.AuthMethod] {
-		return newMethodPage(methods, token)
+		return newMethodPage(methods, token, p.texts)
 	})
 }
 
@@ -103,7 +108,7 @@ func (p *Prompter) ChooseAuth(ctx context.Context, methods []session.AuthMethod)
 // rule, and a rule the client cannot evaluate is not refused locally.
 func (p *Prompter) ChangePassword(ctx context.Context, challenge session.PasswordChangeChallenge) (session.PasswordChangeAnswer, error) {
 	return ask(ctx, p, "", func(token string) *page[session.PasswordChangeAnswer] {
-		return newPasswordPage(challenge, token)
+		return newPasswordPage(challenge, token, p.texts)
 	})
 }
 
@@ -111,13 +116,13 @@ func (p *Prompter) ChangePassword(ctx context.Context, challenge session.Passwor
 // person's decision, so the login waits for the page.
 func (p *Prompter) ConfirmDeviceBind(ctx context.Context, challenge session.DeviceBindChallenge) (bool, error) {
 	return ask(ctx, p, "", func(token string) *page[bool] {
-		return newBindPage(challenge, token)
+		return newBindPage(challenge, token, p.texts)
 	})
 }
 
 func (a *attempt) HandleCodeChallenge(challenge authchallenge.CodeChallenge) (authchallenge.CodeResponse, error) {
 	return ask(a.ctx, a.prompter, "", func(token string) *page[authchallenge.CodeResponse] {
-		return newCodePage(challenge, token)
+		return newCodePage(challenge, token, a.prompter.texts)
 	})
 }
 
@@ -126,7 +131,7 @@ func (a *attempt) HandleTextCaptcha(challenge authchallenge.TextCaptchaChallenge
 		return authchallenge.TextCaptchaResponse{}, errors.New("the gateway sent an empty captcha image")
 	}
 	return ask(a.ctx, a.prompter, "", func(token string) *page[authchallenge.TextCaptchaResponse] {
-		return newTextCaptchaPage(challenge, token)
+		return newTextCaptchaPage(challenge, token, a.prompter.texts)
 	})
 }
 
@@ -135,7 +140,7 @@ func (a *attempt) HandleClickCaptcha(challenge authchallenge.ClickCaptchaChallen
 		return authchallenge.ClickCaptchaResponse{}, errors.New("the gateway sent an empty captcha image")
 	}
 	return ask(a.ctx, a.prompter, "", func(token string) *page[authchallenge.ClickCaptchaResponse] {
-		return newClickCaptchaPage(challenge, token)
+		return newClickCaptchaPage(challenge, token, a.prompter.texts)
 	})
 }
 
@@ -144,7 +149,7 @@ func (a *attempt) HandleExternalLogin(challenge authchallenge.ExternalLoginChall
 	// only carries the paste box. A gateway that hands out no login page still
 	// gets its paste box opened.
 	return ask(a.ctx, a.prompter, challenge.LoginURL, func(token string) *page[authchallenge.ExternalLoginResponse] {
-		return newExternalPage(challenge, token)
+		return newExternalPage(challenge, token, a.prompter.texts)
 	})
 }
 

@@ -5,12 +5,12 @@ package ui
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/core/session"
+	"github.com/YangtseSu/goTrust/locales"
 )
 
 // PasswordPrompt is a password change: the gateway's forced reset during login,
@@ -60,19 +60,19 @@ func (p *PasswordPrompt) CanSubmit() bool {
 // not refused here.
 func (p *PasswordPrompt) Validate() error {
 	if strings.TrimSpace(p.OldPassword) == "" {
-		return errors.New("请输入旧密码")
+		return errors.New(locales.ErrOldPassword())
 	}
 	if strings.TrimSpace(p.NewPassword) == "" {
-		return errors.New("请输入新密码")
+		return errors.New(locales.ErrNewPassword())
 	}
 	if p.NewPassword != p.Confirm {
-		return errors.New("两次输入的新密码不一致")
+		return errors.New(locales.ErrPasswordMismatch())
 	}
 	if p.NewPassword == p.OldPassword {
-		return errors.New("新密码不能与旧密码相同")
+		return errors.New(locales.ErrPasswordSame())
 	}
 	if p.ShowAccount && strings.TrimSpace(p.NewUserName) == "" {
-		return errors.New("请输入新账号名")
+		return errors.New(locales.ErrNewUsername())
 	}
 	if violations := p.Strategy.Violations(p.NewPassword, p.Username); len(violations) > 0 {
 		return errors.New(ruleViolationLabel(violations[0]))
@@ -85,19 +85,19 @@ func (p *PasswordPrompt) Validate() error {
 func ruleViolationLabel(message string) string {
 	switch {
 	case strings.Contains(message, "at least"):
-		return "新密码长度不足"
+		return locales.ViolationLength()
 	case strings.Contains(message, "both an upper-case"):
-		return "新密码需同时包含大小写字母"
+		return locales.ViolationCase()
 	case strings.Contains(message, "contain a letter"):
-		return "新密码需包含字母"
+		return locales.ViolationLetter()
 	case strings.Contains(message, "contain a digit"):
-		return "新密码需包含数字"
+		return locales.ViolationDigit()
 	case strings.Contains(message, "special character"):
-		return "新密码需包含特殊字符"
+		return locales.ViolationSpecial()
 	case strings.Contains(message, "account name"):
-		return "新密码不能包含用户名"
+		return locales.ViolationUsername()
 	case strings.Contains(message, "repeat"):
-		return "新密码包含连续重复字符"
+		return locales.ViolationRepeat()
 	default:
 		return message
 	}
@@ -107,25 +107,25 @@ func ruleViolationLabel(message string) string {
 func RuleLabel(rule session.PasswordRule) string {
 	switch rule.Code {
 	case session.RuleLength:
-		return fmt.Sprintf("密码长度至少%d位", rule.Value)
+		return locales.RuleLength(rule.Value)
 	case session.RuleLetters:
-		return "密码需包含任意字母"
+		return locales.RuleLetters()
 	case session.RuleUpperAndLower:
-		return "密码需同时包含大小写字母"
+		return locales.RuleUpperLower()
 	case session.RuleNumber:
-		return "密码需包含数字"
+		return locales.RuleNumber()
 	case session.RuleSpecial:
-		return "密码需包含特殊字符"
+		return locales.RuleSpecial()
 	case session.RuleNoUsername:
-		return "密码不能包含用户名"
+		return locales.RuleNoUsername()
 	case session.RuleNoRepeat:
-		return fmt.Sprintf("密码不能包含%d位连续重复字符", rule.Value)
+		return locales.RuleNoRepeat(rule.Value)
 	case session.RuleNoSequence:
-		return "密码不能包含键盘连续排序字符或常规连续字符"
+		return locales.RuleNoSequence()
 	case session.RuleNotWeak:
-		return "密码不能属于常见弱密码"
+		return locales.RuleNotWeak()
 	case session.RuleNotInHistory:
-		return fmt.Sprintf("新密码不能与历史前%d次密码重复", rule.Value)
+		return locales.RuleHistory(rule.Value)
 	default:
 		return string(rule.Code)
 	}
@@ -135,21 +135,21 @@ func RuleLabel(rule session.PasswordRule) string {
 func passwordFields(c *ui.Context, prompt *PasswordPrompt) {
 	ui.Column(c).Gap(rowGap).Children(func() {
 		if prompt.ShowAccount {
-			ui.Field(c, "新账号名", func() {
-				ui.TextInput(c, &prompt.NewUserName).Placeholder("新账号名")
+			ui.Field(c, locales.FieldNewUsername(), func() {
+				ui.TextInput(c, &prompt.NewUserName).Placeholder(locales.FieldNewUsername())
 			})
 		}
-		ui.Field(c, "旧密码", func() {
-			ui.TextInput(c, &prompt.OldPassword).Password().Placeholder("请输入旧密码")
+		ui.Field(c, locales.FieldOldPassword(), func() {
+			ui.TextInput(c, &prompt.OldPassword).Password().Placeholder(locales.PlaceholderOldPassword())
 		})
-		ui.Field(c, "新密码", func() {
-			ui.TextInput(c, &prompt.NewPassword).Password().Placeholder("请输入新密码")
+		ui.Field(c, locales.FieldNewPassword(), func() {
+			ui.TextInput(c, &prompt.NewPassword).Password().Placeholder(locales.PlaceholderNewPassword())
 		})
-		ui.Field(c, "确认密码", func() {
-			ui.TextInput(c, &prompt.Confirm).Password().Placeholder("请输入新密码")
+		ui.Field(c, locales.FieldConfirmPassword(), func() {
+			ui.TextInput(c, &prompt.Confirm).Password().Placeholder(locales.PlaceholderNewPassword())
 		})
 		if prompt.CanSkip {
-			ui.Checkbox(c, &prompt.Skip, "跳过本次修改（网关允许）")
+			ui.Checkbox(c, &prompt.Skip, locales.PasswordSkipChange())
 		}
 	})
 }
@@ -168,7 +168,7 @@ func passwordRules(c *ui.Context, prompt *PasswordPrompt) {
 	}
 
 	ui.Column(c).Gap(4).Children(func() {
-		caption(c, "密码规则")
+		caption(c, locales.PasswordRules())
 		for _, rule := range rules {
 			if !rule.Enabled {
 				continue
@@ -201,16 +201,16 @@ func passwordPanel(c *ui.Context, state *State, actions Actions) {
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Gap(sectionGap).Children(func() {
 				ui.Column(c).Gap(6).Children(func() {
-					panelHeading(c, "重置密码")
-					caption(c, "网关要求先重置密码才能完成登录。")
+					panelHeading(c, locales.PasswordTitle())
+					caption(c, locales.PasswordForcedHint())
 					if prompt.Message != "" {
 						captionTone(c, prompt.Message, toneWarning)
 					}
 					if prompt.Username != "" {
-						caption(c, "账号："+prompt.Username)
+						caption(c, locales.PasswordAccount(prompt.Username))
 					}
 					if prompt.CustomizePwd && prompt.Domain != "" {
-						caption(c, "登录域："+prompt.Domain)
+						caption(c, locales.PasswordDomain(prompt.Domain))
 					}
 				})
 				passwordFields(c, prompt)
@@ -218,15 +218,15 @@ func passwordPanel(c *ui.Context, state *State, actions Actions) {
 			})
 		})
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
-			label := "重置并登录"
+			label := locales.PasswordResetLogin()
 			if prompt.Skip {
-				label = "跳过并登录"
+				label = locales.PasswordSkipLogin()
 			}
 			if ui.PrimaryButton(c, label).Disabled(!prompt.CanSubmit() && !prompt.Skip).Clicked() &&
 				actions.SubmitPassword != nil {
 				actions.SubmitPassword()
 			}
-			if ui.Button(c, "取消").Clicked() && actions.CancelPassword != nil {
+			if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelPassword != nil {
 				actions.CancelPassword()
 			}
 		})
@@ -240,8 +240,8 @@ func settingsPasswordPanel(c *ui.Context, state *SettingsState, actions Settings
 
 	ui.Column(c).Gap(sectionGap).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
-			panelHeading(c, "重置密码")
-			caption(c, "密码重置后，其他终端已在线账号需重新登录。")
+			panelHeading(c, locales.PasswordTitle())
+			caption(c, locales.PasswordVoluntaryHint())
 		})
 		passwordFields(c, prompt)
 		passwordRules(c, prompt)
@@ -253,11 +253,11 @@ func settingsPasswordPanel(c *ui.Context, state *SettingsState, actions Settings
 			}
 		}
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
-			if ui.PrimaryButton(c, "确定").Disabled(state.PasswordBusy || !prompt.CanSubmit()).Clicked() &&
+			if ui.PrimaryButton(c, locales.PasswordResetOK()).Disabled(state.PasswordBusy || !prompt.CanSubmit()).Clicked() &&
 				actions.SubmitPassword != nil {
 				actions.SubmitPassword()
 			}
-			if ui.Button(c, "取消").Disabled(state.PasswordBusy).Clicked() && actions.CancelPassword != nil {
+			if ui.Button(c, locales.CommonCancel()).Disabled(state.PasswordBusy).Clicked() && actions.CancelPassword != nil {
 				actions.CancelPassword()
 			}
 		})

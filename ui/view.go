@@ -9,7 +9,6 @@
 package ui
 
 import (
-	"fmt"
 	"math"
 	"strconv"
 	"time"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/session"
+	"github.com/YangtseSu/goTrust/locales"
 )
 
 // State is what the main window and the tray show.
@@ -177,24 +177,24 @@ func profileSummary(cfg config.Config) string {
 	}
 	profile := cfg.Active()
 	if profile.ServerAddress() == "" {
-		return fmt.Sprintf("配置 %s ｜ 尚未填写网关", name)
+		return locales.ProfileUnconfigured(name)
 	}
-	return fmt.Sprintf("配置 %s ｜ %s:%d", name, profile.ServerAddress(), profile.Server.Port)
+	return locales.ProfileTarget(name, profile.ServerAddress(), profile.Server.Port)
 }
 
 // phaseLabel is the short word next to the title.
 func phaseLabel(s session.State) string {
 	switch s.Phase {
 	case session.PhaseOnline:
-		return "已连接"
+		return locales.StatusOnline()
 	case session.PhaseConnecting:
-		return "连接中"
+		return locales.StatusConnecting()
 	case session.PhaseReconnecting:
-		return "重连中"
+		return locales.StatusReconnecting()
 	case session.PhaseFailed:
-		return "失败"
+		return locales.StatusFailed()
 	default:
-		return "未连接"
+		return locales.StatusOffline()
 	}
 }
 
@@ -202,22 +202,22 @@ func phaseLabel(s session.State) string {
 func phaseDetail(s session.State) string {
 	if s.Phase == session.PhaseReconnecting {
 		if s.Reconnect.Attempt == 0 {
-			return s.Detail + "…"
+			return locales.SessionDetailConnecting(s.Detail)
 		}
 		return reconnectLabel(s.Reconnect)
 	}
 	if s.Since.IsZero() {
 		return s.Detail
 	}
-	held := time.Since(s.Since).Round(time.Second)
+	held := time.Since(s.Since).Round(time.Second).String()
 	switch s.Phase {
 	case session.PhaseOnline:
 		if s.ClientIP != "" {
-			return fmt.Sprintf("%s ｜ 内网地址 %s ｜ 已保持 %s", s.Detail, s.ClientIP, held)
+			return locales.SessionDetailClientIP(s.Detail, s.ClientIP, held)
 		}
-		return fmt.Sprintf("%s ｜ 已保持 %s", s.Detail, held)
+		return locales.SessionDetailHeld(s.Detail, held)
 	case session.PhaseConnecting:
-		return fmt.Sprintf("%s…", s.Detail)
+		return locales.SessionDetailConnecting(s.Detail)
 	default:
 		return s.Detail
 	}
@@ -226,11 +226,11 @@ func phaseDetail(s session.State) string {
 // reconnectLabel is the ladder position the state and the tray both show:
 // "重连中 (2/5，4 秒后)" while it waits, "重连中 (2/5)" while an attempt runs.
 func reconnectLabel(reconnect session.ReconnectState) string {
-	label := fmt.Sprintf("重连中 (%d/%d", reconnect.Attempt, reconnect.Max)
-	if wait := reconnectWait(reconnect.NextAt); wait != "" {
-		label += "，" + wait
+	wait := reconnectWait(reconnect.NextAt)
+	if wait == "" {
+		return locales.ReconnectProgress(reconnect.Attempt, reconnect.Max)
 	}
-	return label + ")"
+	return locales.ReconnectProgressWait(reconnect.Attempt, reconnect.Max, wait)
 }
 
 // reconnectWait renders the time left before the next attempt, rounded up so a
@@ -243,7 +243,7 @@ func reconnectWait(next time.Time) string {
 	if seconds < 1 {
 		seconds = 1
 	}
-	return fmt.Sprintf("%d 秒后", seconds)
+	return locales.ReconnectWait(seconds)
 }
 
 // KeepAliveSummary renders the last probe for the window and the tray tooltip.
@@ -254,17 +254,17 @@ func KeepAliveSummary(keepAlive session.KeepAliveState) string {
 	}
 	if keepAlive.Fallback {
 		if keepAlive.OK {
-			return "DNS OK · " + keepAlive.Target
+			return locales.KeepAliveDNSOK(keepAlive.Target)
 		}
-		return "DNS 失败 · " + keepAlive.Target
+		return locales.KeepAliveDNSFailed(keepAlive.Target)
 	}
 	if keepAlive.OK {
-		return fmt.Sprintf("OK %d · %s", keepAlive.Status, keepAlive.Target)
+		return locales.KeepAliveOK(keepAlive.Status, keepAlive.Target)
 	}
 	if keepAlive.Err != "" {
-		return "失败 · " + keepAlive.Target
+		return locales.KeepAliveFailed(keepAlive.Target)
 	}
-	return fmt.Sprintf("失败 %d · %s", keepAlive.Status, keepAlive.Target)
+	return locales.KeepAliveFailedStatus(keepAlive.Status, keepAlive.Target)
 }
 
 // captchaPanel replaces the connection controls while the gateway waits for a
@@ -276,15 +276,15 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 
 	ui.Column(c).Gap(sectionGap).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
-			panelHeading(c, "点击图形验证码")
-			caption(c, "请按图中提示的顺序点击字符，然后提交。")
+			panelHeading(c, locales.CaptchaTitle())
+			caption(c, locales.CaptchaHint())
 		})
 
 		if captcha.Image == nil || width <= 0 || height <= 0 {
-			captionTone(c, "验证码图片无法显示，请取消后重试。", toneDanger)
+			captionTone(c, locales.CaptchaMissing(), toneDanger)
 		} else {
 			ui.Box(c).Width(width).Height(height).Children(func() {
-				image := ui.Image(c, captcha.Image).Width(width).Height(height).Label("图形验证码图片")
+				image := ui.Image(c, captcha.Image).Width(width).Height(height).Label(locales.CaptchaImage())
 				image.OnClick(func() {
 					x, y, ok := image.PointerPosition()
 					if !ok {
@@ -308,18 +308,18 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 		}
 
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-			caption(c, fmt.Sprintf("已点击 %d 个位置", len(captcha.Points)))
+			caption(c, locales.CaptchaPicked(len(captcha.Points)))
 			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-				if ui.Button(c, "撤销").Disabled(len(captcha.Points) == 0).Clicked() && actions.UndoCaptcha != nil {
+				if ui.Button(c, locales.CaptchaUndo()).Disabled(len(captcha.Points) == 0).Clicked() && actions.UndoCaptcha != nil {
 					actions.UndoCaptcha()
 				}
-				if ui.Button(c, "清空").Disabled(len(captcha.Points) == 0).Clicked() && actions.ClearCaptcha != nil {
+				if ui.Button(c, locales.CaptchaClear()).Disabled(len(captcha.Points) == 0).Clicked() && actions.ClearCaptcha != nil {
 					actions.ClearCaptcha()
 				}
-				if ui.PrimaryButton(c, "提交").Disabled(len(captcha.Points) == 0).Clicked() && actions.SubmitCaptcha != nil {
+				if ui.PrimaryButton(c, locales.CommonSubmit()).Disabled(len(captcha.Points) == 0).Clicked() && actions.SubmitCaptcha != nil {
 					actions.SubmitCaptcha()
 				}
-				if ui.Button(c, "取消").Clicked() && actions.CancelCaptcha != nil {
+				if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelCaptcha != nil {
 					actions.CancelCaptcha()
 				}
 			})
@@ -333,19 +333,19 @@ func controls(c *ui.Context, state *State, actions Actions) {
 			if phaseActive(state.Session.Phase) {
 				// 断开 stays available while a login runs: it is how a login
 				// waiting on the network or on a prompt is cancelled.
-				if ui.Button(c, "断开").Clicked() && actions.Logout != nil {
+				if ui.Button(c, locales.Disconnect()).Clicked() && actions.Logout != nil {
 					actions.Logout()
 				}
-			} else if ui.PrimaryButton(c, "连接").Disabled(state.Busy).Clicked() && actions.Login != nil {
+			} else if ui.PrimaryButton(c, locales.Connect()).Disabled(state.Busy).Clicked() && actions.Login != nil {
 				actions.Login()
 			}
-			if ui.Button(c, "设置").Clicked() && actions.Settings != nil {
+			if ui.Button(c, locales.SettingsAction()).Clicked() && actions.Settings != nil {
 				actions.Settings()
 			}
-			if ui.Button(c, "复制 PAC 地址").Disabled(state.PACURL == "").Clicked() && actions.CopyPAC != nil {
+			if ui.Button(c, locales.CopyPAC()).Disabled(state.PACURL == "").Clicked() && actions.CopyPAC != nil {
 				actions.CopyPAC()
 			}
-			if ui.Button(c, "退出").Clicked() && actions.Quit != nil {
+			if ui.Button(c, locales.Quit()).Clicked() && actions.Quit != nil {
 				actions.Quit()
 			}
 			if state.Busy {
@@ -353,13 +353,13 @@ func controls(c *ui.Context, state *State, actions Actions) {
 			}
 		})
 		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-			if ui.Button(c, "Clash 片段").Clicked() && actions.CopyClash != nil {
+			if ui.Button(c, locales.ClashPlain()).Clicked() && actions.CopyClash != nil {
 				actions.CopyClash(ClashPlain)
 			}
-			if ui.Button(c, "Verge 脚本").Clicked() && actions.CopyClash != nil {
+			if ui.Button(c, locales.ClashScript()).Clicked() && actions.CopyClash != nil {
 				actions.CopyClash(ClashScript)
 			}
-			if ui.Button(c, "Clash 完整配置").Clicked() && actions.CopyClash != nil {
+			if ui.Button(c, locales.ClashConfig()).Clicked() && actions.CopyClash != nil {
 				actions.CopyClash(ClashConfig)
 			}
 		})
@@ -385,18 +385,18 @@ func resources(c *ui.Context, state *State, actions Actions) {
 
 	ui.Column(c).Grow(1).Gap(rowGap).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-			sectionHeading(c, "已获授权的资源")
-			caption(c, fmt.Sprintf("%d 项", len(granted.Entries)))
+			sectionHeading(c, locales.ResourcesTitle())
+			caption(c, locales.ResourceCount(len(granted.Entries)))
 		})
 
 		if len(granted.Entries) == 0 {
 			switch state.Session.Phase {
 			case session.PhaseOnline:
-				caption(c, "网关没有为该账号授予资源")
+				caption(c, locales.ResourcesEmptyOnline())
 			case session.PhaseConnecting:
-				caption(c, "登录后显示网关授予的资源")
+				caption(c, locales.ResourcesEmptyConnecting())
 			default:
-				caption(c, "连接后显示网关授予的资源")
+				caption(c, locales.ResourcesEmpty())
 			}
 			return
 		}
@@ -424,12 +424,12 @@ func resourceRow(c *ui.Context, entry session.ResourceEntry, actions Actions) {
 		})
 		if entry.URL != "" {
 			url := entry.URL
-			if ui.Button(c, "打开").Description("打开 "+entry.Title).Clicked() && actions.OpenResource != nil {
+			if ui.Button(c, locales.CommonOpen()).Description(locales.ResourceOpen(entry.Title)).Clicked() && actions.OpenResource != nil {
 				actions.OpenResource(url)
 			}
 		}
 		value := entry.Copy
-		if ui.Button(c, "复制").Description("复制 "+entry.Title).Clicked() && actions.CopyResource != nil {
+		if ui.Button(c, locales.CommonCopy()).Description(locales.ResourceCopy(entry.Title)).Clicked() && actions.CopyResource != nil {
 			actions.CopyResource(value)
 		}
 	})
@@ -455,17 +455,17 @@ func footer(c *ui.Context, state *State) {
 	ui.Divider(c)
 	ui.Column(c).Gap(4).Children(func() {
 		if len(state.Addresses) == 0 {
-			caption(c, "代理端口尚未开启")
+			caption(c, locales.ProxyDisabled())
 		} else {
 			for _, address := range state.Addresses {
-				caption(c, "代理监听 "+address)
+				caption(c, locales.ProxyListening(address))
 			}
 		}
 		if state.PACURL != "" {
-			caption(c, "PAC "+state.PACURL)
+			caption(c, locales.PacURL(state.PACURL))
 		}
 		if summary := KeepAliveSummary(state.Session.KeepAlive); summary != "" {
-			captionTone(c, "保活 "+summary, keepAliveTone(state.Session.KeepAlive))
+			captionTone(c, locales.KeepAliveLine(summary), keepAliveTone(state.Session.KeepAlive))
 		}
 		if state.Status != "" {
 			line := ui.Text(c, state.Status).FontSize(c.Theme().FontSize)
@@ -488,20 +488,20 @@ func TrayStatus(s session.State) string {
 			target = s.Detail
 		}
 		if target == "" {
-			return "已连接"
+			return locales.TrayStatusOnline()
 		}
-		return "已连接 " + target
+		return locales.TrayStatusOnlineTarget(target)
 	case session.PhaseConnecting:
-		return "连接中"
+		return locales.TrayStatusConnecting()
 	case session.PhaseReconnecting:
 		if s.Reconnect.Attempt > 0 {
 			return reconnectLabel(s.Reconnect)
 		}
-		return "重连中"
+		return locales.TrayStatusReconnecting()
 	case session.PhaseFailed:
-		return "失败: " + truncate(s.Detail, 48)
+		return locales.TrayStatusFailed(truncate(s.Detail, 48))
 	default:
-		return "未连接"
+		return locales.TrayStatusOffline()
 	}
 }
 
@@ -522,9 +522,9 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		Disabled: true,
 	}
 
-	toggle := &mygo.MenuItem{ID: "toggle", Label: "连接"}
+	toggle := &mygo.MenuItem{ID: "toggle", Label: locales.Connect()}
 	if phaseActive(state.Session.Phase) {
-		toggle.Label = "断开"
+		toggle.Label = locales.Disconnect()
 		toggle.Click = func(*mygo.MenuItem, *mygo.Window) {
 			if actions.Logout != nil {
 				actions.Logout()
@@ -556,12 +556,12 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 			},
 		})
 	}
-	profiles := &mygo.MenuItem{ID: "profiles", Label: "配置", Submenu: profileItems}
+	profiles := &mygo.MenuItem{ID: "profiles", Label: locales.TrayProfiles(), Submenu: profileItems}
 	if len(profileItems) == 0 {
 		profiles.Disabled = true
 	}
 
-	show := &mygo.MenuItem{ID: "show", Label: "显示窗口", Click: func(*mygo.MenuItem, *mygo.Window) {
+	show := &mygo.MenuItem{ID: "show", Label: locales.TrayShow(), Click: func(*mygo.MenuItem, *mygo.Window) {
 		if actions.ShowWindow != nil {
 			actions.ShowWindow()
 		}
@@ -571,7 +571,7 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 	// address with the desktop's default browser. The main window lists the
 	// same URL on its resource row; the tray item is the shortcut for a user
 	// who does not want to open the window first.
-	openApp := &mygo.MenuItem{ID: "open-app", Label: "打开默认应用"}
+	openApp := &mygo.MenuItem{ID: "open-app", Label: locales.TrayOpenApp()}
 	if url := state.Session.Resources.DefaultAppURL(); url != "" && actions.OpenResource != nil {
 		openApp.Click = func(*mygo.MenuItem, *mygo.Window) {
 			actions.OpenResource(url)
@@ -580,7 +580,7 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		openApp.Disabled = true
 	}
 
-	copyPAC := &mygo.MenuItem{ID: "copy-pac", Label: "复制 PAC 地址"}
+	copyPAC := &mygo.MenuItem{ID: "copy-pac", Label: locales.CopyPAC()}
 	if state.PACURL != "" && actions.CopyPAC != nil {
 		copyPAC.Click = func(*mygo.MenuItem, *mygo.Window) {
 			actions.CopyPAC()
@@ -590,33 +590,33 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 	}
 
 	clashItems := []*mygo.MenuItem{
-		{ID: "copy-clash", Label: "普通片段", Click: func(*mygo.MenuItem, *mygo.Window) {
+		{ID: "copy-clash", Label: locales.TrayClashPlain(), Click: func(*mygo.MenuItem, *mygo.Window) {
 			if actions.CopyClash != nil {
 				actions.CopyClash(ClashPlain)
 			}
 		}},
-		{ID: "copy-clash-script", Label: "Verge 脚本", Click: func(*mygo.MenuItem, *mygo.Window) {
+		{ID: "copy-clash-script", Label: locales.TrayClashScript(), Click: func(*mygo.MenuItem, *mygo.Window) {
 			if actions.CopyClash != nil {
 				actions.CopyClash(ClashScript)
 			}
 		}},
-		{ID: "copy-clash-config", Label: "完整配置", Click: func(*mygo.MenuItem, *mygo.Window) {
+		{ID: "copy-clash-config", Label: locales.TrayClashConfig(), Click: func(*mygo.MenuItem, *mygo.Window) {
 			if actions.CopyClash != nil {
 				actions.CopyClash(ClashConfig)
 			}
 		}},
 	}
-	copyClash := &mygo.MenuItem{ID: "copy-clash-menu", Label: "复制 Clash 片段", Submenu: clashItems}
+	copyClash := &mygo.MenuItem{ID: "copy-clash-menu", Label: locales.TrayCopyClash(), Submenu: clashItems}
 	if actions.CopyClash == nil {
 		copyClash.Disabled = true
 	}
 
-	settingsItem := &mygo.MenuItem{ID: "settings", Label: "设置…", Click: func(*mygo.MenuItem, *mygo.Window) {
+	settingsItem := &mygo.MenuItem{ID: "settings", Label: locales.TraySettings(), Click: func(*mygo.MenuItem, *mygo.Window) {
 		if actions.Settings != nil {
 			actions.Settings()
 		}
 	}}
-	quit := &mygo.MenuItem{ID: "quit", Label: "退出", Click: func(*mygo.MenuItem, *mygo.Window) {
+	quit := &mygo.MenuItem{ID: "quit", Label: locales.TrayQuit(), Click: func(*mygo.MenuItem, *mygo.Window) {
 		if actions.Quit != nil {
 			actions.Quit()
 		}

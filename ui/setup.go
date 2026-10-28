@@ -5,13 +5,13 @@ package ui
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/locales"
 )
 
 // ProfileProblem names the first field a login needs and the profile does not
@@ -24,11 +24,11 @@ import (
 func ProfileProblem(profile config.Profile) string {
 	switch {
 	case profile.ServerAddress() == "":
-		return "请填写网关地址"
+		return locales.ProblemAddress()
 	case profile.Server.Port <= 0 || profile.Server.Port > 65535:
-		return "端口应在 1 到 65535 之间"
+		return locales.ProblemPort()
 	case profile.Auth.Username == "":
-		return "请填写用户名"
+		return locales.ProblemUsername()
 	default:
 		return ""
 	}
@@ -92,11 +92,11 @@ func (d *SetupDraft) Problem() string {
 	port, err := strconv.Atoi(strings.TrimSpace(d.Port))
 	switch {
 	case strings.TrimSpace(d.Address) == "":
-		return "请填写网关地址"
+		return locales.ProblemAddress()
 	case err != nil || port <= 0 || port > 65535:
-		return "端口应在 1 到 65535 之间"
+		return locales.ProblemPort()
 	case strings.TrimSpace(d.Username) == "":
-		return "请填写用户名"
+		return locales.ProblemUsername()
 	default:
 		return ""
 	}
@@ -108,14 +108,14 @@ func (d *SetupDraft) Problem() string {
 func (d *SetupDraft) Apply(cfg *config.Config) error {
 	index := cfg.ProfileIndex(cfg.ActiveProfile)
 	if index < 0 {
-		return fmt.Errorf("配置 %q 不存在", cfg.ActiveProfile)
+		return errors.New(locales.ProfileMissing(cfg.ActiveProfile))
 	}
 	name := cfg.Profiles[index].Name
 	if name == "" {
 		name = config.DefaultProfileName
 	}
 	if d.Profile != "" && d.Profile != name {
-		return errors.New("配置已切换，请重新填写")
+		return errors.New(locales.ProfileChanged())
 	}
 	if problem := d.Problem(); problem != "" {
 		return errors.New(problem)
@@ -150,25 +150,25 @@ func setupPanel(c *ui.Context, state *State, actions Actions) {
 		ui.Scroll(c).Grow(1).Children(func() {
 			ui.Column(c).Gap(sectionGap).Children(func() {
 				ui.Column(c).Gap(6).Children(func() {
-					panelHeading(c, "连接网关")
-					caption(c, "填写管理员提供的网关地址和账号；这些内容会写入设置文件（权限 0600）。")
+					panelHeading(c, locales.SetupTitle())
+					caption(c, locales.SetupHint())
 				})
 
 				ui.Column(c).Gap(rowGap).Children(func() {
-					ui.Field(c, "网关地址", func() {
+					ui.Field(c, locales.FieldGateway(), func() {
 						ui.TextInput(c, &draft.Address).Placeholder("vpn.example.com")
 					})
-					ui.Field(c, "端口", func() {
+					ui.Field(c, locales.FieldPort(), func() {
 						ui.TextInput(c, &draft.Port).Placeholder("443")
 					})
-					ui.Field(c, "用户名", func() {
+					ui.Field(c, locales.FieldUsername(), func() {
 						ui.TextInput(c, &draft.Username)
 					})
-					ui.Field(c, "密码", func() {
-						ui.TextInput(c, &draft.Password).Password().Placeholder("可留空")
-						caption(c, "可以留空：网关使用二次验证或统一认证时，登录过程中会提示。")
+					ui.Field(c, locales.FieldPassword(), func() {
+						ui.TextInput(c, &draft.Password).Password().Placeholder(locales.SetupPasswordPlaceholder())
+						caption(c, locales.SetupPasswordHint())
 					})
-					ui.Checkbox(c, &draft.StorePass, "保存密码（文件权限 0600）")
+					ui.Checkbox(c, &draft.StorePass, locales.SetupStorePassword())
 					if draft.Error != "" {
 						captionTone(c, draft.Error, toneDanger)
 					}
@@ -177,15 +177,15 @@ func setupPanel(c *ui.Context, state *State, actions Actions) {
 		})
 
 		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-			if ui.PrimaryButton(c, "保存并连接").
+			if ui.PrimaryButton(c, locales.SetupConnect()).
 				Disabled(busy || !draft.Complete()).Clicked() && actions.SaveSetup != nil {
 				actions.SaveSetup(*draft, true)
 			}
-			if ui.Button(c, "仅保存").
+			if ui.Button(c, locales.SetupSaveOnly()).
 				Disabled(busy || !draft.Complete()).Clicked() && actions.SaveSetup != nil {
 				actions.SaveSetup(*draft, false)
 			}
-			if ui.Button(c, "更多设置…").Clicked() && actions.Settings != nil {
+			if ui.Button(c, locales.SetupMore()).Clicked() && actions.Settings != nil {
 				actions.Settings()
 			}
 			if busy {

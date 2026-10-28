@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/core/session"
+	"github.com/YangtseSu/goTrust/locales"
 )
 
 // The interface has four text sizes and one spacing grid, so every window looks
@@ -114,7 +115,7 @@ func statusChip(c *ui.Context, state *State) {
 	color := toneColor(c.Theme(), phaseTone(state.Session.Phase))
 	ui.Row(c).AlignItems(ui.Center).Gap(6).PaddingX(10).PaddingY(4).
 		Radius(999).Background(color.Alpha(0.12)).
-		Role(ui.RoleStatus).Label("状态：" + label).
+		Role(ui.RoleStatus).Label(locales.StatusLabel(label)).
 		Children(func() {
 			ui.Box(c).Size(8, 8).Radius(4).Background(color)
 			ui.Text(c, label).FontSize(textSize(c, captionScale)).FontWeight(600).TextColor(color)
@@ -125,7 +126,7 @@ func statusChip(c *ui.Context, state *State) {
 // and a word, so a slow gateway does not look like a frozen window.
 func busyLine(c *ui.Context) {
 	ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-		ui.Spinner(c).Label("正在处理")
-		caption(c, "处理中…")
+		ui.Spinner(c).Label(locales.BusyLabel())
+		caption(c, locales.BusyText())
 	})
 }

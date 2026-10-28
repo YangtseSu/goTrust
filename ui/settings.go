@@ -5,15 +5,16 @@ package ui
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/session"
+	"github.com/YangtseSu/goTrust/locales"
 )
 
 // SettingsState is the settings window's draft. It is a clone of the live
@@ -69,6 +70,10 @@ type SettingsState struct {
 	// the edited one after a dropdown choice, which is what the save hint
 	// reports.
 	ActiveAtOpen string
+	// LocaleIndex is the language picker's entry: 0 follows the desktop, 1 is
+	// Chinese, 2 is English. The application fills it from the choice mygo
+	// holds, so the picker shows the language in effect.
+	LocaleIndex int
 
 	// removedProfiles are the profiles deleted from the draft since it was
 	// loaded. Their stored client data is removed after a successful save, not
@@ -133,6 +138,8 @@ type SettingsActions struct {
 	// OpenConfig opens the settings file so the [identity] section can be
 	// edited by hand; the window never writes it.
 	OpenConfig func()
+	// SetLocale shows the app in the tag's language, "" to follow the desktop.
+	SetLocale func(string)
 }
 
 // NewSettingsState copies cfg into an editable draft and selects the active
@@ -296,7 +303,7 @@ func (s *SettingsState) SelectAuth(index int) {
 	profile := &s.Draft.Profiles[s.Selected]
 	if index == 0 {
 		profile.Auth.AuthType = ""
-		s.Status = "认证方式：自动"
+		s.Status = locales.AuthAuto()
 		s.StatusError = false
 		return
 	}
@@ -306,7 +313,7 @@ func (s *SettingsState) SelectAuth(index int) {
 	method := s.Methods[index-1]
 	profile.Auth.AuthType = method.Type
 	profile.Auth.Domain = method.Domain
-	s.Status = "认证方式：" + MethodLabel(method)
+	s.Status = locales.AuthChosen(MethodLabel(method))
 	s.StatusError = false
 }
 
@@ -318,21 +325,21 @@ func (s *SettingsState) Target() (config.Profile, error) {
 	profile := s.Draft.Profiles[s.Selected]
 	port, err := strconv.Atoi(strings.TrimSpace(s.Ports[s.Selected]))
 	if err != nil || port < 1 || port > 65535 {
-		return profile, errors.New("端口必须是 1-65535 之间的数字")
+		return profile, errors.New(locales.ErrPort())
 	}
 	profile.Server.Port = port
 	profile.Server.Address = strings.TrimSpace(profile.Server.Address)
 	if profile.ServerAddress() == "" {
-		return profile, errors.New("请先填写网关地址")
+		return profile, errors.New(locales.ErrAddress())
 	}
 	return profile, nil
 }
 
 // AddProfile appends a blank profile and selects it.
 func (s *SettingsState) AddProfile() {
-	name := "配置"
+	name := locales.ProfileBaseName()
 	for suffix := 2; s.Draft.ProfileIndex(name) >= 0; suffix++ {
-		name = fmt.Sprintf("配置 %d", suffix)
+		name = locales.ProfileBaseNameN(suffix)
 	}
 	if _, err := s.Draft.AddProfile(name); err != nil {
 		s.Status = err.Error()
@@ -341,7 +348,7 @@ func (s *SettingsState) AddProfile() {
 	}
 	s.refresh()
 	s.Select(s.Draft.ProfileIndex(name))
-	s.Status = "已新建配置 " + name + "；保存后生效"
+	s.Status = locales.ProfileCreated(name)
 	s.StatusError = false
 }
 
@@ -354,9 +361,9 @@ func (s *SettingsState) DuplicateProfile() {
 	// targets can be older than the text fields. DuplicateProfile appends it,
 	// so its buffers are written at the end after refresh.
 	port, targets := s.Ports[index], s.Targets[index]
-	name := source.Name + " 副本"
+	name := locales.ProfileCopyName(source.Name)
 	for suffix := 2; s.Draft.ProfileIndex(name) >= 0; suffix++ {
-		name = fmt.Sprintf("%s 副本 %d", source.Name, suffix)
+		name = locales.ProfileCopyNameN(source.Name, suffix)
 	}
 	if _, err := s.Draft.DuplicateProfile(index, name); err != nil {
 		s.Status = err.Error()
@@ -370,7 +377,7 @@ func (s *SettingsState) DuplicateProfile() {
 		s.Targets[copied] = targets
 	}
 	s.Select(copied)
-	s.Status = "已复制为 " + name + "；保存后生效"
+	s.Status = locales.ProfileCopied(name)
 	s.StatusError = false
 }
 
@@ -398,7 +405,7 @@ func (s *SettingsState) DeleteProfile() {
 		active = 0
 	}
 	s.Select(active)
-	s.Status = "已删除配置；保存后生效"
+	s.Status = locales.ProfileDeleted()
 	s.StatusError = false
 }
 
@@ -411,20 +418,20 @@ func (s *SettingsState) Apply() (config.Config, error) {
 	cfg := s.Draft.Clone()
 	index := s.Selected
 	if index < 0 || index >= len(cfg.Profiles) {
-		return cfg, errors.New("没有可用的配置")
+		return cfg, errors.New(locales.ErrNoProfiles())
 	}
 
 	name := strings.TrimSpace(s.NameText)
 	if name == "" {
-		return cfg, errors.New("配置名称不能为空")
+		return cfg, errors.New(locales.ErrProfileNameEmpty())
 	}
 	if existing := cfg.ProfileIndex(name); existing >= 0 && existing != index {
-		return cfg, fmt.Errorf("配置名称 %q 已存在", name)
+		return cfg, errors.New(locales.ErrProfileNameExists(name))
 	}
 
 	port, err := strconv.Atoi(strings.TrimSpace(s.Ports[index]))
 	if err != nil || port < 1 || port > 65535 {
-		return cfg, errors.New("端口必须是 1-65535 之间的数字")
+		return cfg, errors.New(locales.ErrPort())
 	}
 
 	interval := strings.TrimSpace(cfg.Profiles[index].Keep.Interval)
@@ -433,11 +440,10 @@ func (s *SettingsState) Apply() (config.Config, error) {
 	}
 	duration, err := time.ParseDuration(interval)
 	if err != nil || duration <= 0 {
-		return cfg, errors.New("保活间隔不是有效时长，例如 90s")
+		return cfg, errors.New(locales.ErrKeepAliveInvalid())
 	}
 	if duration < config.MinimumKeepAliveInterval {
-		return cfg, fmt.Errorf("保活间隔至少 %s：每次探测都是一次真实请求",
-			config.MinimumKeepAliveInterval)
+		return cfg, errors.New(locales.ErrKeepAliveShort(config.MinimumKeepAliveInterval.String()))
 	}
 
 	profile := &cfg.Profiles[index]
@@ -455,7 +461,7 @@ func (s *SettingsState) Apply() (config.Config, error) {
 	cfg.Proxy.HTTPBind = strings.TrimSpace(cfg.Proxy.HTTPBind)
 	socks5, httpBind := cfg.ProxyAddresses()
 	if socks5 == "" && httpBind == "" {
-		return cfg, errors.New("SOCKS5 和 HTTP 监听至少启用一个")
+		return cfg, errors.New(locales.ErrProxyBoth())
 	}
 	// Check the binds here as well: the same rule runs before a login, but a
 	// typo should not wait for a successful connection to show up.
@@ -464,7 +470,7 @@ func (s *SettingsState) Apply() (config.Config, error) {
 			continue
 		}
 		if err := config.ValidateBind(bind); err != nil {
-			return cfg, fmt.Errorf("监听地址 %q 无效：%v", bind, err)
+			return cfg, errors.New(locales.ErrBind(bind, err.Error()))
 		}
 	}
 
@@ -512,7 +518,7 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 				})
 				ui.Divider(c)
 				ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
-					if ui.Button(c, "关闭").Disabled(state.PasswordBusy).Clicked() && actions.Close != nil {
+					if ui.Button(c, locales.CommonClose()).Disabled(state.PasswordBusy).Clicked() && actions.Close != nil {
 						actions.Close()
 					}
 				})
@@ -526,7 +532,7 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 		state.dropStaleMethods()
 		index, profile := state.selection()
 		if profile == nil {
-			ui.Text(c, "没有可用的配置").FontSize(13)
+			ui.Text(c, locales.ErrNoProfiles()).FontSize(13)
 			return
 		}
 		names := state.Draft.ProfileNames()
@@ -535,10 +541,10 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 
 		ui.Column(c).Fill().Padding(windowPadding).Gap(sectionGap).Children(func() {
 			ui.Column(c).Gap(6).Children(func() {
-				windowHeading(c, "设置")
-				caption(c, "保存后：连接信息在下次登录生效，代理端口与保活在下次连接生效。")
+				windowHeading(c, locales.SettingsTitle())
+				caption(c, locales.SettingsHint())
 				if active != "" && active != profile.Name {
-					captionTone(c, "保存后将切换到配置 "+profile.Name, toneWarning)
+					captionTone(c, locales.SettingsSwitchHint(profile.Name), toneWarning)
 				}
 			})
 
@@ -563,6 +569,7 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 						// this account, so it sits above the advanced fields.
 						terminalSection(c, state, actions)
 						advancedSection(c, state, profile, actions)
+						languageSection(c, state, actions)
 					})
 				})
 			})
@@ -577,10 +584,10 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 				}
 			}
 			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-				if ui.PrimaryButton(c, "保存").Clicked() && actions.Save != nil {
+				if ui.PrimaryButton(c, locales.CommonSave()).Clicked() && actions.Save != nil {
 					actions.Save()
 				}
-				if ui.Button(c, "关闭").Clicked() && actions.Close != nil {
+				if ui.Button(c, locales.CommonClose()).Clicked() && actions.Close != nil {
 					actions.Close()
 				}
 				if state.Busy {
@@ -592,25 +599,25 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 }
 
 func profileSection(c *ui.Context, state *SettingsState, actions SettingsActions, names []string) {
-	ui.Fieldset(c, "配置", func() {
-		ui.Field(c, "当前配置", func() {
+	ui.Fieldset(c, locales.ProfileSection(), func() {
+		ui.Field(c, locales.CurrentProfile(), func() {
 			if ui.Select(c, &state.SelectText, names).Changed() {
 				if chosen := indexOf(names, state.SelectText); chosen >= 0 && actions.SelectProfile != nil {
 					actions.SelectProfile(chosen)
 				}
 			}
 		})
-		ui.Field(c, "名称", func() {
+		ui.Field(c, locales.NameField(), func() {
 			ui.TextInput(c, &state.NameText)
 		})
 		ui.Row(c).Gap(8).Children(func() {
-			if ui.Button(c, "新建").Clicked() && actions.NewProfile != nil {
+			if ui.Button(c, locales.ProfileNew()).Clicked() && actions.NewProfile != nil {
 				actions.NewProfile()
 			}
-			if ui.Button(c, "复制").Clicked() && actions.DuplicateProfile != nil {
+			if ui.Button(c, locales.ProfileDuplicate()).Clicked() && actions.DuplicateProfile != nil {
 				actions.DuplicateProfile()
 			}
-			if ui.Button(c, "删除").Disabled(len(names) == 1).Clicked() && actions.DeleteProfile != nil {
+			if ui.Button(c, locales.ProfileDelete()).Disabled(len(names) == 1).Clicked() && actions.DeleteProfile != nil {
 				actions.DeleteProfile()
 			}
 		})
@@ -618,17 +625,17 @@ func profileSection(c *ui.Context, state *SettingsState, actions SettingsActions
 }
 
 func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActions, profile *config.Profile, index int) {
-	ui.Fieldset(c, "连接", func() {
-		ui.Field(c, "网关地址", func() {
+	ui.Fieldset(c, locales.ConnectionSection(), func() {
+		ui.Field(c, locales.FieldGateway(), func() {
 			ui.TextInput(c, &profile.Server.Address).Placeholder("vpn.example.com")
 		})
-		ui.Field(c, "端口", func() {
+		ui.Field(c, locales.FieldPort(), func() {
 			ui.TextInput(c, &state.Ports[index]).Placeholder("443")
 		})
-		ui.Field(c, "用户名", func() {
+		ui.Field(c, locales.FieldUsername(), func() {
 			ui.TextInput(c, &profile.Auth.Username)
 		})
-		ui.Field(c, "认证方式", func() {
+		ui.Field(c, locales.AuthMethod(), func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 				options := methodOptions(state.Methods, profile.Auth.AuthType, profile.Auth.Domain)
 				chosen := methodValue(state.Methods, profile.Auth.AuthType, profile.Auth.Domain)
@@ -637,40 +644,40 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 						actions.SelectAuth(picked)
 					}
 				}
-				if ui.Button(c, "获取认证方式").Disabled(state.Discovering).Clicked() && actions.DiscoverAuth != nil {
+				if ui.Button(c, locales.DiscoverAuth()).Disabled(state.Discovering).Clicked() && actions.DiscoverAuth != nil {
 					actions.DiscoverAuth()
 				}
 			})
 			caption(c, authMethodHint(state))
 		})
-		ui.Field(c, "登录域", func() {
+		ui.Field(c, locales.LoginDomain(), func() {
 			ui.TextInput(c, &profile.Auth.Domain).Placeholder("local")
 		})
-		ui.Field(c, "密码", func() {
+		ui.Field(c, locales.FieldPassword(), func() {
 			ui.TextInput(c, &profile.Auth.Password).Password()
 		})
-		ui.Field(c, "密码安全", func() {
+		ui.Field(c, locales.PasswordSecurity(), func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-				if ui.Button(c, "重置密码").Disabled(!state.CanChangePassword()).Clicked() && actions.OpenPassword != nil {
+				if ui.Button(c, locales.ResetPassword()).Disabled(!state.CanChangePassword()).Clicked() && actions.OpenPassword != nil {
 					actions.OpenPassword()
 				}
 				if !state.Online {
-					caption(c, "连接后才能重置密码")
+					caption(c, locales.ResetNeedsConnection())
 				} else if !state.CanChangePassword() {
-					caption(c, "只有当前连接的配置可以重置密码")
+					caption(c, locales.ResetOnlyActive())
 				}
 			})
 		})
 		ui.Field(c, "", func() {
-			ui.Checkbox(c, &profile.Auth.StorePass, "保存密码和 TOTP 密钥（文件权限 0600）")
+			ui.Checkbox(c, &profile.Auth.StorePass, locales.StorePassword())
 		})
 		if profile.Auth.TOTPSecret != "" {
-			ui.Field(c, "二次认证密钥", func() {
+			ui.Field(c, locales.TotpSection(), func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
-					caption(c, "已保存，登录时自动生成验证码")
-					if ui.Button(c, "移除").Clicked() {
+					caption(c, locales.TotpStored())
+					if ui.Button(c, locales.CommonRemove()).Clicked() {
 						profile.Auth.TOTPSecret = ""
-						state.Status = "已移除 TOTP 密钥；保存后生效"
+						state.Status = locales.TotpRemoved()
 						state.StatusError = false
 					}
 				})
@@ -680,91 +687,119 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 }
 
 func proxySection(c *ui.Context, state *SettingsState) {
-	ui.Fieldset(c, "代理", func() {
-		ui.Field(c, "SOCKS5 监听", func() {
+	ui.Fieldset(c, locales.ProxySection(), func() {
+		ui.Field(c, locales.Socks5Listen(), func() {
 			ui.TextInput(c, &state.Draft.Proxy.SOCKS5Bind).Placeholder("127.0.0.1:1080")
 		})
-		ui.Field(c, "HTTP 监听", func() {
+		ui.Field(c, locales.HttpListen(), func() {
 			ui.TextInput(c, &state.Draft.Proxy.HTTPBind).Placeholder("127.0.0.1:1081")
 		})
-		caption(c, "留空即关闭该监听；两者不能同时留空。")
+		caption(c, locales.ProxyHint())
 	})
 }
 
 func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profile, enabled *bool, index int) {
-	ui.Fieldset(c, "保活", func() {
+	ui.Fieldset(c, locales.KeepAliveSection(), func() {
 		ui.Field(c, "", func() {
-			if ui.Checkbox(c, enabled, "启用保活").Changed() {
+			if ui.Checkbox(c, enabled, locales.KeepAliveEnable()).Changed() {
 				profile.Keep.SetEnabled(*enabled)
 			}
 		})
-		ui.Field(c, "间隔", func() {
+		ui.Field(c, locales.KeepAliveInterval(), func() {
 			ui.TextInput(c, &profile.Keep.Interval).Placeholder("90s")
-			caption(c, "至少 10 秒；默认 90 秒。")
+			caption(c, locales.KeepAliveIntervalHint())
 		})
-		ui.Field(c, "手动目标", func() {
-			ui.TextArea(c, &state.Targets[index]).Placeholder("http://192.0.2.10/，每行一个")
-			caption(c, "只探测 http:// 目标：https 经 CONNECT 隧道，不算应用流量，不续期会话。")
+		ui.Field(c, locales.KeepAliveTargets(), func() {
+			ui.TextArea(c, &state.Targets[index]).Placeholder(locales.KeepAliveTargetsPlaceholder())
+			caption(c, locales.KeepAliveTargetsHint())
 		})
 	})
 }
 
 func startupSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
-	ui.Fieldset(c, "启动", func() {
+	ui.Fieldset(c, locales.StartupSection(), func() {
 		ui.Field(c, "", func() {
-			if ui.Checkbox(c, &state.Draft.App.Autostart, "登录系统时启动").Changed() && actions.SetAutostart != nil {
+			if ui.Checkbox(c, &state.Draft.App.Autostart, locales.Autostart()).Changed() && actions.SetAutostart != nil {
 				actions.SetAutostart(state.Draft.App.Autostart)
 			}
 		})
 		ui.Field(c, "", func() {
-			ui.Checkbox(c, &state.Draft.App.AutoConnect, "启动后自动连接")
+			ui.Checkbox(c, &state.Draft.App.AutoConnect, locales.AutoConnect())
 		})
 		ui.Field(c, "", func() {
-			ui.Checkbox(c, &state.Draft.App.StartHidden, "启动时隐藏窗口")
+			ui.Checkbox(c, &state.Draft.App.StartHidden, locales.StartHidden())
 		})
 		ui.Field(c, "", func() {
-			ui.Checkbox(c, &state.Draft.App.AutoReconnect, "断线后自动重连（最多 5 次）")
+			ui.Checkbox(c, &state.Draft.App.AutoReconnect, locales.AutoReconnect())
 		})
 	})
 }
 
 func advancedSection(c *ui.Context, state *SettingsState, profile *config.Profile, actions SettingsActions) {
-	ui.Fieldset(c, "高级", func() {
+	ui.Fieldset(c, locales.AdvancedSection(), func() {
 		ui.Field(c, "", func() {
-			if ui.Checkbox(c, &state.Draft.Logging.Verbose, "详细日志").Changed() && actions.SetVerbose != nil {
+			if ui.Checkbox(c, &state.Draft.Logging.Verbose, locales.VerboseLog()).Changed() && actions.SetVerbose != nil {
 				actions.SetVerbose(state.Draft.Logging.Verbose)
 			}
 		})
-		ui.Field(c, "日志目录", func() {
+		ui.Field(c, locales.LogDir(), func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 				ui.Text(c, state.LogDir).FontSize(c.Theme().FontSize)
-				if ui.Button(c, "打开").Description("打开日志目录").Clicked() && actions.OpenLogs != nil {
+				if ui.Button(c, locales.CommonOpen()).Description(locales.OpenLogsDesc()).Clicked() && actions.OpenLogs != nil {
 					actions.OpenLogs()
 				}
 			})
 		})
-		ui.Field(c, "客户端数据", func() {
-			ui.TextInput(c, &profile.Debug.ClientData).Placeholder("留空则按配置名存放")
+		ui.Field(c, locales.ClientData(), func() {
+			ui.TextInput(c, &profile.Debug.ClientData).Placeholder(locales.ClientDataPlaceholder())
 		})
 		// The device identity is hand-edited only: a wrong id is a support
 		// problem, so the window shows the values in effect and opens the file.
-		ui.Field(c, "设备 ID", func() {
+		ui.Field(c, locales.DeviceID(), func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 				deviceID := state.Draft.Identity.DeviceID
 				if deviceID == "" {
-					deviceID = "尚未生成"
+					deviceID = locales.NotGenerated()
 				}
 				ui.Text(c, deviceID).FontSize(c.Theme().FontSize).TextColor(c.Theme().TextMuted)
-				if ui.Button(c, "打开配置文件").Description("编辑 [identity] 后重启生效").Clicked() && actions.OpenConfig != nil {
+				if ui.Button(c, locales.OpenConfig()).Description(locales.OpenConfigDesc()).Clicked() && actions.OpenConfig != nil {
 					actions.OpenConfig()
 				}
 			})
 		})
-		ui.Field(c, "客户端标识", func() {
+		ui.Field(c, locales.ClientIdentity(), func() {
 			ui.Text(c, identitySummary(state.Draft.Identity)).FontSize(c.Theme().FontSize).
 				TextColor(c.Theme().TextMuted)
 		})
 	})
+}
+
+// languageSection switches the language of the whole app. The picker binds a
+// field of the state, not a local, so the click survives into the pass that
+// reports Changed.
+func languageSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
+	ui.Fieldset(c, locales.Language(), func() {
+		if ui.Segmented(c, &state.LocaleIndex,
+			locales.LanguageSystem(),
+			i18n.Autonym("zh"),
+			i18n.Autonym("en"),
+		).Changed() && actions.SetLocale != nil {
+			actions.SetLocale(localeTag(state.LocaleIndex))
+		}
+		caption(c, locales.LanguageHint())
+	})
+}
+
+// localeTag maps a picker index to the tag SetLocale takes.
+func localeTag(index int) string {
+	switch index {
+	case 1:
+		return "zh"
+	case 2:
+		return "en"
+	default:
+		return ""
+	}
 }
 
 // identitySummary is the one-line description of the identity in effect: the
@@ -800,13 +835,13 @@ func indexOf(values []string, value string) int {
 
 // authAutoLabel is the first entry of the method picker: let the gateway's
 // list decide.
-const authAutoLabel = "自动（网关唯一方式）"
+func authAutoLabel() string { return locales.AuthAutoLabel() }
 
 // methodOptions builds the picker's entries. A saved pair the gateway did not
 // list is kept as a trailing entry so the select never shows a blank value; it
 // is informational, not selectable.
 func methodOptions(methods []session.AuthMethod, authType, domain string) []string {
-	options := []string{authAutoLabel}
+	options := []string{authAutoLabel()}
 	for _, method := range methods {
 		options = append(options, MethodLabel(method))
 	}
@@ -819,7 +854,7 @@ func methodOptions(methods []session.AuthMethod, authType, domain string) []stri
 // methodValue is the picker's current value for a profile.
 func methodValue(methods []session.AuthMethod, authType, domain string) string {
 	if authType == "" {
-		return authAutoLabel
+		return authAutoLabel()
 	}
 	if saved := savedMethodLabel(methods, authType, domain); saved != "" {
 		return saved
@@ -838,18 +873,18 @@ func savedMethodLabel(methods []session.AuthMethod, authType, domain string) str
 			return ""
 		}
 	}
-	return fmt.Sprintf("已保存：%s · %s（网关未提供）", authType, domain)
+	return locales.SavedMethod(authType, domain)
 }
 
 // authMethodHint explains what the picker currently means for the login.
 func authMethodHint(state *SettingsState) string {
 	switch {
 	case state.Discovering:
-		return "正在向网关查询认证方式…"
+		return locales.MethodsDiscovering()
 	case len(state.Methods) == 0:
-		return "尚未查询。自动模式使用网关提供的唯一方式；多种方式时登录会询问。"
+		return locales.MethodsUnknown()
 	default:
-		return fmt.Sprintf("网关提供 %d 种认证方式。固定一种可避免每次登录询问。", len(state.Methods))
+		return locales.MethodsHint(len(state.Methods))
 	}
 }
 
@@ -857,28 +892,27 @@ func authMethodHint(state *SettingsState) string {
 // endpoints separately from the temporary login history. The current device is
 // marked by selfId, exactly as the portal does.
 func terminalSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
-	ui.Fieldset(c, "终端管理", func() {
+	ui.Fieldset(c, locales.TerminalsSection(), func() {
 		if !state.Online {
-			caption(c, "连接后可读取终端列表")
+			caption(c, locales.TerminalsOffline())
 			return
 		}
 
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 			if state.TerminalsKnown && state.Terminals != nil {
-				ui.Text(c, fmt.Sprintf("授信终端 %d · 临时终端 %d",
-					len(state.Terminals.Trusted), len(state.Terminals.Temporary))).
+				ui.Text(c, locales.TerminalCounts(len(state.Terminals.Trusted), len(state.Terminals.Temporary))).
 					FontSize(c.Theme().FontSize)
 			} else {
-				ui.Text(c, "终端列表尚未读取").FontSize(c.Theme().FontSize)
+				ui.Text(c, locales.TerminalsNotLoaded()).FontSize(c.Theme().FontSize)
 			}
-			if ui.Button(c, "刷新").Description("从网关读取终端管理列表").
+			if ui.Button(c, locales.CommonRefresh()).Description(locales.TerminalsRefreshDesc()).
 				Disabled(state.TrustBusy).Clicked() && actions.RefreshTerminals != nil {
 				actions.RefreshTerminals()
 			}
 			if state.TrustKnown {
-				label := "信任此设备"
+				label := locales.Trust()
 				if state.Trusted {
-					label = "取消信任"
+					label = locales.Untrust()
 				}
 				if ui.Button(c, label).Disabled(state.TrustBusy).Clicked() && actions.SetTrusted != nil {
 					actions.SetTrusted(!state.Trusted)
@@ -887,8 +921,8 @@ func terminalSection(c *ui.Context, state *SettingsState, actions SettingsAction
 		})
 
 		if state.TerminalsKnown && state.Terminals != nil {
-			terminalList(c, "授信终端", state.Terminals.Trusted, state.Terminals.SelfID)
-			terminalList(c, "临时终端", state.Terminals.Temporary, state.Terminals.SelfID)
+			terminalList(c, locales.TrustedTerminals(), state.Terminals.Trusted, state.Terminals.SelfID)
+			terminalList(c, locales.TemporaryTerminals(), state.Terminals.Temporary, state.Terminals.SelfID)
 		}
 
 		if state.TrustStatus != "" {
@@ -902,15 +936,15 @@ func terminalSection(c *ui.Context, state *SettingsState, actions SettingsAction
 
 func terminalList(c *ui.Context, title string, terminals []session.Terminal, selfID string) {
 	if len(terminals) == 0 {
-		caption(c, title+"：暂无")
+		caption(c, locales.TerminalNone(title))
 		return
 	}
-	caption(c, fmt.Sprintf("%s（%d）", title, len(terminals)))
+	caption(c, locales.TerminalCount(title, len(terminals)))
 	for _, terminal := range terminals {
 		ui.Column(c).Gap(2).PaddingY(4).Children(func() {
 			name := strings.TrimSpace(terminal.DeviceName)
 			if name == "" {
-				name = "未知设备"
+				name = locales.UnknownDevice()
 			}
 			ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
 				ui.Text(c, name).FontSize(c.Theme().FontSize).FontWeight(600)
@@ -929,12 +963,12 @@ func terminalList(c *ui.Context, title string, terminals []session.Terminal, sel
 // when the historical row says it is offline.
 func terminalState(terminal session.Terminal, selfID string) string {
 	if terminal.ID != "" && terminal.ID == selfID {
-		return "当前设备"
+		return locales.CurrentDevice()
 	}
 	if terminal.OnlineStatus {
-		return "在线"
+		return locales.Online()
 	}
-	return "离线"
+	return locales.Offline()
 }
 
 func terminalDetails(terminal session.Terminal) string {
@@ -944,7 +978,7 @@ func terminalDetails(terminal session.Terminal) string {
 	}
 	location := strings.TrimSpace(terminal.LastLoginAddress)
 	if location == "LAN" {
-		location = "内网"
+		location = locales.Intranet()
 	}
 	if location != "" {
 		if terminal.LastLoginIP != "" {
@@ -961,9 +995,9 @@ func terminalDetails(terminal session.Terminal) string {
 func terminalDevice(terminal session.Terminal) string {
 	if terminal.DeviceType == "browser" {
 		if terminal.Browser != "" {
-			return terminal.Browser + " 浏览器"
+			return locales.BrowserSuffix(terminal.Browser)
 		}
-		return "浏览器"
+		return locales.Browser()
 	}
 	if terminal.OS != "" {
 		return strings.TrimSpace(terminal.OS + " " + terminal.OSVersion)

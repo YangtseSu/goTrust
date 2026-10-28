@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 
@@ -35,6 +36,7 @@ import (
 	gotrustproxy "github.com/YangtseSu/goTrust/core/proxy"
 	"github.com/YangtseSu/goTrust/core/session"
 	"github.com/YangtseSu/goTrust/data"
+	"github.com/YangtseSu/goTrust/locales"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
 )
 
@@ -178,6 +180,10 @@ type app struct {
 	quitting bool
 	// settingsEpoch invalidates a hide queued before the window was reopened.
 	settingsEpoch int
+	// localeChoice is the settings window's language entry: 0 follows the
+	// desktop, 1 is Chinese, 2 is English. mygo remembers the language itself;
+	// this only keeps the picker in step for the rest of the run.
+	localeChoice int
 }
 
 // attemptCancel groups the cancel function with an identity, so a stale
@@ -201,7 +207,21 @@ func (a *app) runUI(ctx context.Context) error {
 		a.mu.Unlock()
 	})
 
+	// The settings title is set once, so a language change has to set it again;
+	// the menus and the windows' views are rebuilt from the catalogs anyway.
+	mygo.App.OnLocaleChanged(func(string) {
+		if window := a.settingsWindow.Load(); window != nil {
+			window.SetTitle(locales.WindowSettingsTitle())
+		}
+		a.refreshTray()
+		a.invalidate()
+		a.invalidateSettings()
+	})
+
 	mygo.App.WhenReady(func() {
+		a.mu.Lock()
+		a.localeChoice = initialLocaleChoice()
+		a.mu.Unlock()
 		a.reconcileAutostart()
 
 		hidden := a.cfg.App.StartHidden || mygo.App.WasOpenedAtLogin()
@@ -307,7 +327,7 @@ func (a *app) openSettings() {
 	a.refreshSettingsTerminals()
 
 	window := mygo.NewWindow(mygo.WindowOptions{
-		Title:     "goTrust 设置",
+		Title:     locales.WindowSettingsTitle(),
 		Width:     600,
 		Height:    760,
 		MinWidth:  560,
@@ -349,6 +369,7 @@ func (a *app) resetSettingsDraft() {
 	a.mu.Lock()
 	a.settings = gotrustui.NewSettingsState(a.cfg, a.logDir)
 	a.settings.Online = online
+	a.settings.LocaleIndex = a.localeChoice
 	a.mu.Unlock()
 }
 
@@ -427,7 +448,7 @@ func (a *app) copyPAC() {
 	url := a.view.PACURL
 	a.mu.RUnlock()
 	if url == "" {
-		a.setStatusError("PAC 地址尚未开启")
+		a.setStatusError(locales.PacOff())
 		return
 	}
 	a.copyResource(url)
@@ -449,11 +470,11 @@ func (a *app) copyClash(format gotrustui.ClashFormat) {
 	case gotrustui.ClashConfig:
 		text, err = snapshot.ClashConfig()
 	default:
-		a.setStatusError("未知的 Clash 格式")
+		a.setStatusError(locales.ClashUnknown())
 		return
 	}
 	if err != nil {
-		a.setStatusError("Clash 片段: " + err.Error())
+		a.setStatusError(locales.ClashFailed(err.Error()))
 		return
 	}
 	a.copyResource(text)
@@ -466,12 +487,12 @@ func (a *app) copyClash(format gotrustui.ClashFormat) {
 func (a *app) openResource(rawURL string) {
 	parsed, err := neturl.Parse(rawURL)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		a.setStatusError("打开失败: 只支持 http 和 https 链接")
+		a.setStatusError(locales.OpenUnsupported())
 		a.logf("refuse to open resource %q: only http and https URLs are allowed", rawURL)
 		return
 	}
 	if err := a.openBrowser(rawURL); err != nil {
-		a.setStatusError("打开失败: " + err.Error())
+		a.setStatusError(locales.OpenFailed(err.Error()))
 		a.logf("open resource %s: %v", rawURL, err)
 	}
 }
@@ -480,11 +501,11 @@ func (a *app) openResource(rawURL string) {
 // status line.
 func (a *app) copyResource(value string) {
 	if err := mygo.Clipboard.Write(transfer.TextData(value)); err != nil {
-		a.setStatusError("复制失败: " + err.Error())
+		a.setStatusError(locales.CopyFailed(err.Error()))
 		a.logf("copy resource: %v", err)
 		return
 	}
-	a.setStatus("已复制", false)
+	a.setStatus(locales.Copied(), false)
 }
 
 // settingsActions are the settings window's callbacks.
@@ -527,7 +548,46 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 		CancelPassword:   a.cancelSettingsPassword,
 		RefreshTerminals: a.refreshSettingsTerminals,
 		SetTrusted:       a.setSettingsTrusted,
+		SetLocale:        a.setLocale,
 	}
+}
+
+// setLocale shows the app in the tag's language, "" to follow the desktop. The
+// picker's index is the choice itself, not a reading of the resulting language,
+// so 跟随系统 stays selected while it follows.
+func (a *app) setLocale(tag string) {
+	a.mu.Lock()
+	a.localeChoice = localeChoiceFor(tag)
+	if a.settings != nil {
+		a.settings.LocaleIndex = a.localeChoice
+	}
+	a.mu.Unlock()
+	a.invalidateSettings()
+	// The picker runs inside a frame and a language change redraws every
+	// window, so it is applied on the next turn of the main loop, as windows
+	// are created and hidden there.
+	go func() { mygo.RunOnMain(func() { mygo.App.SetLocale(tag) }) }()
+}
+
+// localeChoiceFor maps a language tag to the settings picker's entry.
+func localeChoiceFor(tag string) int {
+	switch i18n.Base(tag) {
+	case "zh":
+		return 1
+	case "en":
+		return 2
+	default:
+		return 0
+	}
+}
+
+// initialLocaleChoice reads whether the app follows the desktop: a language
+// that differs from what the desktop asks for was chosen explicitly.
+func initialLocaleChoice() int {
+	if i18n.Match(mygo.App.PreferredLanguages(), mygo.App.Languages()) == mygo.App.Locale() {
+		return 0
+	}
+	return localeChoiceFor(mygo.App.Locale())
 }
 
 // openConfig hands the settings file to the desktop so the [identity] section
@@ -539,7 +599,7 @@ func (a *app) openConfig() {
 	a.mu.RUnlock()
 	if path == "" {
 		if state != nil {
-			state.Status = "配置文件路径不可用"
+			state.Status = locales.ConfigPathUnavailable()
 			state.StatusError = true
 			a.invalidateSettings()
 		}
@@ -547,7 +607,7 @@ func (a *app) openConfig() {
 	}
 	if err := mygo.Shell.OpenPath(path); err != nil {
 		if state != nil {
-			state.Status = "打开配置文件失败: " + err.Error()
+			state.Status = locales.OpenConfigFailed(err.Error())
 			state.StatusError = true
 			a.invalidateSettings()
 		}
@@ -568,7 +628,7 @@ func (a *app) openSettingsPassword() {
 	username := state.Draft.Active().Auth.Username
 	state.Password = &gotrustui.PasswordPrompt{Username: username}
 	state.PasswordBusy = true
-	state.PasswordStatus = "正在读取密码规则…"
+	state.PasswordStatus = locales.RulesLoading()
 	state.PasswordError = false
 	a.mu.Unlock()
 	a.invalidateSettings()
@@ -582,7 +642,7 @@ func (a *app) openSettingsPassword() {
 		if current := a.settings; current != nil && current.Password != nil {
 			current.PasswordBusy = false
 			if err != nil {
-				current.PasswordStatus = "读取密码规则失败: " + err.Error()
+				current.PasswordStatus = locales.RulesFailed(err.Error())
 				current.PasswordError = true
 			} else {
 				current.Password.Strategy = strategy
@@ -605,7 +665,7 @@ func (a *app) refreshSettingsTerminals() {
 		return
 	}
 	state.TrustBusy = true
-	state.TrustStatus = "正在读取终端列表…"
+	state.TrustStatus = locales.TerminalsLoading()
 	state.TrustError = false
 	a.mu.Unlock()
 	a.invalidateSettings()
@@ -619,7 +679,7 @@ func (a *app) refreshSettingsTerminals() {
 		if current := a.settings; current != nil {
 			current.TrustBusy = false
 			if err != nil {
-				current.TrustStatus = "读取终端列表失败: " + err.Error()
+				current.TrustStatus = locales.TerminalsFailed(err.Error())
 				current.TrustError = true
 			} else {
 				current.Terminals = terminals
@@ -645,14 +705,14 @@ func (a *app) setSettingsTrusted(trusted bool) {
 		return
 	}
 	if !state.Online || a.manager == nil {
-		state.TrustStatus = "连接后才能修改授信状态"
+		state.TrustStatus = locales.TrustNeedsConnection()
 		state.TrustError = true
 		a.mu.Unlock()
 		a.invalidateSettings()
 		return
 	}
 	state.TrustBusy = true
-	state.TrustStatus = "正在提交…"
+	state.TrustStatus = locales.Submitting()
 	state.TrustError = false
 	a.mu.Unlock()
 	a.invalidateSettings()
@@ -666,15 +726,15 @@ func (a *app) setSettingsTrusted(trusted bool) {
 		if current := a.settings; current != nil {
 			current.TrustBusy = false
 			if err != nil {
-				current.TrustStatus = "操作失败: " + err.Error()
+				current.TrustStatus = locales.TrustFailed(err.Error())
 				current.TrustError = true
 			} else {
 				current.TrustKnown = true
 				current.Trusted = trusted
 				if trusted {
-					current.TrustStatus = "已信任此设备"
+					current.TrustStatus = locales.Trusted()
 				} else {
-					current.TrustStatus = "已取消信任"
+					current.TrustStatus = locales.Untrusted()
 				}
 				current.TrustError = false
 			}
@@ -723,7 +783,7 @@ func (a *app) submitSettingsPassword() {
 		return
 	}
 	state.PasswordBusy = true
-	state.PasswordStatus = "正在重置密码…"
+	state.PasswordStatus = locales.PasswordResetting()
 	state.PasswordError = false
 	a.mu.Unlock()
 	a.invalidateSettings()
@@ -737,11 +797,11 @@ func (a *app) submitSettingsPassword() {
 		if current := a.settings; current != nil && current.Password != nil {
 			current.PasswordBusy = false
 			if err != nil {
-				current.PasswordStatus = "重置失败: " + err.Error()
+				current.PasswordStatus = locales.ResetFailed(err.Error())
 				current.PasswordError = true
 			} else {
 				current.Password = nil
-				current.Status = "密码重置成功，其他终端已在线账号需重新登录"
+				current.Status = locales.PasswordResetDone()
 				current.StatusError = false
 			}
 		}
@@ -761,14 +821,14 @@ func (a *app) changePasswordOnline(ctx context.Context, oldPassword, newPassword
 	case result.Code != 0 && !result.Validate:
 		message := result.Message
 		if message == "" {
-			message = "新密码属于常见弱密码"
+			message = locales.WeakPassword()
 		}
 		return errors.New(message)
 	case result.Code != 0:
 		if result.Message != "" {
 			return errors.New(result.Message)
 		}
-		return fmt.Errorf("网关拒绝该密码（%d）", result.Code)
+		return errors.New(locales.PasswordRejected(result.Code))
 	}
 
 	profile := a.manager.LiveProfile()
@@ -867,7 +927,7 @@ func (a *app) async(fn func(context.Context) error) {
 			// 断开 cancels the attempt: the user asked for the stop, so report
 			// it as one instead of painting the cancelled login red.
 			if errors.Is(err, context.Canceled) || a.isStopping() {
-				a.setStatus("已取消", false)
+				a.setStatus(locales.Cancelled(), false)
 				return
 			}
 			a.setStatusError(err.Error())
@@ -926,7 +986,7 @@ func (a *app) saveSetup(draft gotrustui.SetupDraft, connect bool) {
 		return
 	}
 	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
-		a.setSetupError("保存失败: " + err.Error())
+		a.setSetupError(locales.SaveFailed(err.Error()))
 		a.logf("save setup: %v", err)
 		return
 	}
@@ -1286,7 +1346,7 @@ func (a *app) saveSettings() {
 		return
 	}
 	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
-		state.Status = "保存失败: " + err.Error()
+		state.Status = locales.SaveFailed(err.Error())
 		state.StatusError = true
 		a.invalidateSettings()
 		a.logf("save settings: %v", err)
@@ -1307,7 +1367,7 @@ func (a *app) saveSettings() {
 	a.mu.RUnlock()
 	if settings != nil {
 		settings.Reload(cfg)
-		settings.Status = "设置已保存"
+		settings.Status = locales.SettingsSaved()
 		settings.StatusError = false
 	}
 
@@ -1323,7 +1383,7 @@ func (a *app) selectProfile(name string) {
 		return
 	}
 	if cfg.ProfileIndex(name) < 0 {
-		a.setStatusError(fmt.Sprintf("配置 %q 不存在", name))
+		a.setStatusError(locales.ProfileMissing(name))
 		return
 	}
 
@@ -1333,7 +1393,7 @@ func (a *app) selectProfile(name string) {
 
 	cfg.ActiveProfile = name
 	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
-		a.setStatusError("切换配置失败: " + err.Error())
+		a.setStatusError(locales.SwitchFailed(err.Error()))
 		a.logf("switch profile: %v", err)
 		return
 	}
@@ -1352,7 +1412,7 @@ func (a *app) selectProfile(name string) {
 	a.mu.RUnlock()
 	if settings != nil {
 		settings.Reload(cfg)
-		settings.Status = "配置已切换，未保存的修改已丢弃"
+		settings.Status = locales.ProfileSwitched()
 		a.invalidateSettings()
 	}
 }
@@ -1434,7 +1494,7 @@ func (a *app) setAutostart(on bool) {
 
 	if err := mygo.App.SetOpenAtLogin(on); err != nil {
 		if state != nil {
-			state.Status = "开机自启设置失败: " + err.Error()
+			state.Status = locales.AutostartFailed(err.Error())
 			state.StatusError = true
 			a.invalidateSettings()
 		}
@@ -1443,7 +1503,10 @@ func (a *app) setAutostart(on bool) {
 	}
 	a.persistFlag(func(cfg *config.Config) { cfg.App.Autostart = on })
 	if state != nil {
-		state.Status = "开机自启已" + map[bool]string{true: "开启", false: "关闭"}[on]
+		state.Status = locales.AutostartOn()
+		if !on {
+			state.Status = locales.AutostartOff()
+		}
 		state.StatusError = false
 		a.invalidateSettings()
 	}
@@ -1462,7 +1525,7 @@ func (a *app) persistFlag(mutate func(*config.Config)) {
 	cfg := a.currentConfig()
 	mutate(&cfg)
 	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
-		a.setStatusError("保存设置失败: " + err.Error())
+		a.setStatusError(locales.SaveSettingsFailed(err.Error()))
 		a.logf("save settings: %v", err)
 		return
 	}
@@ -1475,7 +1538,7 @@ func (a *app) openLogs() {
 	a.mu.RUnlock()
 	if a.logDir == "" {
 		if state != nil {
-			state.Status = "日志目录不可用"
+			state.Status = locales.LogDirUnavailable()
 			state.StatusError = true
 			a.invalidateSettings()
 		}
@@ -1483,7 +1546,7 @@ func (a *app) openLogs() {
 	}
 	if err := mygo.Shell.OpenPath(a.logDir); err != nil {
 		if state != nil {
-			state.Status = "打开日志目录失败: " + err.Error()
+			state.Status = locales.OpenLogsFailed(err.Error())
 			state.StatusError = true
 			a.invalidateSettings()
 		}
@@ -1514,7 +1577,7 @@ func (a *app) discoverAuth() {
 	state.Discovering = true
 	state.Methods = nil
 	state.MethodsFrom = ""
-	state.Status = "正在向网关查询认证方式…"
+	state.Status = locales.MethodsDiscovering()
 	a.invalidateSettings()
 
 	go func() {
@@ -1533,12 +1596,12 @@ func (a *app) discoverAuth() {
 			}
 			switch {
 			case discoverErr != nil:
-				state.SetMethods(nil, key, "获取认证方式失败: "+discoverErr.Error(), true)
+				state.SetMethods(nil, key, locales.MethodsDiscoverFailed(discoverErr.Error()), true)
 				a.logf("discover auth methods: %v", discoverErr)
 			case len(methods) == 0:
-				state.SetMethods(nil, key, "网关没有提供认证方式（可能已经登录）", false)
+				state.SetMethods(nil, key, locales.MethodsNone(), false)
 			default:
-				state.SetMethods(methods, key, fmt.Sprintf("已获取 %d 种认证方式", len(methods)), false)
+				state.SetMethods(methods, key, locales.MethodsLoaded(len(methods)), false)
 				a.logf("gateway offers %d authentication method(s)", len(methods))
 			}
 			a.invalidateSettings()
@@ -1604,17 +1667,17 @@ func decideAutoConnect(cfg config.Config) autoConnectDecision {
 	}
 	profile := cfg.Active()
 	if profile.ServerAddress() == "" {
-		return autoConnectDecision{Reason: "自动连接未执行：请先在设置中填写网关地址"}
+		return autoConnectDecision{Reason: locales.AutoConnectNoAddress()}
 	}
 	if strings.TrimSpace(profile.Auth.Username) == "" {
-		return autoConnectDecision{Reason: "自动连接未执行：请先在设置中填写用户名"}
+		return autoConnectDecision{Reason: locales.AutoConnectNoUsername()}
 	}
 	// A stored session is not a login credential: the portal ends a session
 	// with its connection, so startup needs a saved password to reconnect.
 	if profile.Auth.StorePass && profile.Auth.Password != "" {
 		return autoConnectDecision{Connect: true}
 	}
-	return autoConnectDecision{Reason: "自动连接未执行：没有保存的密码，请先在设置中保存密码"}
+	return autoConnectDecision{Reason: locales.AutoConnectNoPassword()}
 }
 
 func (a *app) setStatus(message string, busy bool) {
@@ -1667,9 +1730,9 @@ func (a *app) refreshTray() {
 }
 
 func (a *app) tooltip(state gotrustui.State) string {
-	tooltip := "goTrust: " + gotrustui.TrayStatus(state.Session)
+	status := gotrustui.TrayStatus(state.Session)
 	if summary := gotrustui.KeepAliveSummary(state.Session.KeepAlive); summary != "" {
-		tooltip += "\n保活: " + summary
+		return locales.TrayTooltipKeepAlive(status, summary)
 	}
-	return tooltip
+	return locales.TrayTooltip(status)
 }
