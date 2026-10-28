@@ -178,8 +178,6 @@ type app struct {
 	// quitting lets the main window's close handler destroy it during Quit
 	// instead of hiding it in the tray.
 	quitting bool
-	// settingsEpoch invalidates a hide queued before the window was reopened.
-	settingsEpoch int
 	// localeChoice is the settings window's language entry: 0 follows the
 	// desktop, 1 is Chinese, 2 is English. mygo remembers the language itself;
 	// this only keeps the picker in step for the rest of the run.
@@ -312,12 +310,10 @@ func (a *app) showWindow() {
 // Each opening starts from the saved settings, so closing without 保存 really
 // discards the edits.
 //
-// It runs in whatever frame asked for it, 设置 in the ⋯ menu included: a window
-// created or shown inside a frame is safe since 0.6.4. Hiding it is the hop
+// It runs in whatever frame asked for it, 设置 in the ⋯ menu included: creating,
+// showing and hiding a window inside a frame are all safe on the pinned mygo
 // (see hideSettings).
 func (a *app) openSettings() {
-	a.bumpSettingsEpoch()
-
 	if window := a.settingsWindow.Load(); window != nil {
 		// The window is hidden, not destroyed, so a close cannot tear down a
 		// GTK window while its own view is still running. Each opening starts
@@ -351,8 +347,7 @@ func (a *app) openSettings() {
 	})
 	a.settingsWindow.Store(window)
 	// A close hides the window, as it does for the main window, so reopening
-	// starts from the saved settings again. The hide itself runs after the
-	// frame (see hideSettings), not from this handler's GTK callback.
+	// starts from the saved settings again.
 	window.OnClose(func(event *mygo.CloseEvent) {
 		a.mu.RLock()
 		quitting := a.quitting
@@ -861,55 +856,15 @@ func (a *app) closeSettings() {
 	a.mu.Unlock()
 }
 
-// hideSettings hides the settings window after the current frame, then discards
-// its draft so reopening loads the saved settings again. Hiding a window from
-// its own frame makes GTK paint a GtkGLArea whose Wayland GL context the hide
-// released, which is a SIGSEGV inside gdk_cairo_draw_from_gl on 0.6.4 and
-// 0.7.1; mygo defers Close during a frame (PR #674) but not Hide. Creating the
-// window from a frame needs no such hop since 0.6.4 (see openSettings).
-//
-// The epoch check belongs on the main thread with the hide, because openSettings
-// bumps the epoch there: a reopen either runs before the claim (and the queued
-// hide is stale) or after the hide (and shows the window again).
+// hideSettings hides the settings window and discards its draft, so reopening
+// loads the saved settings again. Hide is safe from the window's own frame: the
+// pinned mygo defers a hide made while the surface draws to the next idle, as
+// it defers a destroy (PR #674), which is the fix for issue #680.
 func (a *app) hideSettings(window *mygo.Window) {
-	epoch := a.bumpSettingsEpoch()
-
-	go func() {
-		mygo.RunOnMain(func() {
-			if !a.claimSettingsHide(epoch) {
-				return
-			}
-			window.Hide()
-			a.clearSettingsDraftAfterHide(epoch)
-		})
-	}()
-}
-
-// bumpSettingsEpoch invalidates every settings hide queued before now and
-// returns the new epoch. It is called on the main thread, which is what makes
-// the claim below one step with the reopen.
-func (a *app) bumpSettingsEpoch() int {
+	window.Hide()
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.settingsEpoch++
-	return a.settingsEpoch
-}
-
-// claimSettingsHide reports whether a queued hide still owns the window.
-func (a *app) claimSettingsHide(epoch int) bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.settingsEpoch == epoch
-}
-
-// clearSettingsDraftAfterHide discards the draft of the window that was hidden,
-// unless a reopen already replaced it with a new one.
-func (a *app) clearSettingsDraftAfterHide(epoch int) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.settingsEpoch == epoch {
-		a.settings = nil
-	}
+	a.settings = nil
+	a.mu.Unlock()
 }
 
 // async runs work off the UI thread and reports the outcome in the status line.

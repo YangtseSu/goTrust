@@ -26,3 +26,5 @@ require (
 )
 
 tool github.com/egoist/mygo/cmd/mygo
+
+replace github.com/egoist/mygo => github.com/YangtseSu/mygo v0.7.2-0.20261028152917-37187e4c9ff8

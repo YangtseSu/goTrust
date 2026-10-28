@@ -130,37 +130,40 @@ wait "$pid"               # expect 0
 
 ## mygo window rules
 
-Measured on 0.6.3, 0.6.4 and 0.7.1, nested and on the operator's session:
+Measured on 0.6.3, 0.6.4, 0.7.1 and the fork commit `go.mod` pins:
 
 - `NewWindow` inside a frame is safe from 0.6.4 on. In 0.6.3 it made the new
   window's GtkGLArea fail (`OpenGL 0.0 is too old`, then `native UI shows
   nothing: gl: no current context`) and the window stayed blank: 0.6.4's
   `gl.MakeAreaCurrent` before an in-memory present fixed that half (issue #680's
   logs).
-- `Hide` of a window from **its own frame** still crashes GTK on Wayland:
+- `Hide` of a window from **its own frame** crashed GTK on Wayland up to 0.7.1:
   SIGSEGV `addr=0x40` in `gdk_cairo_draw_from_gl` → `gdk_gl_context_make_current`
-  → `wl_proxy_get_version` with a NULL proxy. The same on 0.6.4 and 0.7.1;
-  upstream defers `Close` during a frame (PR #674) but not `Hide`. Hiding one
-  window from another window's frame is fine, and so is `Show`.
-- So only the hide hop is required: hide through
-  `go func() { mygo.RunOnMain(fn) }()`. Creating a window in the frame that asked
-  for it is fine, and `Close` there is deferred by mygo itself.
-- The settings window hides on close; reopening reloads the saved draft.
+  → `wl_proxy_get_version` with a NULL proxy, because the hide unmapped the
+  window before GTK painted its GtkGLArea. The pinned fork
+  (`YangtseSu/mygo` `linux-hide-in-frame`, 37187e4c) queues that hide in an idle
+  below `Close`'s priority, as mygo already defers a destroy during a frame
+  (PR #674), so the app hides and shows windows from any frame again.
+- Hiding one window from another window's frame, and `Show`, were always fine.
+- If mygo is ever moved back to a release without the fix, hiding a window from
+  its own frame must go through `go func() { mygo.RunOnMain(fn) }()` again. The
+  settings window hides on close; reopening reloads the saved draft.
 
 ## Frame rules
 
 A window's build runs inside mygo's frame, so an action that runs while the
 view builds runs there too. What each operation does from there, measured in
 the headless Wayland session and on the operator's GNOME session, with a second
-window carrying a `Scroll`:
+window carrying a `Scroll`. The last column is the fork commit `go.mod` pins
+(`linux-hide-in-frame`, 37187e4c):
 
-| Operation, from | Where | 0.6.3 | 0.6.4 | 0.7.1 |
-|---|---|---|---|---|
-| `NewWindow` | a frame | blank window, `no current context` | renders | renders |
-| `Close` | a frame | destroys at once, no crash in this run | deferred by mygo | deferred by mygo |
-| `Hide` | the window's own frame | SIGSEGV | SIGSEGV | SIGSEGV |
-| `Hide` | another window's frame | fine | fine | fine |
-| `Show` | a frame | fine | fine | fine |
+| Operation, from | Where | 0.6.3 | 0.6.4 | 0.7.1 | + fix |
+|---|---|---|---|---|---|
+| `NewWindow` | a frame | blank window, `no current context` | renders | renders | renders |
+| `Close` | a frame | destroys at once, no crash in this run | deferred by mygo | deferred by mygo | deferred by mygo |
+| `Hide` | the window's own frame | SIGSEGV | SIGSEGV | SIGSEGV | hides after the frame |
+| `Hide` | another window's frame | fine | fine | fine | fine |
+| `Show` | a frame | fine | fine | fine | fine |
 
 To repeat it: one window's build calls `NewWindow` once for a second window,
 and a timer posts `Update` to ask that window to call `Hide` from its own build;
