@@ -31,6 +31,30 @@ func TestPhaseTone(t *testing.T) {
 	}
 }
 
+// A tone is read at caption size, so every tone that carries a mark has to
+// clear WCAG AA in both appearances, on the window and on the chip's own
+// tint. The chip's label is the theme's text colour on that tint, so it is
+// asserted with the same surfaces.
+func TestToneInkPassesAA(t *testing.T) {
+	appearances := map[string]*ui.Theme{"light": ui.LightTheme(), "dark": ui.DarkTheme()}
+	tones := []tone{toneNeutral, toneAccent, toneSuccess, toneWarning, toneDanger}
+	for appearance, theme := range appearances {
+		for _, tn := range tones {
+			ink := toneInk(theme, tn)
+			tint := chipSurface(theme, ink)
+			if got := contrastRatio(ink, tint); got < 4.5 {
+				t.Errorf("%s tone %d: ink on the chip tint = %.2f:1, want >= 4.5", appearance, tn, got)
+			}
+			if got := contrastRatio(ink, theme.Background); got < 4.5 {
+				t.Errorf("%s tone %d: ink on the window = %.2f:1, want >= 4.5", appearance, tn, got)
+			}
+			if got := contrastRatio(theme.Text, tint); got < 4.5 {
+				t.Errorf("%s tone %d: label on the chip tint = %.2f:1, want >= 4.5", appearance, tn, got)
+			}
+		}
+	}
+}
+
 // Starting a login twice would race two sessions, so the button is disabled
 // while one runs, and the window says what it is doing.
 func TestBusyStateDisablesConnect(t *testing.T) {

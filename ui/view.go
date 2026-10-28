@@ -163,7 +163,7 @@ func header(c *ui.Context, state *State) {
 func detailLine(c *ui.Context, text string, t tone) {
 	line := ui.Text(c, text).FontSize(c.Theme().FontSize)
 	if t == toneWarning || t == toneDanger {
-		line.TextColor(toneColor(c.Theme(), t))
+		line.TextColor(toneInk(c.Theme(), t))
 	} else {
 		line.TextColor(c.Theme().TextMuted)
 	}
@@ -301,7 +301,7 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 					ui.Box(c).Absolute().Left(left).Top(top).Width(18).Height(18).
 						Radius(9).Background(c.Theme().Danger).Center().PassThrough().
 						Children(func() {
-							ui.Text(c, strconv.Itoa(i+1)).FontSize(10).TextColor(c.Theme().AccentText).Bold()
+							ui.Text(c, strconv.Itoa(i+1)).FontSize(textSize(c, captionScale)).TextColor(c.Theme().AccentText).Bold()
 						})
 				}
 			})
@@ -470,7 +470,7 @@ func footer(c *ui.Context, state *State) {
 		if state.Status != "" {
 			line := ui.Text(c, state.Status).FontSize(c.Theme().FontSize)
 			if state.StatusError {
-				line.TextColor(c.Theme().Danger)
+				line.TextColor(toneInk(c.Theme(), toneDanger))
 			} else {
 				line.TextColor(c.Theme().TextMuted)
 			}

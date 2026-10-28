@@ -56,6 +56,9 @@ func phaseTone(phase session.Phase) tone {
 	}
 }
 
+// toneColor is the theme's own colour for a tone. These are Meter fills, so
+// they are surfaces and the source toneInk walks away from; the readable mark
+// is toneInk.
 func toneColor(theme *ui.Theme, t tone) ui.Color {
 	switch t {
 	case toneAccent:
@@ -69,6 +72,64 @@ func toneColor(theme *ui.Theme, t tone) ui.Color {
 	default:
 		return theme.TextMuted
 	}
+}
+
+// contrastFloor is WCAG AA for body text (4.5:1) with a margin: the ink is
+// mixed in 5% steps, so the first step that clears the threshold would
+// otherwise sit on it.
+const contrastFloor = 4.8
+
+// toneInk is a tone's colour when it has to be read, as text or as the chip's
+// dot on the chip's own tint. The semantic fills measure 2.81-4.37:1 at
+// caption size, so the ink is the fill moved toward the far end of the
+// appearance until it clears contrastFloor. Every use of a tone as a mark
+// goes through this; the raw fill stays a surface.
+func toneInk(theme *ui.Theme, t tone) ui.Color {
+	fill := toneColor(theme, t)
+	away := ui.RGB(0, 0, 0)
+	if theme.Dark {
+		away = ui.RGB(255, 255, 255)
+	}
+	for step := range 21 {
+		ink := fill
+		if step > 0 {
+			ink = fill.Mix(away, float32(step)*0.05)
+		}
+		if contrastRatio(ink, chipSurface(theme, ink)) >= contrastFloor {
+			return ink
+		}
+	}
+	// The theme's own text colour always reads on its background; a fill that
+	// cannot be read at any mix has no business carrying meaning.
+	return theme.Text
+}
+
+// chipSurface is the pill behind a status label: the ink at 12% over the
+// window.
+func chipSurface(theme *ui.Theme, ink ui.Color) ui.Color {
+	return ink.Alpha(0.12).Over(theme.Background)
+}
+
+// contrastRatio is WCAG 2.1's ratio between two colours composited over an
+// opaque background.
+func contrastRatio(a, b ui.Color) float64 {
+	first, second := luminance(a), luminance(b)
+	if first < second {
+		first, second = second, first
+	}
+	return (first + 0.05) / (second + 0.05)
+}
+
+// luminance is WCAG 2.1's relative luminance of an sRGB colour.
+func luminance(c ui.Color) float64 {
+	linear := func(v uint8) float64 {
+		s := float64(v) / 255
+		if s <= 0.03928 {
+			return s / 12.92
+		}
+		return math.Pow((s+0.055)/1.055, 2.4)
+	}
+	return 0.2126*linear(c.R) + 0.7152*linear(c.G) + 0.0722*linear(c.B)
 }
 
 // textSize returns a size on the scale, rounded to half a point so the
@@ -105,20 +166,22 @@ func caption(c *ui.Context, text string) ui.Element {
 // captionTone is a secondary line that also reports a state, such as a failed
 // keep-alive probe.
 func captionTone(c *ui.Context, text string, t tone) ui.Element {
-	return ui.Text(c, text).FontSize(textSize(c, captionScale)).TextColor(toneColor(c.Theme(), t))
+	return ui.Text(c, text).FontSize(textSize(c, captionScale)).TextColor(toneInk(c.Theme(), t))
 }
 
 // statusChip is the phase as a coloured pill next to the window title. The
-// colour is the state's, so the eye finds the one changing element first.
+// colour is the state's, so the eye finds the one changing element first; the
+// label reads in the theme's text colour, because a semantic fill on its own
+// tint does not carry small text.
 func statusChip(c *ui.Context, state *State) {
 	label := phaseLabel(state.Session)
-	color := toneColor(c.Theme(), phaseTone(state.Session.Phase))
+	ink := toneInk(c.Theme(), phaseTone(state.Session.Phase))
 	ui.Row(c).AlignItems(ui.Center).Gap(6).PaddingX(10).PaddingY(4).
-		Radius(999).Background(color.Alpha(0.12)).
+		Radius(999).Background(chipSurface(c.Theme(), ink)).
 		Role(ui.RoleStatus).Label(locales.StatusLabel(label)).
 		Children(func() {
-			ui.Box(c).Size(8, 8).Radius(4).Background(color)
-			ui.Text(c, label).FontSize(textSize(c, captionScale)).FontWeight(600).TextColor(color)
+			ui.Box(c).Size(8, 8).Radius(4).Background(ink)
+			ui.Text(c, label).FontSize(textSize(c, captionScale)).FontWeight(600).TextColor(c.Theme().Text)
 		})
 }
 

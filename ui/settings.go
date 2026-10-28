@@ -532,7 +532,7 @@ func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Cont
 		state.dropStaleMethods()
 		index, profile := state.selection()
 		if profile == nil {
-			ui.Text(c, locales.ErrNoProfiles()).FontSize(13)
+			ui.Text(c, locales.ErrNoProfiles())
 			return
 		}
 		names := state.Draft.ProfileNames()

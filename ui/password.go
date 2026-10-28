@@ -176,7 +176,7 @@ func passwordRules(c *ui.Context, prompt *PasswordPrompt) {
 			line := ui.Text(c, ruleLabelWithMark(rule)).FontSize(textSize(c, captionScale)).
 				TextColor(c.Theme().TextMuted)
 			if rule.Satisfied {
-				line.TextColor(toneColor(c.Theme(), toneSuccess))
+				line.TextColor(toneInk(c.Theme(), toneSuccess))
 			}
 		}
 		if prompt.Prompt != "" {
