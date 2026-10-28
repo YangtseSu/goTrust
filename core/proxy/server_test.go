@@ -352,14 +352,14 @@ func TestCloseStopsTheListener(t *testing.T) {
 	if err := server.Start(ctx); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	if addresses := server.Addresses(); len(addresses) != 1 {
+	if addresses := server.Listeners(); len(addresses) != 1 {
 		t.Fatalf("addresses = %v, want one", addresses)
 	}
 
 	if err := server.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	if addresses := server.Addresses(); len(addresses) != 0 {
+	if addresses := server.Listeners(); len(addresses) != 0 {
 		t.Fatalf("addresses after close = %v, want none", addresses)
 	}
 	if err := server.Close(); err != nil {
@@ -400,7 +400,7 @@ func TestBindFailureClosesWhatWasBound(t *testing.T) {
 	if err == nil {
 		t.Fatal("start succeeded on an occupied port")
 	}
-	if addresses := server.Addresses(); len(addresses) != 0 {
+	if addresses := server.Listeners(); len(addresses) != 0 {
 		t.Fatalf("addresses = %v, want none after a failed start", addresses)
 	}
 }
@@ -604,7 +604,7 @@ func isTimeout(err error) bool {
 func TestCloseDropsHTTPConnectTunnels(t *testing.T) {
 	echo := echoServer(t)
 	server := startProxy(t, Options{HTTPBind: freePort(t), Dial: directDial})
-	bind := server.Addresses()[0]
+	bind := server.Listeners()[0].Address
 
 	conn, err := net.Dial("tcp", bind)
 	if err != nil {
@@ -646,7 +646,7 @@ func TestCloseDropsHTTPConnectTunnels(t *testing.T) {
 func TestCloseDropsSOCKS5Tunnels(t *testing.T) {
 	echo := echoServer(t)
 	server := startProxy(t, Options{SOCKS5Bind: freePort(t), Dial: directDial})
-	conn := socks5Connect(t, server.Addresses()[0], echo.Addr().String())
+	conn := socks5Connect(t, server.Listeners()[0].Address, echo.Addr().String())
 
 	if _, err := conn.Write([]byte("still open")); err != nil {
 		t.Fatalf("write payload: %v", err)
@@ -743,7 +743,7 @@ func TestHTTPForwardStreamsWithoutWaitingForTheOrigin(t *testing.T) {
 	defer unblock()
 
 	server := startProxy(t, Options{HTTPBind: freePort(t), Dial: directDial})
-	conn, err := net.Dial("tcp", server.Addresses()[0])
+	conn, err := net.Dial("tcp", server.Listeners()[0].Address)
 	if err != nil {
 		t.Fatalf("dial the proxy: %v", err)
 	}
@@ -807,7 +807,7 @@ func TestHTTPConnectHalfCloseKeepsTheResponseDirection(t *testing.T) {
 	}()
 
 	server := startProxy(t, Options{HTTPBind: freePort(t), Dial: directDial})
-	conn, err := net.Dial("tcp", server.Addresses()[0])
+	conn, err := net.Dial("tcp", server.Listeners()[0].Address)
 	if err != nil {
 		t.Fatalf("dial the proxy: %v", err)
 	}

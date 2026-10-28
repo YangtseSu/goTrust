@@ -197,8 +197,8 @@ func passwordPanel(c *ui.Context, state *State, actions Actions) {
 	// The form is taller than the window's minimum, so it scrolls under a
 	// pinned action row: the buttons stay reachable at 440x400 instead of
 	// being clipped with the rules.
-	ui.Column(c).Grow(1).Gap(sectionGap).Children(func() {
-		ui.Scroll(c).Grow(1).Children(func() {
+	ui.Column(c).Grow(1).Shrink(1).Gap(sectionGap).Children(func() {
+		ui.Scroll(c).Grow(1).Shrink(1).Children(func() {
 			ui.Column(c).Gap(sectionGap).Children(func() {
 				ui.Column(c).Gap(6).Children(func() {
 					panelHeading(c, locales.PasswordTitle())

@@ -270,12 +270,14 @@ func (a *app) openWindow(hidden bool) {
 		return
 	}
 	window := mygo.NewWindow(mygo.WindowOptions{
-		Title:     "goTrust",
-		Width:     540,
-		Height:    640,
-		MinWidth:  440,
-		MinHeight: 400,
-		Hidden:    hidden,
+		Title:          "goTrust",
+		Width:          540,
+		Height:         640,
+		MinWidth:       440,
+		MinHeight:      480,
+		TitleBarStyle:  mygo.TitleBarHidden,
+		TitleBarHeight: gotrustui.TitleBarHeight,
+		Hidden:         hidden,
 		Content: ui.View(func(c *ui.Context) {
 			a.mu.RLock()
 			state := a.view
@@ -327,11 +329,13 @@ func (a *app) openSettings() {
 	a.refreshSettingsTerminals()
 
 	window := mygo.NewWindow(mygo.WindowOptions{
-		Title:     locales.WindowSettingsTitle(),
-		Width:     600,
-		Height:    760,
-		MinWidth:  560,
-		MinHeight: 440,
+		Title:          locales.WindowSettingsTitle(),
+		Width:          600,
+		Height:         760,
+		MinWidth:       560,
+		MinHeight:      440,
+		TitleBarStyle:  mygo.TitleBarHidden,
+		TitleBarHeight: gotrustui.TitleBarHeight,
 		Content: ui.View(func(c *ui.Context) {
 			a.mu.RLock()
 			state := a.settings
@@ -429,6 +433,7 @@ func (a *app) actions() gotrustui.Actions {
 		CopyResource: a.copyResource,
 		CopyPAC:      a.copyPAC,
 		CopyClash:    a.copyClash,
+		OpenLogs:     a.openLogs,
 	}
 }
 
@@ -1153,7 +1158,7 @@ func (a *app) releaseProxy() {
 	cancel := a.proxyCancel
 	a.proxy = nil
 	a.proxyCancel = nil
-	a.view.Addresses = nil
+	a.view.Listeners = nil
 	a.mu.Unlock()
 
 	if cancel != nil {
@@ -1209,7 +1214,7 @@ func (a *app) installProxy(server *gotrustproxy.Server, cancel context.CancelFun
 	}
 	a.proxy = server
 	a.proxyCancel = cancel
-	a.view.Addresses = server.Addresses()
+	a.view.Listeners = server.Listeners()
 	a.mu.Unlock()
 
 	a.invalidate()
@@ -1683,6 +1688,7 @@ func decideAutoConnect(cfg config.Config) autoConnectDecision {
 func (a *app) setStatus(message string, busy bool) {
 	a.mu.Lock()
 	a.view.Status = message
+	a.view.StatusSeq++
 	a.view.StatusError = false
 	a.view.Busy = busy
 	a.mu.Unlock()
@@ -1697,6 +1703,7 @@ func (a *app) setStatus(message string, busy bool) {
 func (a *app) setStatusError(message string) {
 	a.mu.Lock()
 	a.view.Status = message
+	a.view.StatusSeq++
 	a.view.StatusError = true
 	a.view.Busy = false
 	a.mu.Unlock()

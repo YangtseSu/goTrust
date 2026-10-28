@@ -169,19 +169,19 @@ func captionTone(c *ui.Context, text string, t tone) ui.Element {
 	return ui.Text(c, text).FontSize(textSize(c, captionScale)).TextColor(toneInk(c.Theme(), t))
 }
 
-// statusChip is the phase as a coloured pill next to the window title. The
-// colour is the state's, so the eye finds the one changing element first; the
-// label reads in the theme's text colour, because a semantic fill on its own
-// tint does not carry small text.
+// statusChip is the phase as the window's headline: a pill whose dot carries
+// the state's colour, with the label at title size in the theme's text colour.
+// The colour is the state's, so the eye finds the one changing element first,
+// and the text does not have to pass on a fill it does not sit on.
 func statusChip(c *ui.Context, state *State) {
 	label := phaseLabel(state.Session)
 	ink := toneInk(c.Theme(), phaseTone(state.Session.Phase))
-	ui.Row(c).AlignItems(ui.Center).Gap(6).PaddingX(10).PaddingY(4).
+	ui.Row(c).AlignItems(ui.Center).Gap(8).PaddingX(12).PaddingY(4).
 		Radius(999).Background(chipSurface(c.Theme(), ink)).
 		Role(ui.RoleStatus).Label(locales.StatusLabel(label)).
 		Children(func() {
-			ui.Box(c).Size(8, 8).Radius(4).Background(ink)
-			ui.Text(c, label).FontSize(textSize(c, captionScale)).FontWeight(600).TextColor(c.Theme().Text)
+			ui.Box(c).Size(9, 9).Radius(5).Background(ink)
+			ui.Text(c, label).FontSize(textSize(c, titleScale)).FontWeight(600).TextColor(c.Theme().Text)
 		})
 }
 

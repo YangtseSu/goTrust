@@ -256,14 +256,14 @@ func testProxyApp(t *testing.T) (*app, *gotrustproxy.Server) {
 	}
 
 	cfg := config.Default()
-	cfg.Proxy.SOCKS5Bind = server.Addresses()[0]
+	cfg.Proxy.SOCKS5Bind = server.Listeners()[0].Address
 	cfg.Proxy.HTTPBind = ""
 
 	application := &app{
 		cfg:     cfg,
 		manager: session.New(session.Options{Config: func() config.Config { return cfg }}),
 		proxy:   server,
-		view:    gotrustui.State{Addresses: server.Addresses()},
+		view:    gotrustui.State{Listeners: server.Listeners()},
 	}
 	application.proxyCancel = cancel
 	t.Cleanup(application.releaseProxy)
@@ -275,7 +275,7 @@ func testProxyApp(t *testing.T) (*app, *gotrustproxy.Server) {
 // use" on every retry until the process exited.
 func TestRestartProxyClosesTheOldListenersBeforeBinding(t *testing.T) {
 	application, old := testProxyApp(t)
-	address := old.Addresses()[0]
+	address := old.Listeners()[0].Address
 
 	if err := application.restartProxy(); err != nil {
 		t.Fatalf("restart the proxy on %s: %v", address, err)
@@ -283,12 +283,12 @@ func TestRestartProxyClosesTheOldListenersBeforeBinding(t *testing.T) {
 
 	application.mu.RLock()
 	server := application.proxy
-	addresses := application.view.Addresses
+	addresses := application.view.Listeners
 	application.mu.RUnlock()
 	if server == nil || server == old {
 		t.Fatal("the proxy was not replaced")
 	}
-	if len(addresses) != 1 || addresses[0] != address {
+	if len(addresses) != 1 || addresses[0].Address != address {
 		t.Fatalf("addresses = %v, want [%s]", addresses, address)
 	}
 }
@@ -297,7 +297,7 @@ func TestRestartProxyClosesTheOldListenersBeforeBinding(t *testing.T) {
 // the dead session and must be released, or 连接 can never bind them again.
 func TestTerminalSessionFailureReleasesTheProxyListeners(t *testing.T) {
 	application, old := testProxyApp(t)
-	address := old.Addresses()[0]
+	address := old.Listeners()[0].Address
 
 	application.onSessionState(session.State{
 		Phase:     session.PhaseFailed,
@@ -313,7 +313,7 @@ func TestTerminalSessionFailureReleasesTheProxyListeners(t *testing.T) {
 
 	application.mu.RLock()
 	server := application.proxy
-	addresses := application.view.Addresses
+	addresses := application.view.Listeners
 	application.mu.RUnlock()
 	if server != nil || addresses != nil {
 		t.Fatalf("proxy = %v addresses = %v", server, addresses)
@@ -604,7 +604,7 @@ func TestAProxyBoundAfterReleaseClosesItself(t *testing.T) {
 
 	application.mu.RLock()
 	installed := application.proxy
-	addresses := application.view.Addresses
+	addresses := application.view.Listeners
 	application.mu.RUnlock()
 	if installed != nil || addresses != nil {
 		t.Fatalf("proxy = %v addresses = %v", installed, addresses)

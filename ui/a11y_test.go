@@ -5,6 +5,7 @@ package ui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -104,7 +105,7 @@ func TestMainWindowTabOrder(t *testing.T) {
 	tester := ui.NewTester(View(&state, Actions{}), 540, 640)
 	tester.Frame()
 
-	for _, want := range []string{"连接", "设置", "退出"} {
+	for _, want := range []string{"连接", "复制配置", "⋯"} {
 		tester.Key(0, ui.KeyTab)
 		tester.Frame()
 		if !tester.Focused(want) {
@@ -140,25 +141,27 @@ func TestSettingsTabOrderReachesTheActions(t *testing.T) {
 	}
 }
 
-// The status line reports a failure in the danger colour; no other action
-// result may claim that colour.
-func TestStatusLineTone(t *testing.T) {
+// An action's result is reported once, as a toast: the window keeps no line
+// for it, so the resources keep their room, and the toast goes away by itself.
+func TestActionResultsShowAsToasts(t *testing.T) {
 	state := State{
 		Session:     session.State{Phase: session.PhaseIdle, Detail: "未连接"},
 		Config:      config.Default(),
 		Status:      "打开失败: no browser",
+		StatusSeq:   1,
 		StatusError: true,
 	}
 	tester := ui.NewTester(View(&state, Actions{}), 540, 640)
+	tester.Frame()
+	tester.Advance(250 * time.Millisecond)
 	tester.Frame()
 	if !tester.HasText("打开失败: no browser") {
 		t.Fatalf("the failure is missing; texts: %v", tester.Texts())
 	}
 
-	state.StatusError = false
-	tester = ui.NewTester(View(&state, Actions{}), 540, 640)
+	tester.Advance(5 * time.Second)
 	tester.Frame()
-	if !tester.HasText("打开失败: no browser") {
-		t.Fatal("the note disappeared")
+	if tester.HasText("打开失败: no browser") {
+		t.Fatal("the toast outlived its timeout")
 	}
 }

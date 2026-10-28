@@ -511,93 +511,101 @@ func splitTargets(text string) []string {
 func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Context) {
 	return func(c *ui.Context) {
 		state.refresh()
-		if state.Password != nil {
-			ui.Column(c).Fill().Padding(windowPadding).Gap(sectionGap).Children(func() {
-				ui.Scroll(c).Grow(1).Children(func() {
-					settingsPasswordPanel(c, state, actions)
-				})
-				ui.Divider(c)
-				ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
-					if ui.Button(c, locales.CommonClose()).Disabled(state.PasswordBusy).Clicked() && actions.Close != nil {
-						actions.Close()
-					}
-				})
-			})
-			return
-		}
-		// A discovered list belongs to the gateway it was read from, and the
-		// gateway is edited in this window. Drop it as soon as the address or
-		// the port names something else, before the picker can store another
-		// gateway's method.
-		state.dropStaleMethods()
-		index, profile := state.selection()
-		if profile == nil {
-			ui.Text(c, locales.ErrNoProfiles())
-			return
-		}
-		names := state.Draft.ProfileNames()
-		active := state.ActiveAtOpen
-		enabled := profile.Keep.IsEnabled()
-
-		ui.Column(c).Fill().Padding(windowPadding).Gap(sectionGap).Children(func() {
-			ui.Column(c).Gap(6).Children(func() {
-				windowHeading(c, locales.SettingsTitle())
-				caption(c, locales.SettingsHint())
-				if active != "" && active != profile.Name {
-					captionTone(c, locales.SettingsSwitchHint(profile.Name), toneWarning)
-				}
-			})
-
-			ui.Scroll(c).Grow(1).Children(func() {
-				ui.Column(c).Gap(sectionGap).Children(func() {
-					ui.Form(c, func() {
-						profileSection(c, state, actions, names)
-						// 新建/复制/删除 change the list and the selection
-						// from inside this frame. Re-read them before the
-						// sections that index the profile buffers, or the
-						// rest of the frame works on a profile that is gone.
-						index, profile = state.selection()
-						if profile == nil {
-							return
-						}
-						enabled = profile.Keep.IsEnabled()
-						connectionSection(c, state, actions, profile, index)
-						proxySection(c, state)
-						keepAliveSection(c, state, profile, &enabled, index)
-						startupSection(c, state, actions)
-						// The live terminal list is the portal's own view of
-						// this account, so it sits above the advanced fields.
-						terminalSection(c, state, actions)
-						advancedSection(c, state, profile, actions)
-						languageSection(c, state, actions)
-					})
-				})
-			})
-
-			ui.Divider(c)
-			if state.Status != "" {
-				line := ui.Text(c, state.Status).FontSize(c.Theme().FontSize)
-				if state.StatusError {
-					line.TextColor(c.Theme().Danger)
-				} else {
-					line.TextColor(c.Theme().TextMuted)
-				}
-			}
-			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-				if ui.PrimaryButton(c, locales.CommonSave()).Clicked() && actions.Save != nil {
-					actions.Save()
-				}
-				if ui.Button(c, locales.CommonClose()).Clicked() && actions.Close != nil {
-					actions.Close()
-				}
-				if state.Busy {
-					busyLine(c)
-				}
+		ui.Column(c).Fill().Children(func() {
+			titleBar(c, "")
+			ui.Column(c).Grow(1).Shrink(1).Padding(windowPadding).Gap(sectionGap).Children(func() {
+				settingsBody(c, state, actions)
 			})
 		})
 	}
 }
 
+// settingsBody is the form under the title bar, or the gateway's password
+// change, which takes the whole body until it is answered.
+func settingsBody(c *ui.Context, state *SettingsState, actions SettingsActions) {
+	if state.Password != nil {
+		ui.Scroll(c).Grow(1).Shrink(1).Children(func() {
+			settingsPasswordPanel(c, state, actions)
+		})
+		ui.Divider(c)
+		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
+			if ui.Button(c, locales.CommonClose()).Disabled(state.PasswordBusy).Clicked() && actions.Close != nil {
+				actions.Close()
+			}
+		})
+		return
+	}
+	// A discovered list belongs to the gateway it was read from, and the
+	// gateway is edited in this window. Drop it as soon as the address or
+	// the port names something else, before the picker can store another
+	// gateway's method.
+	state.dropStaleMethods()
+	index, profile := state.selection()
+	if profile == nil {
+		ui.Text(c, locales.ErrNoProfiles())
+		return
+	}
+	names := state.Draft.ProfileNames()
+	active := state.ActiveAtOpen
+	enabled := profile.Keep.IsEnabled()
+
+	ui.Column(c).Grow(1).Shrink(1).Gap(sectionGap).Children(func() {
+		ui.Column(c).Gap(6).Children(func() {
+			windowHeading(c, locales.SettingsTitle())
+			caption(c, locales.SettingsHint())
+			if active != "" && active != profile.Name {
+				captionTone(c, locales.SettingsSwitchHint(profile.Name), toneWarning)
+			}
+		})
+
+		ui.Scroll(c).Grow(1).Shrink(1).Children(func() {
+			ui.Column(c).Gap(sectionGap).Children(func() {
+				ui.Form(c, func() {
+					profileSection(c, state, actions, names)
+					// 新建/复制/删除 change the list and the selection
+					// from inside this frame. Re-read them before the
+					// sections that index the profile buffers, or the
+					// rest of the frame works on a profile that is gone.
+					index, profile = state.selection()
+					if profile == nil {
+						return
+					}
+					enabled = profile.Keep.IsEnabled()
+					connectionSection(c, state, actions, profile, index)
+					proxySection(c, state)
+					keepAliveSection(c, state, profile, &enabled, index)
+					startupSection(c, state, actions)
+					// The live terminal list is the portal's own view of
+					// this account, so it sits above the advanced fields.
+					terminalSection(c, state, actions)
+					advancedSection(c, state, profile, actions)
+					languageSection(c, state, actions)
+				})
+			})
+		})
+
+		ui.Divider(c)
+		if state.Status != "" {
+			line := ui.Text(c, state.Status).FontSize(c.Theme().FontSize)
+			if state.StatusError {
+				line.TextColor(toneInk(c.Theme(), toneDanger))
+			} else {
+				line.TextColor(c.Theme().TextMuted)
+			}
+		}
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			if ui.PrimaryButton(c, locales.CommonSave()).Clicked() && actions.Save != nil {
+				actions.Save()
+			}
+			if ui.Button(c, locales.CommonClose()).Clicked() && actions.Close != nil {
+				actions.Close()
+			}
+			if state.Busy {
+				busyLine(c)
+			}
+		})
+	})
+}
 func profileSection(c *ui.Context, state *SettingsState, actions SettingsActions, names []string) {
 	ui.Fieldset(c, locales.ProfileSection(), func() {
 		ui.Field(c, locales.CurrentProfile(), func() {
@@ -928,7 +936,7 @@ func terminalSection(c *ui.Context, state *SettingsState, actions SettingsAction
 		if state.TrustStatus != "" {
 			line := caption(c, state.TrustStatus)
 			if state.TrustError {
-				line.TextColor(c.Theme().Danger)
+				line.TextColor(toneInk(c.Theme(), toneDanger))
 			}
 		}
 	})

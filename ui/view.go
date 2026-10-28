@@ -11,12 +11,14 @@ package ui
 import (
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/proxy"
 	"github.com/YangtseSu/goTrust/core/session"
 	"github.com/YangtseSu/goTrust/locales"
 )
@@ -27,14 +29,16 @@ type State struct {
 	// Config is the settings in effect. The main window shows the active
 	// profile; editing happens in the settings window.
 	Config config.Config
-	// Addresses are the bound proxy listeners.
-	Addresses []string
+	// Listeners are the bound proxy endpoints.
+	Listeners []proxy.Listener
 	// PACURL is the loopback PAC a browser or extension can use, empty while
 	// the endpoint is disabled.
 	PACURL string
-	// Status is a one-line message about the last user action. StatusError
-	// paints it as a failure instead of a note.
+	// Status is a one-line message about the last user action. The window shows
+	// it once, as a toast; StatusSeq increases with every new message, so the
+	// same text twice is reported twice. StatusError reports a failure.
 	Status      string
+	StatusSeq   uint64
 	StatusError bool
 	// Busy disables the controls that would race a login or a logout.
 	Busy bool
@@ -113,76 +117,164 @@ type Actions struct {
 	CopyResource func(string)
 	CopyPAC      func()
 	CopyClash    func(ClashFormat)
+	// OpenLogs opens the log directory in the desktop's file manager.
+	OpenLogs func()
 }
 
 // View renders one frame of the main window.
 func View(state *State, actions Actions) func(c *ui.Context) {
 	return func(c *ui.Context) {
-		ui.Column(c).Fill().Padding(windowPadding).Gap(sectionGap).Children(func() {
-			header(c, state)
-			switch {
-			case state.Choice != nil:
-				choicePanel(c, state, actions)
-			case state.Captcha != nil:
-				captchaPanel(c, state, actions)
-			case state.Code != nil:
-				codePanel(c, state, actions)
-			case state.External != nil:
-				externalPanel(c, state, actions)
-			case state.DeviceBind != nil:
-				deviceBindPanel(c, state, actions)
-			case state.Password != nil:
-				passwordPanel(c, state, actions)
-			case state.Setup != nil:
-				setupPanel(c, state, actions)
-			default:
-				controls(c, state, actions)
-				resources(c, state, actions)
+		root := ui.Column(c).Fill()
+		statusToast(c, root, state)
+		root.Children(func() {
+			titleBar(c, activeProfileName(state.Config))
+			ui.Column(c).Grow(1).Shrink(1).Padding(windowPadding).Gap(sectionGap).Children(func() {
+				header(c, state, actions)
+				switch {
+				case state.Choice != nil:
+					choicePanel(c, state, actions)
+				case state.Captcha != nil:
+					captchaPanel(c, state, actions)
+				case state.Code != nil:
+					codePanel(c, state, actions)
+				case state.External != nil:
+					externalPanel(c, state, actions)
+				case state.DeviceBind != nil:
+					deviceBindPanel(c, state, actions)
+				case state.Password != nil:
+					passwordPanel(c, state, actions)
+				case state.Setup != nil:
+					setupPanel(c, state, actions)
+				default:
+					resources(c, state, actions)
+				}
+				footer(c, state)
+			})
+		})
+	}
+}
+
+// TitleBarHeight is the strip a window with a hidden frame draws: the room its
+// desktop window controls sit in. Both windows declare it, so a view drawn in a
+// tester, where no frame reports one, still leaves the same room.
+const TitleBarHeight = 34
+
+// titleBar is the window's own title bar: the brand, at caption size and
+// muted, inside the room the desktop's window controls leave. The strip drags
+// the window and holds no control, so a press anywhere on it moves the window.
+func titleBar(c *ui.Context, profile string) {
+	bar := c.TitleBar()
+	height := bar.Height
+	if height <= 0 {
+		// Without a hidden frame there is no room to keep clear of; the strip
+		// still keeps the two windows aligned.
+		height = TitleBarHeight
+	}
+	ui.Row(c).Height(height).AlignItems(ui.Center).
+		Padding(0, bar.Right+windowPadding/2, 0, bar.Left+windowPadding/2).
+		DragWindow().
+		Children(func() {
+			brand := "goTrust"
+			if profile != "" {
+				brand += " · " + profile
 			}
-			footer(c, state)
+			ui.Text(c, brand).FontSize(textSize(c, captionScale)).TextColor(c.Theme().TextMuted)
 		})
-	}
 }
 
-func header(c *ui.Context, state *State) {
-	ui.Column(c).Gap(6).Children(func() {
-		ui.Row(c).AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-			windowHeading(c, "goTrust")
-			statusChip(c, state)
-		})
-		caption(c, profileSummary(state.Config))
-		if detail := phaseDetail(state.Session); detail != "" && detail != phaseLabel(state.Session) {
-			detailLine(c, detail, phaseTone(state.Session.Phase))
-		}
-	})
-}
-
-// detailLine is the one-line explanation under the header: muted while
-// nothing is wrong, and in the phase's colour when the session reports a
-// warning or a failure, so the reason is not quieter than the label.
-func detailLine(c *ui.Context, text string, t tone) {
-	line := ui.Text(c, text).FontSize(c.Theme().FontSize)
-	if t == toneWarning || t == toneDanger {
-		line.TextColor(toneInk(c.Theme(), t))
-	} else {
-		line.TextColor(c.Theme().TextMuted)
-	}
-}
-
-// profileSummary names the active account and where it connects.
-func profileSummary(cfg config.Config) string {
+// activeProfileName is the account the window is showing, as the title bar
+// names it: the strip is the one place that stays true across every panel.
+func activeProfileName(cfg config.Config) string {
 	name := cfg.ActiveProfile
 	if name == "" {
 		name = config.DefaultProfileName
 	}
-	profile := cfg.Active()
-	if profile.ServerAddress() == "" {
-		return locales.ProfileUnconfigured(name)
-	}
-	return locales.ProfileTarget(name, profile.ServerAddress(), profile.Server.Port)
+	return locales.ProfileName(name)
 }
 
-// phaseLabel is the short word next to the title.
+// statusToast reports the last action's result once. The window never keeps it
+// on screen: a result is something that happened, not a permanent line.
+func statusToast(c *ui.Context, root ui.Element, state *State) {
+	if state.Status == "" {
+		return
+	}
+	shown := ui.Local[uint64](root, "status-seq", func() uint64 { return 0 })
+	if shown == nil || *shown == state.StatusSeq {
+		return
+	}
+	*shown = state.StatusSeq
+	c.AddToast(ui.Toast{ID: "status", Title: state.Status})
+}
+
+// header is the state and what it acts on: the phase as the window's headline,
+// its actions on the same line, and one line of session facts under them.
+func header(c *ui.Context, state *State, actions Actions) {
+	ui.Column(c).Gap(6).Children(func() {
+		// Wrap: at the declared minimum width the three actions do not fit
+		// beside the headline, and a clipped ⋯ would hide settings and quit.
+		ui.Row(c).Wrap().AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(rowGap).Children(func() {
+			statusChip(c, state)
+			controls(c, state, actions)
+		})
+		if state.Setup == nil {
+			// The first-run panel says what is missing itself; repeating it
+			// above the form would spend the height the form needs.
+			subline(c, state)
+		}
+	})
+}
+
+// subline is the one line under the state: where it connects, what the gateway
+// assigned, and how long it has held. A failure or the reconnect ladder
+// replaces the timing, in the tone that reports it.
+func subline(c *ui.Context, state *State) {
+	text, t := sessionSummary(state, c.Now())
+	if t == toneNeutral {
+		caption(c, text)
+		return
+	}
+	captionTone(c, text, t)
+}
+
+// sessionSummary builds the subline: the endpoint first, then the fact that
+// makes the phase readable on its own.
+func sessionSummary(state *State, now time.Time) (string, tone) {
+	profile := state.Config.Active()
+	if profile.ServerAddress() == "" {
+		// The title bar already names the profile; the subline says what is
+		// missing from it.
+		return locales.ProfileUnconfigured(), toneNeutral
+	}
+	parts := []string{locales.SessionEndpoint(profile.ServerAddress(), profile.Server.Port)}
+	live := state.Session
+	switch live.Phase {
+	case session.PhaseFailed:
+		if live.Detail != "" {
+			parts = append(parts, live.Detail)
+		}
+		return strings.Join(parts, " · "), toneDanger
+	case session.PhaseReconnecting:
+		return strings.Join(append(parts, reconnectLabel(live.Reconnect)), " · "), toneWarning
+	case session.PhaseOnline:
+		if live.ClientIP != "" {
+			parts = append(parts, locales.SessionIntranet(live.ClientIP))
+		}
+		if !live.Since.IsZero() {
+			minutes := int(now.Sub(live.Since).Round(time.Minute) / time.Minute)
+			if minutes < 1 {
+				minutes = 1
+			}
+			parts = append(parts, locales.SessionHeldMinutes(minutes))
+		}
+	case session.PhaseConnecting:
+		if live.Detail != "" {
+			parts = append(parts, live.Detail)
+		}
+	}
+	return strings.Join(parts, " · "), toneNeutral
+}
+
+// phaseLabel is the short word of the phase.
 func phaseLabel(s session.State) string {
 	switch s.Phase {
 	case session.PhaseOnline:
@@ -195,31 +287,6 @@ func phaseLabel(s session.State) string {
 		return locales.StatusFailed()
 	default:
 		return locales.StatusOffline()
-	}
-}
-
-// phaseDetail explains the phase in one line, including how long it has held.
-func phaseDetail(s session.State) string {
-	if s.Phase == session.PhaseReconnecting {
-		if s.Reconnect.Attempt == 0 {
-			return locales.SessionDetailConnecting(s.Detail)
-		}
-		return reconnectLabel(s.Reconnect)
-	}
-	if s.Since.IsZero() {
-		return s.Detail
-	}
-	held := time.Since(s.Since).Round(time.Second).String()
-	switch s.Phase {
-	case session.PhaseOnline:
-		if s.ClientIP != "" {
-			return locales.SessionDetailClientIP(s.Detail, s.ClientIP, held)
-		}
-		return locales.SessionDetailHeld(s.Detail, held)
-	case session.PhaseConnecting:
-		return locales.SessionDetailConnecting(s.Detail)
-	default:
-		return s.Detail
 	}
 }
 
@@ -327,42 +394,58 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 	})
 }
 
+// controls are the window's actions, next to the state: one primary action,
+// the copy menu, and an overflow for everything that is not part of the
+// session. Every action has exactly one control here.
 func controls(c *ui.Context, state *State, actions Actions) {
-	ui.Column(c).Gap(rowGap).Children(func() {
-		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-			if phaseActive(state.Session.Phase) {
-				// 断开 stays available while a login runs: it is how a login
-				// waiting on the network or on a prompt is cancelled.
-				if ui.Button(c, locales.Disconnect()).Clicked() && actions.Logout != nil {
-					actions.Logout()
-				}
-			} else if ui.PrimaryButton(c, locales.Connect()).Disabled(state.Busy).Clicked() && actions.Login != nil {
-				actions.Login()
+	ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+		switch {
+		case state.Setup != nil:
+			// The first-run panel owns 连接 while it is up: its own primary
+			// saves the form and signs in, so a second copy here would be a
+			// second way to do the same thing with different failures.
+		case phaseActive(state.Session.Phase):
+			// 断开 stays available while a login runs: it is how a login
+			// waiting on the network or on a prompt is cancelled.
+			if ui.Button(c, locales.Disconnect()).Clicked() && actions.Logout != nil {
+				actions.Logout()
 			}
-			if ui.Button(c, locales.SettingsAction()).Clicked() && actions.Settings != nil {
-				actions.Settings()
-			}
-			if ui.Button(c, locales.CopyPAC()).Disabled(state.PACURL == "").Clicked() && actions.CopyPAC != nil {
+		case ui.PrimaryButton(c, locales.Connect()).Disabled(state.Busy).Clicked() && actions.Login != nil:
+			actions.Login()
+		}
+		if state.Busy {
+			busyLine(c)
+		}
+		ui.MenuButton(c, locales.CopyConfig(), func(menu *ui.Menu) {
+			if menu.Item(locales.CopyPAC()).Disabled(state.PACURL == "").Chosen() && actions.CopyPAC != nil {
 				actions.CopyPAC()
 			}
-			if ui.Button(c, locales.Quit()).Clicked() && actions.Quit != nil {
+			menu.Separator()
+			for _, format := range []struct {
+				label  string
+				format ClashFormat
+			}{
+				{locales.ClashPlain(), ClashPlain},
+				{locales.ClashScript(), ClashScript},
+				{locales.ClashConfig(), ClashConfig},
+			} {
+				if menu.Item(format.label).Chosen() && actions.CopyClash != nil {
+					actions.CopyClash(format.format)
+				}
+			}
+		})
+		ui.MenuButton(c, "⋯", func(menu *ui.Menu) {
+			if menu.Item(locales.SettingsAction()).Chosen() && actions.Settings != nil {
+				actions.Settings()
+			}
+			if menu.Item(locales.OpenLogsMenu()).Disabled(actions.OpenLogs == nil).Chosen() && actions.OpenLogs != nil {
+				actions.OpenLogs()
+			}
+			menu.Separator()
+			if menu.Item(locales.Quit()).Chosen() && actions.Quit != nil {
 				actions.Quit()
 			}
-			if state.Busy {
-				busyLine(c)
-			}
-		})
-		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-			if ui.Button(c, locales.ClashPlain()).Clicked() && actions.CopyClash != nil {
-				actions.CopyClash(ClashPlain)
-			}
-			if ui.Button(c, locales.ClashScript()).Clicked() && actions.CopyClash != nil {
-				actions.CopyClash(ClashScript)
-			}
-			if ui.Button(c, locales.ClashConfig()).Clicked() && actions.CopyClash != nil {
-				actions.CopyClash(ClashConfig)
-			}
-		})
+		}).Description(locales.MoreActions())
 	})
 }
 
@@ -383,7 +466,7 @@ func phaseActive(phase session.Phase) bool {
 func resources(c *ui.Context, state *State, actions Actions) {
 	granted := state.Session.Resources
 
-	ui.Column(c).Grow(1).Gap(rowGap).Children(func() {
+	ui.Column(c).Grow(1).Shrink(1).Gap(rowGap).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
 			sectionHeading(c, locales.ResourcesTitle())
 			caption(c, locales.ResourceCount(len(granted.Entries)))
@@ -401,7 +484,7 @@ func resources(c *ui.Context, state *State, actions Actions) {
 			return
 		}
 
-		ui.Scroll(c).Grow(1).Children(func() {
+		ui.Scroll(c).Grow(1).Shrink(1).Children(func() {
 			ui.Column(c).Gap(2).Children(func() {
 				for index, entry := range granted.Entries {
 					if index > 0 {
@@ -451,30 +534,73 @@ func keepAliveTone(keepAlive session.KeepAliveState) tone {
 	}
 }
 
+// footer is one quiet line: which listeners are up, and how long ago the
+// session was last proved alive. The PAC URL and the probe's own result sit in
+// the tooltip, so the line stays a line.
 func footer(c *ui.Context, state *State) {
+	line, detail, t := footerContent(state, c.Now())
 	ui.Divider(c)
-	ui.Column(c).Gap(4).Children(func() {
-		if len(state.Addresses) == 0 {
-			caption(c, locales.ProxyDisabled())
-		} else {
-			for _, address := range state.Addresses {
-				caption(c, locales.ProxyListening(address))
-			}
+	text := ui.Text(c, line).FontSize(textSize(c, captionScale)).MaxLines(2)
+	if t == toneNeutral {
+		text.TextColor(c.Theme().TextMuted)
+	} else {
+		text.TextColor(toneInk(c.Theme(), t))
+	}
+	if len(detail) == 0 {
+		return
+	}
+	text.Description(strings.Join(detail, " · "))
+	footerTip(c, text, detail)
+}
+
+// footerContent builds the footer line and what the tooltip adds to it. Only a
+// warning or a failure colours the line: a healthy probe is not news.
+func footerContent(state *State, now time.Time) (string, []string, tone) {
+	parts := make([]string, 0, len(state.Listeners)+1)
+	for _, listener := range state.Listeners {
+		parts = append(parts, listener.Protocol+" "+listener.Address)
+	}
+	if len(state.Listeners) == 0 {
+		parts = append(parts, locales.ProxyDisabled())
+	}
+
+	detail := make([]string, 0, 2)
+	if state.PACURL != "" {
+		detail = append(detail, locales.PacURL(state.PACURL))
+	}
+	t := toneNeutral
+	if keepAlive := state.Session.KeepAlive; !keepAlive.At.IsZero() {
+		seconds := int(now.Sub(keepAlive.At) / time.Second)
+		if seconds < 0 {
+			seconds = 0
 		}
-		if state.PACURL != "" {
-			caption(c, locales.PacURL(state.PACURL))
+		parts = append(parts, locales.KeepAliveAgo(seconds))
+		switch probe := keepAliveTone(keepAlive); probe {
+		case toneWarning, toneDanger:
+			t = probe
 		}
-		if summary := KeepAliveSummary(state.Session.KeepAlive); summary != "" {
-			captionTone(c, locales.KeepAliveLine(summary), keepAliveTone(state.Session.KeepAlive))
+		if summary := KeepAliveSummary(keepAlive); summary != "" {
+			detail = append(detail, locales.KeepAliveLine(summary))
 		}
-		if state.Status != "" {
-			line := ui.Text(c, state.Status).FontSize(c.Theme().FontSize)
-			if state.StatusError {
-				line.TextColor(toneInk(c.Theme(), toneDanger))
-			} else {
-				line.TextColor(c.Theme().TextMuted)
-			}
-		}
+	}
+	return strings.Join(parts, " · "), detail, t
+}
+
+// footerTip shows the footer's details above the line, one per row, in the
+// inverse look the theme gives a tooltip.
+func footerTip(c *ui.Context, anchor ui.Element, lines []string) {
+	ui.TooltipBase(c, anchor, func(tip ui.Element) {
+		tip.Padding(6, 10).Radius(6).MaxWidth(360).
+			Background(c.Theme().Text).TextColor(c.Theme().Background).
+			FontSize(textSize(c, captionScale)).
+			AttachTo(anchor, ui.AnchorTop, ui.AnchorBottom).Margin(0, 0, 6, 0)
+		tip.Children(func() {
+			ui.Column(c).Gap(2).Children(func() {
+				for _, line := range lines {
+					ui.Text(c, line)
+				}
+			})
+		})
 	})
 }
 

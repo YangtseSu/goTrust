@@ -146,8 +146,8 @@ func setupPanel(c *ui.Context, state *State, actions Actions) {
 	draft := state.Setup
 	busy := state.Busy
 
-	ui.Column(c).Grow(1).Gap(sectionGap).Children(func() {
-		ui.Scroll(c).Grow(1).Children(func() {
+	ui.Column(c).Grow(1).Shrink(1).Gap(sectionGap).Children(func() {
+		ui.Scroll(c).Grow(1).Shrink(1).Children(func() {
 			ui.Column(c).Gap(sectionGap).Children(func() {
 				ui.Column(c).Gap(6).Children(func() {
 					panelHeading(c, locales.SetupTitle())

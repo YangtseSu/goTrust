@@ -12,6 +12,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/proxy"
 	"github.com/YangtseSu/goTrust/core/session"
 )
 
@@ -72,8 +73,11 @@ func TestProfileSummaryShowsTheActiveAccount(t *testing.T) {
 	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
 	tester.Frame()
 
-	if !tester.HasText("配置 默认 ｜ vpn.example.com:443") {
-		t.Fatalf("profile summary missing; texts: %v", tester.Texts())
+	if !tester.HasText("goTrust · 配置 默认") {
+		t.Fatalf("the active account is missing from the title bar; texts: %v", tester.Texts())
+	}
+	if !tester.HasText("vpn.example.com:443") {
+		t.Fatalf("the endpoint is missing from the subline; texts: %v", tester.Texts())
 	}
 	if tester.HasText("hunter2") {
 		t.Fatal("a password is painted on the main window")
@@ -131,17 +135,22 @@ func TestSettingsButtonOpensTheWindow(t *testing.T) {
 		Config:  config.Default(),
 	}
 	tester := ui.NewTester(View(&state, Actions{Settings: func() { opened++ }}), 520, 560)
-	if err := tester.Click("设置"); err != nil {
-		t.Fatalf("click settings: %v", err)
+	tester.Frame()
+	if err := tester.Click("⋯"); err != nil {
+		t.Fatalf("open the overflow: %v", err)
+	}
+	if err := tester.ChooseMenuItem("设置"); err != nil {
+		t.Fatalf("choose settings: %v", err)
 	}
 	if opened != 1 {
 		t.Fatalf("settings calls = %d, want 1", opened)
 	}
 }
 
-// The listener addresses are what the user copies into another application, so
-// the view has to show every one of them.
-func TestAddressesAndKeepAliveAreListed(t *testing.T) {
+// The footer is one line: which listeners are up and how long ago the session
+// was proved alive. The probe's own result is one hover away, not a second line
+// that pushes the resources up.
+func TestListenersAndKeepAliveAreListed(t *testing.T) {
 	state := State{
 		Session: session.State{
 			Phase:  session.PhaseOnline,
@@ -153,20 +162,33 @@ func TestAddressesAndKeepAliveAreListed(t *testing.T) {
 				At:     time.Now(),
 			},
 		},
-		Config:    config.Default(),
-		Addresses: []string{"127.0.0.1:1080", "127.0.0.1:1081"},
+		Config: config.Default(),
+		Listeners: []proxy.Listener{
+			{Protocol: proxy.ProtocolSOCKS5, Address: "127.0.0.1:1080"},
+			{Protocol: proxy.ProtocolHTTP, Address: "127.0.0.1:1081"},
+		},
 	}
 
 	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
 	tester.Frame()
 
-	for _, address := range state.Addresses {
-		if !tester.HasText("代理监听 " + address) {
-			t.Fatalf("address %q is missing from the view", address)
-		}
+	line := "SOCKS5 127.0.0.1:1080 · HTTP 127.0.0.1:1081 · 保活 0 秒前"
+	if !tester.HasText(line) {
+		t.Fatalf("the footer line is missing; texts: %v", tester.Texts())
 	}
-	if !tester.HasText("保活 OK 200") {
-		t.Fatal("the keep-alive result is missing")
+	if tester.HasText("保活 OK 200") {
+		t.Fatal("the probe detail is printed in the footer instead of its tooltip")
+	}
+
+	anchor, ok := tester.Find(line)
+	if !ok {
+		t.Fatalf("no element shows %q", line)
+	}
+	tester.Move(anchor.X+anchor.W/2, anchor.Y+anchor.H/2)
+	tester.Advance(700 * time.Millisecond)
+	tester.Frame()
+	if !tester.HasText("保活 OK 200 · http://192.0.2.10/") {
+		t.Fatalf("the probe detail is missing from the tooltip; texts: %v", tester.Texts())
 	}
 }
 
@@ -407,6 +429,8 @@ func labels(items []*mygo.MenuItem) []string {
 // The ladder says which attempt is next and how long the wait is; that is the
 // only place a user learns the app is retrying instead of hanging.
 func TestReconnectCountdownIsRendered(t *testing.T) {
+	cfg := config.Default()
+	cfg.Profiles[0].Server.Address = "vpn.example.com"
 	state := State{
 		Session: session.State{
 			Phase:  session.PhaseReconnecting,
@@ -418,7 +442,7 @@ func TestReconnectCountdownIsRendered(t *testing.T) {
 			},
 			Since: time.Now(),
 		},
-		Config: config.Default(),
+		Config: cfg,
 	}
 
 	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
@@ -510,8 +534,12 @@ func TestClashButtonsCopyEachFormat(t *testing.T) {
 				copied = append(copied, format)
 			}}
 			tester := ui.NewTester(View(&state, actions), 520, 620)
-			if err := tester.Click(testCase.label); err != nil {
-				t.Fatalf("click %q: %v", testCase.label, err)
+			tester.Frame()
+			if err := tester.Click("复制配置"); err != nil {
+				t.Fatalf("open the copy menu: %v", err)
+			}
+			if err := tester.ChooseMenuItem(testCase.label); err != nil {
+				t.Fatalf("choose %q: %v", testCase.label, err)
 			}
 			if len(copied) != 1 || copied[0] != testCase.want {
 				t.Fatalf("copied = %v, want [%s]", copied, testCase.want)

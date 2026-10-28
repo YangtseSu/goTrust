@@ -15,6 +15,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/core/config"
+	"github.com/YangtseSu/goTrust/core/proxy"
 	"github.com/YangtseSu/goTrust/core/session"
 )
 
@@ -73,11 +74,19 @@ func renderStates(t *testing.T, dir, lang string) {
 		KeepAlive: session.KeepAliveState{Target: "http://192.0.2.10/", Status: 200, OK: true, At: time.Now()},
 	}
 
+	// A hidden title bar leaves the desktop's window controls in the top
+	// right; the renders reserve the room a Linux desktop's three buttons take.
+	testerTitleBar := ui.TitleBar{Height: TitleBarHeight, Right: 120}
+
 	save := func(name string, tester *ui.Tester) {
 		t.Helper()
 		if lang != "zh" {
 			name += "-" + lang
 		}
+		tester.SetTitleBar(testerTitleBar)
+		tester.Frame()
+		// The toast fades in; one frame at its start is transparent.
+		tester.Advance(250 * time.Millisecond)
 		tester.Frame()
 		file, err := os.Create(filepath.Join(dir, name+".png"))
 		if err != nil {
@@ -100,10 +109,11 @@ func renderStates(t *testing.T, dir, lang string) {
 		{
 			name: "main-connecting",
 			state: State{
-				Session: session.State{Phase: session.PhaseConnecting, Detail: "正在登录", Since: time.Now()},
-				Config:  cfg,
-				Status:  "正在连接 vpn.example.com:443",
-				Busy:    true,
+				Session:   session.State{Phase: session.PhaseConnecting, Detail: "正在登录", Since: time.Now()},
+				Config:    cfg,
+				Status:    "正在连接 vpn.example.com:443",
+				StatusSeq: 1,
+				Busy:      true,
 			},
 		},
 		{
@@ -111,7 +121,7 @@ func renderStates(t *testing.T, dir, lang string) {
 			state: State{
 				Session:   online,
 				Config:    cfg,
-				Addresses: []string{"127.0.0.1:1080", "127.0.0.1:1081"},
+				Listeners: renderListeners(),
 			},
 		},
 		{
@@ -133,6 +143,7 @@ func renderStates(t *testing.T, dir, lang string) {
 				Session:     session.State{Phase: session.PhaseFailed, Detail: "认证失败：账号或密码错误", Since: time.Now()},
 				Config:      cfg,
 				Status:      "登录失败，请检查设置",
+				StatusSeq:   1,
 				StatusError: true,
 			},
 		},
@@ -155,7 +166,8 @@ func renderStates(t *testing.T, dir, lang string) {
 					Height: 48,
 					Points: []Point{{X: 30, Y: 24}},
 				},
-				Status: "请在窗口中点击图形验证码",
+				Status:    "请在窗口中点击图形验证码",
+				StatusSeq: 1,
 			},
 		},
 		{
@@ -231,7 +243,7 @@ func renderStates(t *testing.T, dir, lang string) {
 		state := State{
 			Session:   online,
 			Config:    cfg,
-			Addresses: []string{"127.0.0.1:1080", "127.0.0.1:1081"},
+			Listeners: renderListeners(),
 		}
 		tester := ui.NewTester(View(&state, Actions{}), 540, 640)
 		tester.SetDark(true)
@@ -242,9 +254,9 @@ func renderStates(t *testing.T, dir, lang string) {
 		state := State{
 			Session:   online,
 			Config:    cfg,
-			Addresses: []string{"127.0.0.1:1080", "127.0.0.1:1081"},
+			Listeners: renderListeners(),
 		}
-		save("main-small", ui.NewTester(View(&state, Actions{}), 440, 400))
+		save("main-small", ui.NewTester(View(&state, Actions{}), 440, 480))
 	})
 
 	t.Run("settings-small", func(t *testing.T) {
@@ -264,7 +276,7 @@ func renderStates(t *testing.T, dir, lang string) {
 				Strategy: passwordTestStrategy(),
 			},
 		}
-		save("main-password-small", ui.NewTester(View(&state, Actions{}), 440, 400))
+		save("main-password-small", ui.NewTester(View(&state, Actions{}), 440, 480))
 	})
 
 	t.Run("main-setup-small", func(t *testing.T) {
@@ -273,7 +285,7 @@ func renderStates(t *testing.T, dir, lang string) {
 			Config:  fresh,
 			Setup:   NewSetupDraft(fresh.Active()),
 		}
-		save("main-setup-small", ui.NewTester(View(&state, Actions{}), 440, 400))
+		save("main-setup-small", ui.NewTester(View(&state, Actions{}), 440, 480))
 	})
 
 	t.Run("settings-password", func(t *testing.T) {
@@ -289,6 +301,14 @@ func renderStates(t *testing.T, dir, lang string) {
 		tester.SetDark(true)
 		save("settings-dark", tester)
 	})
+}
+
+// renderListeners are the two listeners a session binds by default.
+func renderListeners() []proxy.Listener {
+	return []proxy.Listener{
+		{Protocol: proxy.ProtocolSOCKS5, Address: "127.0.0.1:1080"},
+		{Protocol: proxy.ProtocolHTTP, Address: "127.0.0.1:1081"},
+	}
 }
 
 // renderBitmap is a placeholder captcha image: grey with two dark bars, so the

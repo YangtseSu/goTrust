@@ -194,26 +194,66 @@ func (msgs Messages) BusyText() string {
 	return Catalog.Format(msgs.locale, "busyText", nil)
 }
 
-// ProfileUnconfigured says "配置 {name} ｜ 尚未填写网关"
+// ProfileUnconfigured says "尚未填写网关"
 // in the language the app shows.
-func ProfileUnconfigured(name string) string { return In(i18n.Locale()).ProfileUnconfigured(name) }
+func ProfileUnconfigured() string { return In(i18n.Locale()).ProfileUnconfigured() }
 
-// ProfileUnconfigured says "配置 {name} ｜ 尚未填写网关"
+// ProfileUnconfigured says "尚未填写网关"
 // in the language of msgs.
-func (msgs Messages) ProfileUnconfigured(name string) string {
-	return Catalog.Format(msgs.locale, "profileUnconfigured", map[string]any{"name": name})
+func (msgs Messages) ProfileUnconfigured() string {
+	return Catalog.Format(msgs.locale, "profileUnconfigured", nil)
 }
 
-// ProfileTarget says "配置 {name} ｜ {host}:{port, number}"
+// ProfileName says "配置 {name}"
 // in the language the app shows.
-func ProfileTarget(name string, host string, port int) string {
-	return In(i18n.Locale()).ProfileTarget(name, host, port)
+func ProfileName(name string) string { return In(i18n.Locale()).ProfileName(name) }
+
+// ProfileName says "配置 {name}"
+// in the language of msgs.
+func (msgs Messages) ProfileName(name string) string {
+	return Catalog.Format(msgs.locale, "profileName", map[string]any{"name": name})
 }
 
-// ProfileTarget says "配置 {name} ｜ {host}:{port, number}"
+// SessionEndpoint says "{host}:{port, number}"
+// in the language the app shows.
+func SessionEndpoint(host string, port int) string {
+	return In(i18n.Locale()).SessionEndpoint(host, port)
+}
+
+// SessionEndpoint says "{host}:{port, number}"
 // in the language of msgs.
-func (msgs Messages) ProfileTarget(name string, host string, port int) string {
-	return Catalog.Format(msgs.locale, "profileTarget", map[string]any{"name": name, "host": host, "port": port})
+func (msgs Messages) SessionEndpoint(host string, port int) string {
+	return Catalog.Format(msgs.locale, "sessionEndpoint", map[string]any{"host": host, "port": port})
+}
+
+// SessionIntranet says "内网地址 {ip}"
+// in the language the app shows.
+func SessionIntranet(ip string) string { return In(i18n.Locale()).SessionIntranet(ip) }
+
+// SessionIntranet says "内网地址 {ip}"
+// in the language of msgs.
+func (msgs Messages) SessionIntranet(ip string) string {
+	return Catalog.Format(msgs.locale, "sessionIntranet", map[string]any{"ip": ip})
+}
+
+// SessionHeldMinutes says "{minutes, plural, other {已保持 # 分钟}}"
+// in the language the app shows.
+func SessionHeldMinutes(minutes int) string { return In(i18n.Locale()).SessionHeldMinutes(minutes) }
+
+// SessionHeldMinutes says "{minutes, plural, other {已保持 # 分钟}}"
+// in the language of msgs.
+func (msgs Messages) SessionHeldMinutes(minutes int) string {
+	return Catalog.Format(msgs.locale, "sessionHeldMinutes", map[string]any{"minutes": minutes})
+}
+
+// KeepAliveAgo says "{seconds, plural, other {保活 # 秒前}}"
+// in the language the app shows.
+func KeepAliveAgo(seconds int) string { return In(i18n.Locale()).KeepAliveAgo(seconds) }
+
+// KeepAliveAgo says "{seconds, plural, other {保活 # 秒前}}"
+// in the language of msgs.
+func (msgs Messages) KeepAliveAgo(seconds int) string {
+	return Catalog.Format(msgs.locale, "keepAliveAgo", map[string]any{"seconds": seconds})
 }
 
 // ProfileMissing says "配置 {name} 不存在"
@@ -264,42 +304,6 @@ func ProblemUsername() string { return In(i18n.Locale()).ProblemUsername() }
 // in the language of msgs.
 func (msgs Messages) ProblemUsername() string {
 	return Catalog.Format(msgs.locale, "problemUsername", nil)
-}
-
-// SessionDetailClientIP says "{detail} ｜ 内网地址 {ip} ｜ 已保持 {duration}"
-// in the language the app shows.
-func SessionDetailClientIP(detail string, ip string, duration string) string {
-	return In(i18n.Locale()).SessionDetailClientIP(detail, ip, duration)
-}
-
-// SessionDetailClientIP says "{detail} ｜ 内网地址 {ip} ｜ 已保持 {duration}"
-// in the language of msgs.
-func (msgs Messages) SessionDetailClientIP(detail string, ip string, duration string) string {
-	return Catalog.Format(msgs.locale, "sessionDetailClientIP", map[string]any{"detail": detail, "ip": ip, "duration": duration})
-}
-
-// SessionDetailHeld says "{detail} ｜ 已保持 {duration}"
-// in the language the app shows.
-func SessionDetailHeld(detail string, duration string) string {
-	return In(i18n.Locale()).SessionDetailHeld(detail, duration)
-}
-
-// SessionDetailHeld says "{detail} ｜ 已保持 {duration}"
-// in the language of msgs.
-func (msgs Messages) SessionDetailHeld(detail string, duration string) string {
-	return Catalog.Format(msgs.locale, "sessionDetailHeld", map[string]any{"detail": detail, "duration": duration})
-}
-
-// SessionDetailConnecting says "{detail}…"
-// in the language the app shows.
-func SessionDetailConnecting(detail string) string {
-	return In(i18n.Locale()).SessionDetailConnecting(detail)
-}
-
-// SessionDetailConnecting says "{detail}…"
-// in the language of msgs.
-func (msgs Messages) SessionDetailConnecting(detail string) string {
-	return Catalog.Format(msgs.locale, "sessionDetailConnecting", map[string]any{"detail": detail})
 }
 
 // ReconnectProgress says "重连中 ({attempt, number}/{max, number})"
@@ -508,6 +512,36 @@ func CopyPAC() string { return In(i18n.Locale()).CopyPAC() }
 // in the language of msgs.
 func (msgs Messages) CopyPAC() string {
 	return Catalog.Format(msgs.locale, "copyPAC", nil)
+}
+
+// CopyConfig says "复制配置"
+// in the language the app shows.
+func CopyConfig() string { return In(i18n.Locale()).CopyConfig() }
+
+// CopyConfig says "复制配置"
+// in the language of msgs.
+func (msgs Messages) CopyConfig() string {
+	return Catalog.Format(msgs.locale, "copyConfig", nil)
+}
+
+// MoreActions says "更多操作"
+// in the language the app shows.
+func MoreActions() string { return In(i18n.Locale()).MoreActions() }
+
+// MoreActions says "更多操作"
+// in the language of msgs.
+func (msgs Messages) MoreActions() string {
+	return Catalog.Format(msgs.locale, "moreActions", nil)
+}
+
+// OpenLogsMenu says "打开日志目录"
+// in the language the app shows.
+func OpenLogsMenu() string { return In(i18n.Locale()).OpenLogsMenu() }
+
+// OpenLogsMenu says "打开日志目录"
+// in the language of msgs.
+func (msgs Messages) OpenLogsMenu() string {
+	return Catalog.Format(msgs.locale, "openLogsMenu", nil)
 }
 
 // Quit says "退出"

@@ -227,7 +227,11 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 		return ExitFailure
 	}
 	defer func() { _ = server.Close() }()
-	logf("serving %s", strings.Join(server.Addresses(), ", "))
+	names := make([]string, 0, len(server.Listeners()))
+	for _, listener := range server.Listeners() {
+		names = append(names, listener.Protocol+" "+listener.Address)
+	}
+	logf("serving %s", strings.Join(names, ", "))
 
 	state := manager.State()
 	printGrant(stdout, liveGrant{

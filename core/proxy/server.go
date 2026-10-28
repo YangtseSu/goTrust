@@ -59,7 +59,7 @@ type Server struct {
 	transport *http.Transport
 
 	mu        sync.Mutex
-	listeners []net.Listener
+	listeners []boundListener
 	servers   []*http.Server
 	// conns holds every proxied connection that outlives its handler: hijacked
 	// CONNECT tunnels and accepted SOCKS5 connections. http.Server.Shutdown
@@ -115,16 +115,39 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// Addresses reports the bound listeners, in the form the UI shows the user.
-func (s *Server) Addresses() []string {
+// Listener is one bound proxy endpoint: the protocol it speaks and the address
+// it listens on, as the window shows them.
+type Listener struct {
+	Protocol string
+	Address  string
+}
+
+// The protocols a Listener speaks. They are names, not interface text, so they
+// read the same in every language.
+const (
+	ProtocolSOCKS5 = "SOCKS5"
+	ProtocolHTTP   = "HTTP"
+)
+
+// boundListener is one listening socket and the protocol it speaks.
+type boundListener struct {
+	protocol string
+	net.Listener
+}
+
+// Listeners reports the bound endpoints, in the order they were bound.
+func (s *Server) Listeners() []Listener {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	addresses := make([]string, 0, len(s.listeners))
+	listeners := make([]Listener, 0, len(s.listeners))
 	for _, listener := range s.listeners {
-		addresses = append(addresses, listener.Addr().String())
+		listeners = append(listeners, Listener{
+			Protocol: listener.protocol,
+			Address:  listener.Addr().String(),
+		})
 	}
-	return addresses
+	return listeners
 }
 
 // Close stops every listener and drops every open tunnel. It is safe to call
@@ -257,7 +280,7 @@ func (s *Server) startSOCKS5(ctx context.Context, bind string) error {
 	tracked := &trackedListener{Listener: listener, server: s}
 
 	s.mu.Lock()
-	s.listeners = append(s.listeners, listener)
+	s.listeners = append(s.listeners, boundListener{protocol: ProtocolSOCKS5, Listener: listener})
 	s.mu.Unlock()
 
 	s.logf("SOCKS5 listening on %s", listener.Addr())
@@ -287,7 +310,7 @@ func (s *Server) startHTTP(ctx context.Context, bind string) error {
 	}
 
 	s.mu.Lock()
-	s.listeners = append(s.listeners, listener)
+	s.listeners = append(s.listeners, boundListener{protocol: ProtocolHTTP, Listener: listener})
 	s.servers = append(s.servers, server)
 	s.mu.Unlock()
 
