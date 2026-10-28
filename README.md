@@ -36,7 +36,8 @@ yay -S gotrust-cli    # 无界面版，只依赖 glibc
 ```
 
 发布的包没有代码签名：macOS 会提示开发者来源不明，Windows 会弹出 SmartScreen 提示。
-如需自行构建，见 [`docs/development.md`](docs/development.md)。
+如需自行构建，见 [`docs/development.md`](docs/development.md)；界面与交互的规则见
+[`docs/design.md`](docs/design.md)。
 
 ## 第一次使用
 
