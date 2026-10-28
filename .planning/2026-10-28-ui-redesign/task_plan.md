@@ -12,19 +12,20 @@ new dependency and no change to `core/session`.
 
 ## Next Step
 
-Phase 3: add the text-safe semantic colours to `ui/theme.go`, rework
-`statusChip` so the label reads in `Theme.Text`, remove the two hardcoded font
-sizes, and extend `ui/a11y_test.go` with the contrast assertion. The render
-command is unchanged: `GOTRUST_RENDER_DIR=/tmp/gotrust-ui go test ./ui -run
-TestRenderEveryState`.
+Phase 4: window chrome and main window information architecture. Phase 3 is
+complete: semantic tones have a derived ink that clears 4.5:1 in both
+appearances, the chip's label is `Theme.Text` on the 12% tint, no literal font
+sizes remain, and the render command is unchanged:
+`GOTRUST_RENDER_DIR=/tmp/gotrust-ui go test ./ui -run TestRenderEveryState`.
 
 ## Current Phase
 
-Phase 3: Design tokens. Phase 2 is complete: `locales/{zh,en}.json` hold 302
-messages, `go tool mygo generate` writes their accessors (and imports MyGo's
-zh-Hans widget strings), every view and application message reads them, the
-settings window switches between 跟随系统/中文/English, and both languages are
-rendered and tested.
+Phase 4: Window chrome and main window information architecture. Phase 3 is
+complete: `toneInk` mixes each semantic fill toward the far end of the
+appearance until it clears 4.8:1 on the chip's own tint (light Success
+2.89:1 → 5.06:1), the chip's dot carries that ink while its label reads in
+`Theme.Text` (≥13:1 in both appearances), and `TestToneInkPassesAA` holds the
+line for every tone.
 
 ## Phases
 
@@ -112,14 +113,15 @@ accessors, and one locale the whole app reads.
 - [x] Measure contrast of the semantic colours against both mygo themes
 - [x] Inventory the mygo 0.7.1 widgets a redesign may use (`Tabs`, `MenuButton`,
       `SearchField`, `Icon`, `Toast`, `Tooltip`, `Badge`, `Segmented`)
-- [ ] Add text-safe semantic colours (`successText`, `warningText`,
-      `dangerText`) to `ui/theme.go`, derived per appearance
-- [ ] Rework `statusChip`: semantic colour on the dot only, label in
+- [x] Add the text-safe tone ink to `ui/theme.go` (`toneInk`, plus
+      `chipSurface`, `contrastRatio`, `luminance`), derived per appearance from
+      the theme's own fill instead of a fixed hex
+- [x] Rework `statusChip`: semantic colour on the dot only, label in
       `Theme.Text` on the 12% tint, so the pill passes at caption size
-- [ ] Delete the hardcoded `FontSize(13)` (`ui/settings.go:529`) and
+- [x] Delete the hardcoded `FontSize(13)` (`ui/settings.go:529`) and
       `FontSize(10)` (`ui/view.go:295`); everything goes through `textSize`
-- [ ] Extend `ui/a11y_test.go` with a contrast assertion on the chip's colours
-- **Status:** pending
+- [x] Extend `ui/a11y_test.go` with a contrast assertion on the chip's colours
+- **Status:** complete
 
 ### Phase 4: Window chrome and main window information architecture
 
@@ -264,9 +266,9 @@ the desktop's window controls, so the view draws a 34px strip under them.
 | State becomes the window headline, brand drops to 12px | With the frame hidden the brand cannot hide in the title bar, but it must not outrank the state |
 | Nine buttons become primary + `复制配置` menu + `⋯` overflow | Measured against the render: every control had equal weight, so the primary action had none |
 | Resources group by kind instead of a flat list | `ResourceEntry.Kind` already exists and apps/domains/addresses are read differently; grouping costs no new data |
-| Semantic colours split into fill and text variants | mygo's `Success`/`Warning` are Meter colours; measured 3.30:1 and 3.19:1 on white, 2.89/2.81 on the chip's tint |
+| Semantic colours split into fill and text variants | mygo's `Success`/`Warning` are Meter colours, measured 3.30:1 and 3.19:1 on white, 2.89/2.81 on the chip's tint. `toneInk` mixes the fill toward the far end of the appearance until it clears 4.8:1 against that tint, so a theme change or the desktop's own accent cannot reintroduce a failing colour |
 | Login panels stay in the window instead of a second dialog | A prompt asks about a specific account and gateway; the header must stay visible, and a new window frame is the documented crash risk |
-| Contrast becomes a test, not a review note | The failure is numeric and cheap to assert from the rendered pixels |
+| Contrast becomes a test, not a review note | The failure is numeric and cheap to assert from the tokens the views paint with |
 | Localize to zh-CN + en-US | The product already mixes them: Chinese GUI and docs, English CLI and library errors. "Chinese only" is not true today |
 | Use mygo's catalog and generated accessors, not a hand-rolled table | The toolkit already ships catalog parsing, ICU formatting, locale resolution, a persisted override and the widget strings; a second mechanism would have to be kept in step with it |
 | Source language is `zh`, not `en` | The window's text is Chinese today; making English the source would rewrite every message before a single translation exists |

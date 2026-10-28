@@ -65,6 +65,26 @@ computation:
 Dark-appearance candidates: `#4ade80` (8.00 on tint), `#fbbf24` (8.29),
 `#f87171` (5.39).
 
+### Resolved in Phase 3
+
+The candidates above were a survey; the shipped tokens are derived, not pinned.
+`toneInk` (`ui/theme.go`) takes the theme's own fill and mixes it toward black
+(light) or white (dark) in 5% steps until it clears 4.8:1 against the chip's
+tint — the ink at 12% over the window. Measured after the change:
+
+| Tone | light ink | on window / tint | dark ink | on window / tint |
+|---|---|---|---|---|
+| neutral | `#66666e` | 5.69 / 4.82 | `#a1a1aa` | 6.91 / 5.66 |
+| accent | `#2159d4` | 6.10 / 5.10 | `#5895f7` | 5.95 / 5.02 |
+| success | `#0f7234` | 6.04 / 5.06 | `#22c55e` | 7.78 / 6.40 |
+| warning | `#985304` | 5.88 / 4.93 | `#f59e0b` | 8.25 / 6.71 |
+| danger | `#bb2020` | 6.29 / 5.14 | `#f26969` | 5.91 / 5.02 |
+
+The dot and the tint use the ink; the label itself is `Theme.Text` on that tint
+(13.10-15.01:1). `TestToneInkPassesAA` asserts all three pairs in both
+appearances, so a mygo palette change or a desktop accent cannot slip a failing
+colour back in.
+
 ## mygo 0.7.1 surface the redesign can use
 
 Read from `~/go/pkg/mod/github.com/egoist/mygo@v0.7.1/ui/api_gen.go`:

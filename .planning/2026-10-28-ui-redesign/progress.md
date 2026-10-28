@@ -81,9 +81,39 @@ semantic colours were measured, rather than judged from the source alone.
 
 ### Phase 3: Design tokens
 
-- **Status:** pending
-- Actions taken: none
-- Files created/modified: none
+- **Status:** complete
+- Actions taken:
+  - Rendered every state before touching code and read the chip in light and
+    dark; confirmed the audit's numbers: light Success on its 12% tint is
+    2.89:1, Warning 2.81:1, Danger 4.01:1, Accent 4.37:1, all below the 4.5:1
+    body threshold for an ~11.9px label.
+  - `ui/theme.go`: `toneInk` derives the readable colour from the theme's own
+    fill by mixing it toward black (light) or white (dark) in 5% steps until it
+    clears `contrastFloor` (4.8:1, AA plus a margin for the step size) against
+    `chipSurface` — the ink at 12% over the window. `contrastRatio` and
+    `luminance` implement WCAG 2.1; no hex value is pinned, so a theme or
+    desktop-accent change cannot reintroduce a failing colour.
+  - Resulting ink, measured on the window and on the ink's own tint: light
+    neutral #66666e (5.69 / 4.82), accent #2159d4 (6.10 / 5.10), success
+    #0f7234 (6.04 / 5.06), warning #985304 (5.88 / 4.93), danger #bb2020
+    (6.29 / 5.14); dark neutral #a1a1aa (6.91 / 5.66), accent #5895f7 (5.95 /
+    5.02), success #22c55e (7.78 / 6.40), warning #f59e0b (8.25 / 6.71), danger
+    #f26969 (5.91 / 5.02). Dark Success and Warning already passed, so they are
+    unchanged.
+  - `statusChip`: the dot and the 12% tint use the ink, the label reads in
+    `Theme.Text` (13.10-15.01:1 on the tint), so the pill no longer depends on
+    a fill carrying small text. `captionTone`, `detailLine`, the satisfied
+    password rule and the footer's failure line now use `toneInk` too; the raw
+    fill stays a surface only.
+  - Removed both literal sizes: the settings window's no-profiles line keeps the
+    text default, and the captcha marker's number goes through
+    `textSize(captionScale)`.
+  - `ui/a11y_test.go`: `TestToneInkPassesAA` asserts every tone's ink on its
+    tint, on the window and the label on the tint at >= 4.5:1, in both
+    appearances.
+- Files created/modified:
+  - `ui/theme.go`, `ui/view.go`, `ui/password.go`, `ui/settings.go`,
+    `ui/a11y_test.go`
 
 ### Phase 4: Window chrome and main window information architecture
 
@@ -128,7 +158,9 @@ semantic colours were measured, rather than judged from the source alone.
 | Render every state | `GOTRUST_RENDER_DIR=/tmp/gotrust-ui go test ./ui -run TestRenderEveryState -count=1` | every PNG, suite ok | 20 files, `ok … 0.309s` | pass |
 | Render sizes at the declared minimum | `main-small.png`, `settings-small.png` | content visible at 440×400 and 560×440 | `main-small.png` shows the resource heading with zero rows | **fail — Phase 5 fixes** |
 | First-run form at the minimum size | `main-setup-small.png` (440×400) | the form scrolls, the action row stays | fields scroll under a pinned 保存并连接 / 仅保存 row | pass |
-| Contrast of the chip colours | computed from the mygo palette | ≥ 4.5:1 at ~11.9px | light Success 2.89, Warning 2.81, Danger 4.01 | **fail — Phase 3 fixes** |
+| Contrast of the chip colours | `go test ./ui -run TestToneInkPassesAA` | ≥ 4.5:1 at ~11.9px in both appearances | light ink 5.06-6.29 on the window, 4.82-5.14 on the tint; dark 5.02-8.25 / 5.02-6.71; labels 13.10-15.01 | pass |
+| Literal font sizes gone | `grep -n 'FontSize(1[0-9])' ui/*.go` | none | none | pass |
+| Renders after the token change | `GOTRUST_RENDER_DIR=/tmp/gotrust-ui go test ./ui -run TestRenderEveryState -count=1` | 40 PNGs, chip legible in every phase | 40 files, `ok … 0.653s`; chip read in light online/idle/reconnecting/failed, dark online and the captcha marker | pass |
 | First-run view tests | `go test ./ui -run 'TestProfileProblem\|TestSetup\|TestCompleteProfile'` | pass | `ok` | pass |
 | First-run app tests | `go test ./internal/gui -run TestFirstRun` | pass | `ok` | pass |
 | Whole suite | `go test ./...` | pass | all packages ok | pass |
