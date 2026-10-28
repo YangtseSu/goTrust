@@ -42,23 +42,42 @@ semantic colours were measured, rather than judged from the source alone.
 
 ### Phase 2: Localization (zh-CN + en-US)
 
-- **Status:** pending
+- **Status:** complete
 - Actions taken:
   - Counted the surfaces: 355 distinct Chinese literals in the GUI (421
     occurrences), 70 CJK lines in the web prompt pages, zero in `internal/cli`.
-  - Recorded that the product already speaks two languages: Chinese in the
-    windows and documents, English in the CLI and every library error.
   - Chose mygo's own catalog system over a hand-rolled table, and read it out of
     the pinned module: JSON catalogs, generated accessors that read
     `i18n.Locale()`, `SetLocale` persistence, the `zh-Hans` widget pack.
-  - Found the second instance of the same defect: mygo's own widget menus are
-    English inside the Chinese window because no language pack is linked.
-  - Rewrote the phase around that mechanism: source `zh`, `mygo.json`,
-    `locales/{zh,en}.json`, generated accessors, the settings switch, the web
-    pages carrying their own text, and a guard against new CJK literals.
+  - `mygo.json` (`i18n.dir` = `locales`, source `zh`); 302 messages in
+    `locales/zh.json` and `locales/en.json`, keyed by surface and with ICU
+    placeholders for counts, statuses, ports and rule values.
+  - `go tool mygo generate` writes `locales/catalog_gen.go`, which registers
+    both languages and imports `zh-Hans`, so MyGo's own widget menus are
+    Chinese in the Chinese window.
+  - `ui/` and `internal/gui/`: every view, state message and status line now
+    reads the catalog; `ProfileProblem`, `SettingsState.Apply`, the tray menu,
+    the keep-alive summary and the tooltip included.
+  - `core/prompt/web`: `Options.Language`, `text.go` with both languages, and
+    the templates fed from it; an empty tag follows the POSIX locale
+    environment, because `core/*` cannot import mygo.
+  - Settings window: 语言 fieldset with 跟随系统/中文/English, bound to
+    `SettingsState.LocaleIndex`; `SetLocale` runs on the next main-loop turn,
+    outside the frame that saw the click.
+  - `internal/guards/catalog_test.go`: CJK literals are forbidden in the
+    production files of `ui/` and `internal/gui/`, and the two catalogs must
+    carry the same keys.
+  - `README.md` states both languages and the switch; `configuration.md` and
+    `handoff.md` got English versions (the other two docs were already English).
 - Files created/modified:
-  - `.planning/2026-10-28-ui-redesign/task_plan.md`
-  - `.planning/2026-10-28-ui-redesign/findings.md`
+  - `mygo.json`, `locales/zh.json`, `locales/en.json`, `locales/catalog_gen.go`
+  - `ui/{view,theme,setup,prompt,password,settings,render_test}.go`,
+    `ui/locale_test.go`
+  - `internal/gui/{gui,prompt}.go`
+  - `core/prompt/web/{web,pages,challenges,page,text}.go`, `web_test.go`
+  - `internal/guards/catalog_test.go`
+  - `README.md`, `docs/configuration.en.md`, `docs/handoff.en.md`,
+    `docs/configuration.md`, `docs/handoff.md`, `REUSE.toml`
 
 ### Phase 3: Design tokens
 
@@ -116,10 +135,21 @@ semantic colours were measured, rather than judged from the source alone.
 | Static checks | `go vet ./...`, `gofmt -l .`, `reuse lint`, `go tool mygo vet .` | clean | no output; reuse 198/198 | pass |
 | CGO-free build of the UI packages | `CGO_ENABLED=0 go test ./ui ./internal/gui` | pass | `ok` | pass |
 
+| Both-language renders | `GOTRUST_RENDER_DIR=/tmp/gotrust-ui-i18n go test ./ui -run TestRenderEveryState -count=1` | 40 PNGs, suite ok | 40 files, `ok … 0.654s` | pass |
+| English first-run window | headless mutter + Xwayland, `LC_ALL=en_US.UTF-8 ./gotrust --config …` | English labels, no crash | English form captured; identical to the `LANG` run | pass |
+| Catalog imports MyGo's widgets | `grep zh-Hans locales/catalog_gen.go` | one blank import | `_ "github.com/egoist/mygo/locales/zh-Hans"` | pass |
+| Guard: no literals in views | `go test ./internal/guards` | no CJK literal, equal key sets | `ok` | pass |
+| Locale switch | `go test ./ui -run TestSettingsLanguagePickerCallsSetLocale` | one `SetLocale("en")` | pass | pass |
+| Web pages in English | `go test ./core/prompt/web -run 'TestPagesSpeakEnglish\|TestResolveLanguage'` | English page, success page, env fallback | pass | pass |
+
 ## Error Log
 
 | Timestamp | Error | Attempt | Resolution |
 |---|---|---|---|
 | 2026-10-28 | `GET api.github.com/repos/egoist/mygo/contents/...` → 403 | 1 | Used the codeload tarball for the skill and the pinned module cache for the API surface |
 | 2026-10-28 | `tar --strip-components=6` left the path as `skills/mygo-maintenance/`, so the first copy nested it one level deep | 1 | Recreated `.agents/skills/mygo-maintenance/` from the extracted contents and removed the stray tree |
+| 2026-10-28 | `Segmented(...).OnClick` never fired: the tester click lands on the segment, not the track the handler was attached to | 1 | Bound `SettingsState.LocaleIndex` directly and read `.Changed()`, the same pattern as the profile picker |
+| 2026-10-28 | `grep '"[^"]*\p{Han}[^"]*"'` matched middle dots; the catalog guard uses a Go AST and `unicode.Han` instead | 1 | Guard parses non-test files of `ui/` and `internal/gui/` |
+| 2026-10-28 | Converting accessor names: `TOTPSection`, `SOCKS5Listen`, `PACURL` are generated as `TotpSection`, `Socks5Listen`, `PacURL` | 1 | Build errors named each; call sites fixed |
+| 2026-10-28 | `settings-full` at 600×1500 still clips after 详细日志: the scroll content is taller than the view; the language field lies below the fold | 1 | Inspected the language field through a 600×2200 tester instead of a PNG |
 | 2026-10-28 | The password hint rendered under the 保存密码 checkbox and read as if it explained the checkbox | 1 | Moved the caption inside the 密码 field, above the checkbox |

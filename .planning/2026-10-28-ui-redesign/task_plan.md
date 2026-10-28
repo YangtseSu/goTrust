@@ -12,18 +12,19 @@ new dependency and no change to `core/session`.
 
 ## Next Step
 
-Phase 2: create `locales/` — `mygo.json` with the `i18n` block, `locales/zh.json`
-as the source catalog holding every message, `locales/en.json`, and a first
-`go tool mygo generate` run. Migrate `ui/setup.go` as the proving surface, since
-it is the smallest view that has both static text and formatting.
+Phase 3: add the text-safe semantic colours to `ui/theme.go`, rework
+`statusChip` so the label reads in `Theme.Text`, remove the two hardcoded font
+sizes, and extend `ui/a11y_test.go` with the contrast assertion. The render
+command is unchanged: `GOTRUST_RENDER_DIR=/tmp/gotrust-ui go test ./ui -run
+TestRenderEveryState`.
 
 ## Current Phase
 
-Phase 2: Localization. Phase 1 is complete: a fresh install opens on the
-first-run form, 保存并连接 writes the settings file and starts the login, and an
-incomplete profile never surfaces the library's English validation message. The
-mechanism for this phase is settled (mygo's catalogs); no catalog file exists
-yet.
+Phase 3: Design tokens. Phase 2 is complete: `locales/{zh,en}.json` hold 302
+messages, `go tool mygo generate` writes their accessors (and imports MyGo's
+zh-Hans widget strings), every view and application message reads them, the
+settings window switches between 跟随系统/中文/English, and both languages are
+rendered and tested.
 
 ## Phases
 
@@ -66,38 +67,44 @@ in the footer. This phase makes the language a choice the user makes once.
 The mechanism is mygo 0.7.1's own: a JSON catalog per language, generated typed
 accessors, and one locale the whole app reads.
 
-- [ ] `mygo.json` with `{"i18n": {"dir": "locales", "source": "zh"}}`, and
-      `locales/zh.json` (the source: every message) plus `locales/en.json`
-- [ ] `go tool mygo generate` writes `locales/catalog_gen.go`: typed accessors
+- [x] `mygo.json` with `main` (`./cmd/gotrust`) and
+      `{"i18n": {"dir": "locales", "source": "zh"}}`, and
+      `locales/zh.json` (the source: 302 messages) plus `locales/en.json`
+- [x] `go tool mygo generate` writes `locales/catalog_gen.go`: typed accessors
       such as `locales.StatusOnline()`, each reading `i18n.Locale()`, so no view
       takes a locale parameter and `i18n.Register` makes zh and en the app's
       languages
-- [ ] Import `_ "github.com/egoist/mygo/locales/zh-Hans"` in the tray app: mygo's
-      own widget strings (the text field's 撤销/剪切/复制/粘贴 menu, the date
-      picker) are English today even inside the Chinese window, because no
-      language pack is linked
-- [ ] Keys named by surface, ICU placeholders instead of `fmt.Sprintf` for
+- [x] mygo's own widget strings (the text field's 撤销/剪切/复制/粘贴 menu, the
+      date picker) are English even inside the Chinese window because no
+      language pack is linked; the accessors `mygo generate` writes import
+      `_ "github.com/egoist/mygo/locales/zh-Hans"` themselves, so no
+      hand-written import is needed
+- [x] Keys named by surface, ICU placeholders instead of `fmt.Sprintf` for
       counts and durations (`{count} 项`, `{seconds} 秒后`), so a translated
       message can move its numbers
-- [ ] Migrate `ui/` and `internal/gui/` (355 distinct literals): no Chinese or
-      English literal left in a view; `phaseLabel`, `phaseDetail`,
-      `KeepAliveSummary`, `TrayStatus` and `TrayMenu` say theirs through the
-      catalog too
-- [ ] `core/prompt/web` takes the language tag and keeps its own two-language
-      text for its 35 lines: `core/*` must not reach mygo, and `internal/guards`
-      checks the whole `go list -deps` graph
-- [ ] The settings window gets 跟随系统 / 中文 / English, calling
-      `mygo.App.SetLocale("", "zh", "en")`; mygo persists the choice itself
-      (PathUserData), so no new key in `config.toml`
-- [ ] `internal/guards` or a new test: no CJK literal outside `locales/*.json`,
-      and `locales/en.json` carries every key of the source
-- [ ] Verify: `go tool mygo generate` is idempotent; `TestRenderEveryState`
-      gains a locale switch and renders every state in both languages; the
-      English layout is checked at 440×400 and 600×760, where labels grow;
-      `LC_ALL=en_US.UTF-8 ./gotrust` shows English with no rebuild
-- [ ] `README.md` states the two languages and the switch; `docs/*.md` get
-      English versions
-- **Status:** pending
+- [x] `ui/` and `internal/gui/` migrated: the views, the settings state's
+      validation messages and every status line read the catalog;
+      `phaseLabel`, `phaseDetail`, `KeepAliveSummary`, `TrayStatus` and
+      `TrayMenu` included
+- [x] `core/prompt/web` takes `Options.Language` and keeps its own two-language
+      text (`text.go`), since `core/*` must not reach mygo; an empty tag
+      follows `LC_ALL`/`LC_MESSAGES`/`LANG`
+- [x] The settings window gets 跟随系统 / 中文 / English: a segmented control
+      bound to `SettingsState.LocaleIndex` calls `SetLocale("", "zh", "en")` on
+      the next main-loop turn; mygo persists the choice itself
+- [x] `internal/guards/catalog_test.go`: no CJK string literal in the
+      production files of `ui/` or `internal/gui/`, and both catalogs carry the
+      same keys
+- [x] Verify: `go tool mygo generate` is idempotent; `TestRenderEveryState`
+      renders every state in both languages; the English layout is read at
+      540×640, 440×400 and 600×760; a headless mutter session started with
+      `LC_ALL=en_US.UTF-8` shows the English first-run window (its capture is
+      byte-identical to the `LANG=en_US.UTF-8` one)
+- [x] `README.md` states the two languages and the switch;
+      `docs/configuration.md` and `docs/handoff.md` gained English versions
+      (the other two documents were already English), and each pair links the
+      other
+- **Status:** complete
 
 ### Phase 3: Design tokens
 
@@ -267,6 +274,11 @@ the desktop's window controls, so the view draws a 34px strip under them.
 | Locale follows the desktop, switchable in the settings window | mygo resolves `LANGUAGE`/`LC_ALL`/`LC_MESSAGES`/`LANG` and persists the user's own choice; a settings key would duplicate both |
 | The catalog lands before the redesign phases | Phases 4-8 rewrite most of the 355 GUI strings; with the catalog in place each rewrite is one line instead of a literal hunt |
 | The headless CLI stays English | Its output is read in terminals and logs, which are already English |
+| The login pages carry their own two-language text | `core/prompt/web` cannot import mygo's catalogs, and `internal/guards` forbids it; a 60-field table is smaller than moving the package out of core |
+| The language picker binds `SettingsState.LocaleIndex` | A local recomputed per frame loses the click before `Changed` reports it; the profile picker uses the same pattern |
+| `SetLocale` runs on the next main-loop turn | A language change redraws every window, and the click happens inside a frame |
+| The CJK guard covers production view files, not tests | A test may use Chinese as fixture data (truncation, names); a view may not |
+| Only two documents needed translating | `agent-ui-testing.md` and `development.md` were already English |
 
 ## Errors Encountered
 
