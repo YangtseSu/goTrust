@@ -309,9 +309,39 @@ semantic colours were measured, rather than judged from the source alone.
 
 ### Phase 9: Verification and docs
 
-- **Status:** pending
-- Actions taken: none
-- Files created/modified: none
+- **Status:** in_progress (the real-mouse drag is the operator's check)
+- Actions taken:
+  - `/tmp/gotrust-ui-before` had been cleared with `/tmp`, so the set was
+    regenerated from `db0f05d` (end of Phase 2) in a temporary worktree:
+    `GOTRUST_RENDER_DIR=/tmp/gotrust-ui-before go test ./ui -run
+    TestRenderEveryState` wrote 20 PNGs there, and the current tree wrote 60 to
+    `/tmp/gotrust-ui`.
+  - Compared by pixel: of the 19 states that still exist, the main window
+    differs in 10-34% of pixels and the settings window in 27-37%; three states
+    are 440x480 now instead of 440x400 (the Phase 4 minimum), and
+    `settings-full` is gone because the form is six pages. The differences are
+    the redesign's own: title strip, headline, grouped list, panels, settings
+    pages.
+  - CGO-free whole suite, vet, mygo vet, gofmt, build and reuse lint pass.
+  - Real session: the first-run window was captured from the desktop; a
+    double-click on the title strip maximized it to 2304x1264 on the 2304x1296
+    logical screen; a real Alt+F4 hid it (`visible:false` through the automation
+    plugin) with the process alive. The drag itself is not driveable by
+    synthetic input: mygo calls `gtk_window_begin_move_drag` from the platform's
+    own GdkEvent, and ydotool's absolute pointer mispositioned the real pointer
+    (one run opened GNOME's overview). The operator's mouse is left for that one
+    check.
+  - The maximized first-run capture showed the form stretched across 2300 DIPs;
+    `panelSlot` now caps every panel at `panelMaxWidth` (560) and
+    `main-setup-wide` renders the result.
+  - `docs/design.md` records the rules (state first, one primary action, a login
+    never needs a second window, tone as a mark, four sizes, a result is a
+    toast, keyboard ownership, one catalog, mygo owns the toolkit); README links
+    it next to the development guide.
+- Files created/modified:
+  - `docs/design.md` (new), `README.md`
+  - `ui/view.go`, `ui/render_test.go`
+  - `.planning/2026-10-28-ui-redesign/task_plan.md`
 
 ## Test Results
 
@@ -364,6 +394,14 @@ semantic colours were measured, rather than judged from the source alone.
 | Every state rendered | `GOTRUST_RENDER_DIR=/tmp/gotrust-ui-phase8 go test ./ui -run TestRenderEveryState -count=1` | 58 PNGs, settings without the result line, main window unchanged | pass | pass |
 | Whole suite after Phase 8 | `go test ./...`, `go vet ./...`, `gofmt -l .`, `go tool mygo vet .`, `reuse lint` | clean | all packages ok; 208/208 files with license information | pass |
 | CGO-free UI build after Phase 8 | `CGO_ENABLED=0 go test ./ui ./internal/gui ./internal/cli` | pass | `ok` | pass |
+| Before set regenerated | worktree at `db0f05d` + `GOTRUST_RENDER_DIR=/tmp/gotrust-ui-before go test ./ui -run TestRenderEveryState` | the 20 pre-redesign PNGs | 20 files | pass |
+| Before/after comparison | PIL difference of the 19 shared states | every state differs, none blank | main 10-34%, settings 27-37%; 3 resized to 440x480; `settings-full` replaced by six pages | pass |
+| Whole suite, CGO off, after Phase 9 | `CGO_ENABLED=0 go test ./...`, `go vet ./...`, `go tool mygo vet .`, `gofmt -l .`, `go build ./...`, `reuse lint` | clean | all packages ok; 208/208 files | pass |
+| Real-session first run | tray app on the operator's Wayland session, empty config, `flameshot full` | the form in the centred window | captured at 540x640 | pass |
+| Double-click maximize | automation `input` double-click on the title strip | the window manager maximizes | bounds 2304x1264; capture 4608x2528 | pass |
+| Close-to-tray | real `Alt+F4` from ydotool | window hidden, process alive | `visible:false`, pid alive, SIGTERM 0 | pass |
+| Drag by the title strip | automation `input` pointerDown/move/up and a real ydotool device | the window moves | not driveable: `gtk_window_begin_move_drag` needs the platform's own event; ydotool mispositioned | not verified |
+| Wide first-run form | `main-setup-wide.png` (900x640) | fields read as rows, not full-width | form capped at 560, left-aligned | pass |
 
 ## Error Log
 
@@ -386,3 +424,5 @@ semantic colours were measured, rather than judged from the source alone.
 | 2026-10-28 | The row-menu test could not click a second `⋯`: `Tester.Click` takes the first element with that text, which is the header's overflow | 1 | Each row menu carries `Label("<title> 的操作")`, its accessible name, which is also what the test clicks |
 | 2026-10-29 | The smoke-test client hung: `act press` on the header's ⋯ opened a GTK popup with a loop of its own, and the app stopped answering the socket | 1 | Opened the settings window from the first-run panel's 更多设置… (a plain button) instead; an open context menu is out of the protocol's reach |
 | 2026-10-29 | `panelActions` omitted 取消登录 when the callback was nil, so the render harness's `Actions{}` drew a row the app never draws | 1 | The control is always drawn and disabled without a callback, like the header's primary button, whose presence does not depend on its wiring |
+| 2026-10-29 | `ydotool mousemove --absolute` did not land at the requested point and one attempt opened the GNOME overview through the hot corner | 1 | Stopped using absolute pointer injection; the mouse settings it needed were restored. The real-mouse drag is left to the operator |
+| 2026-10-29 | The automation plugin's `input` pointerDown/move/up did not move the window, in the nested session or on the desktop | 1 | mygo starts a move drag with `gtk_window_begin_move_drag` from the platform's GdkEvent, which synthetic input does not produce; double-click maximize and close-to-tray still work, the drag stays an operator check |

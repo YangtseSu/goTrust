@@ -12,21 +12,19 @@ new dependency and no change to `core/session`.
 
 ## Next Step
 
-Phase 9: verification and docs — re-render every state against
-`/tmp/gotrust-ui-before`, run the whole check list (`CGO_ENABLED=0 go test
-./...`, `go vet`, `go tool mygo vet`, `gofmt`, `reuse lint`), drive the tray app
-on the operator's Wayland session, and record the design rules in `docs/`.
-Phase 8 is complete: the window answers `Ctrl+Enter`, `Ctrl+,`, `Esc` and `/`,
-the tray no longer repeats the window's copy actions, and every result is a
-toast rather than a line that stays.
+Operator check: with the tray app open on the desktop, drag the window by the
+34 DIP strip at its top with a real mouse, the way a window is moved
+everywhere; then Phase 9 closes. Everything else is done: the renders are
+compared with the pre-redesign set, the whole check list passes, first run,
+maximize and close-to-tray are verified on the operator's Wayland session, and
+`docs/design.md` carries the rules.
 
 ## Current Phase
 
-Phase 9: Verification and docs. Phase 8 is complete: `windowShortcuts` declares
-the four keys at the window scope, `panelCancel` is the one Esc route,
-`resourceSearchShown` gates `/` to the visible filter, the tray lost its copy
-items, and `SettingsState.SetStatus` gives the settings window the same
-once-per-result toast as the main window.
+Phase 9: Verification and docs, open only for the real-mouse drag. The renders,
+the check list, the first-run capture, double-click maximize, close-to-tray and
+the design rules are done; the drag is the one check synthetic input cannot
+serve, because mygo starts it from the platform's own pointer event.
 
 ## Phases
 
@@ -275,16 +273,41 @@ progress message was dropped because the picker already says 正在获取….
 
 ### Phase 9: Verification and docs
 
-- [ ] Re-render every state (`GOTRUST_RENDER_DIR=… go test ./ui -run
+- [x] Re-render every state (`GOTRUST_RENDER_DIR=… go test ./ui -run
       TestRenderEveryState`) and compare against `/tmp/gotrust-ui-before`
-- [ ] `CGO_ENABLED=0 go test ./...`, `go vet ./...`, `go tool mygo vet .`,
+- [x] `CGO_ENABLED=0 go test ./...`, `go vet ./...`, `go tool mygo vet .`,
       `gofmt -l .`, `reuse lint`
 - [ ] Run the tray app on the operator's Wayland session: drag by the new title
       bar strip, double-click maximize, close-to-tray, and the first-run panel
       from an empty config
-- [ ] Record the design rules (state first, one primary action, text-safe tones,
+- [x] Record the design rules (state first, one primary action, text-safe tones,
       four sizes, first run never sends the user to a second window) in `docs/`
-- **Status:** pending
+- **Status:** in_progress
+
+Details: the before set was regenerated from `db0f05d` (the end of Phase 2) in
+a worktree, because `/tmp` had been cleared. All 19 states that still exist
+changed — 10-34% of pixels in the main window, 27-37% in the settings window,
+at the high end where the form became pages — plus three states resized with
+the 440x480 minimum and one (`settings-full`) replaced by the six pages, which
+is the intended shape of the redesign. The
+whole check list passes. On the operator's Wayland session the first-run window
+was captured from the desktop, double-click on the strip maximized the window
+(2304x1264 at the 2304x1296 logical screen), and a real Alt+F4 hid it to the
+tray with the process still alive. The drag itself could not be driven: mygo
+starts it with `gtk_window_begin_move_drag` from the real GdkEvent, which the
+automation plugin's synthetic input does not produce, and ydotool's absolute
+pointer moved the real pointer to the wrong place (one run opened the GNOME
+overview through the hot corner). The check needs the operator's mouse; the
+phase stays open for it.
+
+The real-session capture also showed a defect the renders at 540 DIP hid: a
+maximized window stretched the first-run form across 2300 DIPs. `panelSlot` now
+caps every panel at `panelMaxWidth` (560), which changes nothing at the window's
+own width and keeps a form readable when it is enlarged; `main-setup-wide`
+renders it.
+
+`docs/design.md` records the rules and their reasons; README links it next to
+the development guide.
 
 ## Not doing
 
@@ -361,6 +384,8 @@ progress message was dropped because the picker already says 正在获取….
 | `/` is registered only while the filter is visible and unfocused | A window-level `/` swallows the character from any focused text field; gating it on the field it belongs to keeps the shortcut and lets the search take a slash |
 | The settings result is a toast with a sequence | The line under the form stayed for the window's whole life, so an old result read as the current state; a sequence keeps the same text a second result instead of a silent no-op |
 | The tray keeps no copy actions | 复制配置 already owns the PAC and the three Clash renderings; the tray copy items were a second wording for every export and a second place to keep in sync |
+| A panel is capped at 560 DIPs | The real-session maximize stretched the first-run fields across 2300 DIPs; a form is read as label-value rows, and a row that long has no row left. The cap does nothing at the window's 540 |
+| The real-mouse drag stays an operator check | mygo starts a window move with `gtk_window_begin_move_drag` from the platform's own event; automation input has no such event, and ydotool's absolute pointer is not reliable enough on this session to place the press |
 | The title strip names the profile | The subline's job is the session; the account is static, so it belongs where it does not compete, and a fresh install still shows which profile is being filled |
 | The header row wraps instead of clipping | At 440 DIP the English labels of three controls plus the headline exceed the width; a wrapped second row keeps `⋯` reachable, where a clipped row would hide settings and quit |
 | The first-run panel hides the header's 连接 and the subline | The panel owns the connect action and says what is missing; two controls for one intent, and a line repeating its heading, only cost the form height |
