@@ -196,9 +196,43 @@ semantic colours were measured, rather than judged from the source alone.
 
 ### Phase 6: Settings window
 
-- **Status:** pending
-- Actions taken: none
-- Files created/modified: none
+- **Status:** complete
+- Actions taken:
+  - Rendered the window before the change: one 1450px form, seven fieldsets,
+    one caption at the top saying when all of it takes effect, no dirty state.
+  - `SettingsState.Tab` and six page constants; `settingsTabBar` draws the
+    pages with `ui.TabsBase` in a wrapped row (same look as `ui.Tabs`: 12px tab
+    padding, a 2px accent underline under the choice, the widget's focus ring),
+    because the six English labels overflow the 560px minimum at the default
+    text size and more so with larger text.
+  - `profileBar` moves the picker and 新建/复制/删除 out of the form into a
+    fixed row above the tabs; the 名称 field stays on 连接.
+  - `settingsPage` switches on the tab; each page draws its effect as one line
+    (`settingsEffectLogin`, `settingsEffectConnect`, `settingsEffectStartup`,
+    `settingsEffectAdvanced`, `settingsEffectLive`) and one `ui.Form` of fields
+    capped at `fieldWidth` (360), with the method picker at 240 beside
+   获取认证方式. Rows whose label and action can outgrow the line wrap.
+  - `settingsHint` is gone; `settingsUnsaved`, `settingsDiscard`,
+    `settingsDiscarded`, the five effect lines and `terminalsTab` are new;
+    `profileSection` and `terminalsSection` are gone. The English
+    `passwordSecurity` said "Password", the same as the field above it, and now
+    says "Password security".
+  - `SettingsState.Changed()` compares the folded draft with the loaded file:
+    `folded()` is `Apply` without the checks. `SettingsActions.Discard` reloads
+    the draft; the bottom bar's 关闭 is gone, and 保存/放弃修改 disable while
+    nothing differs.
+  - 终端管理 is its own page; 语言 moved to the bottom of 启动.
+  - Tests: `Changed()` semantics, the profile bar on every page, save/discard
+    following the draft, the tab order reaching 保存 then 放弃修改 (with a
+    draft edit, because a disabled control takes no focus), the language
+    picker and the terminal page through their tabs, and one render per page
+    plus a 560px-wide page.
+- Files created/modified:
+  - `ui/settings.go`, `ui/settings_test.go`, `ui/render_test.go`,
+    `ui/a11y_test.go`, `ui/locale_test.go`
+  - `internal/gui/gui.go` (`Discard`)
+  - `locales/zh.json`, `locales/en.json`, `locales/catalog_gen.go`
+  - `README.md`
 
 ### Phase 7: Login panels
 
@@ -250,6 +284,12 @@ semantic colours were measured, rather than judged from the source alone.
 | Renders in both themes | `main-online.png`, `main-online-dark.png` | glyphs and counts legible in light and dark | pass | pass |
 | Whole suite after Phase 5 | `go test ./...`, `go vet ./...`, `gofmt -l .`, `go tool mygo vet .`, `reuse lint` | clean | all packages ok; 208/208 files with license information | pass |
 | CGO-free UI build after Phase 5 | `CGO_ENABLED=0 go test ./ui ./internal/gui ./internal/cli` | pass | `ok` | pass |
+| Every settings page rendered | `GOTRUST_RENDER_DIR=/tmp/gotrust-ui-phase6 go test ./ui -run TestRenderEveryState -count=1` | six pages, the unsaved state and a 560px-wide page, both languages | 56 PNGs; the tab row wraps to two lines in English at 560, the Chinese one stays on one line | pass |
+| The unsaved marker follows the file | `go test ./ui -run 'TestSettingsChanged\|TestSettingsSaveAndDiscard'` | clean draft, padded values and the language stay clean; a port, a picker switch and a delete are marked | pass | pass |
+| Save and discard in the window | `go test ./ui -run 'TestSettingsViewRendersAndCallsActions\|TestSettingsProfileBarStaysOnEveryPage'` | pages are exclusive, 新建 enables 保存, 放弃修改 reaches its action | pass | pass |
+| The actions stay reachable with Tab | `go test ./ui -run TestSettingsTabOrderReachesTheActions` (with an edited draft) | Tab reaches 保存 then 放弃修改 | pass; a disabled control takes no focus, so the test edits first | pass |
+| The real window, six pages | headless mutter (Wayland) + mygo's automation plugin: 更多设置… → the six tabs → port 8443 | six tabs in order, every page drawn, marker on after the edit | `tabs ['连接', '代理', '保活', '启动', '高级', '终端']`, 10 captures, app exit 0 | pass |
+| 放弃修改 and 保存 in the real window | same run | discard restores 443 and clears the marker; save writes the file and clears the marker | `port after discard: 443`; `config.toml` then reads `port = 8443` | pass |
 
 ## Error Log
 
@@ -270,3 +310,4 @@ semantic colours were measured, rather than judged from the source alone.
 | 2026-10-28 | `ui.MenuButton` per row put a bordered button with a dropdown arrow beside every entry | 1 | `Element.Menu` on a three-dot glyph: same menu, one icon, no arrow |
 | 2026-10-28 | `resourceListMinHeight` mixed an untyped const with `Theme.FontSize` and did not compile | 1 | `line := float32(resourceIconSize)` before comparing |
 | 2026-10-28 | The row-menu test could not click a second `⋯`: `Tester.Click` takes the first element with that text, which is the header's overflow | 1 | Each row menu carries `Label("<title> 的操作")`, its accessible name, which is also what the test clicks |
+| 2026-10-29 | The smoke-test client hung: `act press` on the header's ⋯ opened a GTK popup with a loop of its own, and the app stopped answering the socket | 1 | Opened the settings window from the first-run panel's 更多设置… (a plain button) instead; an open context menu is out of the protocol's reach |

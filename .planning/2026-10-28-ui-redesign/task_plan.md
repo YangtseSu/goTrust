@@ -12,22 +12,19 @@ new dependency and no change to `core/session`.
 
 ## Next Step
 
-Phase 6: turn the settings window into `ui.Tabs` pages (连接 / 代理 / 保活 /
-启动 / 高级 / 终端) with the profile picker in a fixed top bar and each section
-heading stating when its settings take effect. Phase 5 is complete: the granted
-resources are grouped by kind with a count each, every row is one line with the
-kind's glyph, its title, its detail at the right and one dots menu, a group of
-more than eight rows gets a filter, and the list keeps three rows at the
-window's minimum.
+Phase 7: bring the login panels inside the window — the header stays, the
+granted resource count stays as one line, the buttons get a hierarchy (提交
+primary, 取消登录 left of the action row), and the captcha markers share the web
+page's 26px marker and 13px number. Phase 6 is complete: the settings window is
+six pages under a fixed profile bar, each page states when its edits take
+effect, and the heading marks unsaved changes with 保存 / 放弃修改 at the foot.
 
 ## Current Phase
 
-Phase 6: Settings window. Phase 5 is complete: `ui/icons.go` holds five glyphs
-(application grid, globe, hosts, name book, and the unknown kind), the list
-groups by `ResourceKind` in a fixed order with `应用 · N 项` headings,
-`groupResources` applies the filter, `ui.SearchField` appears once a kind holds
-more than eight rows, each row's `⋯` is a dots icon with a menu of 打开 and
-复制, and `ui.Scroll` has a `MinHeight` of three rows.
+Phase 7: Login panels. Phase 6 is complete: `settingsTabBar` draws the six
+pages with `ui.TabsBase` in a wrapped row, `SettingsState.Tab` chooses the page,
+`Changed()` compares the folded draft with the loaded file, and
+`SettingsActions.Discard` throws the draft away.
 
 ## Phases
 
@@ -179,15 +176,48 @@ collapsing to its heading when the header and footer have taken the window.
 
 ### Phase 6: Settings window
 
-- [ ] `ui.Tabs` pages: 连接 / 代理 / 保活 / 启动 / 高级 / 终端; the profile
-      picker and 新建/复制/删除 move to a fixed top bar
-- [ ] Each section heading carries its effect (`下次登录生效`,
-      `下次连接生效`) instead of one long caption above the form
-- [ ] Inputs get `MaxWidth(360)`, label column stays one width
-- [ ] Unsaved changes marked in the heading; the bottom bar offers 保存 and
-      放弃修改
-- [ ] 终端管理 becomes its own page; it no longer sits between 保活 and 高级
-- **Status:** pending
+The form was one 1450px column: reaching 代理 meant scrolling past a screen and
+a half, the effect of every setting sat in one caption above the form, and
+nothing said whether the window held unsaved edits.
+
+- [x] Six pages — 连接 / 代理 / 保活 / 启动 / 高级 / 终端 — as mygo's tab list
+      (`TabsBase` with the widget's own look), so the choice, the arrow keys and
+      the tab roles stay the toolkit's; the row wraps because six English labels
+      do not fit the 560px minimum
+- [x] The profile picker with 新建/复制/删除 moves from a fieldset inside the
+      form to a fixed bar above the tabs
+- [x] Each page opens with its effect (`下次登录生效`, `下次连接生效`,
+      `下次启动生效`, `详细日志立即生效；客户端数据下次登录生效`,
+      `随连接实时读取`) instead of one `settingsHint` paragraph; that key is gone
+- [x] Controls are capped at `fieldWidth` (360), the method picker that shares
+      its row with 获取认证方式 at 240, and every row whose labels can outgrow
+      the line wraps
+- [x] `SettingsState.Changed()` folds the draft the way `Apply` folds it and
+      compares it with the loaded file; the heading marks 未保存的修改 and the
+      bottom bar offers 保存 (primary) and 放弃修改, both disabled while nothing
+      differs
+- [x] `SettingsActions.Discard` reloads the draft and reports 已放弃修改; 关闭
+      left the bottom bar, because the window's own close control already hides
+      and discards
+- [x] 终端管理 is its own page (终端), no longer between 保活 and 高级
+- **Status:** complete
+
+Details: `settingsTabBar` is `ui.Tabs` with one difference: the row wraps.
+`ui.Tabs` lays its labels out in a single `Shrink(0)` row, so at 560 DIP the
+English labels already ran 14px past the content box at the default size, and
+larger text would have pushed 终端 off the window. `TabsBase` exposes the list
+and keeps the choice, the arrow keys and the tab roles; the wrapped rows keep
+the widget's look (12px tab padding, a 2px accent underline under the choice, a
+6px focus ring). `settingsPage` switches on `SettingsState.Tab`, so a page that
+is not shown is not in the tree at all, and the tab names the page, which is why
+the page draws only its effect line instead of repeating the title. `folded()`
+is `Apply` without the checks: it trims the same fields, parses the port through
+the same range, splits the same targets and sets the active profile, which is
+why choosing another profile in the picker marks the window unsaved — saving is
+what switches. `Changed()` compares two `Clone`s with `reflect.DeepEqual`, so a
+field added to `config.Config` later cannot silently escape the marker. 语言
+moved to the bottom of 启动: it is the only app-level page, and 高级 holds
+diagnostics and the device identity.
 
 ### Phase 7: Login panels
 
@@ -298,6 +328,14 @@ collapsing to its heading when the header and footer have taken the window.
 | The filter lives in the field's `ui.Local` state, not in `State` | Nothing else reads the query, `State` is copied per frame by the app, and a new login must not inherit a stale filter |
 | A row's menu is `Element.Menu` on the dots glyph, not `ui.MenuButton` | The arrowed button belongs in the header; one per row puts a border and an arrow beside every entry and outshouts the rows |
 | A kind the build does not know is listed under 其他 | A newer gateway adds rows instead of losing them, and the window still has one place for each entry |
+| The settings pages are `TabsBase` in a wrapped row, not `Tabs` | Six English labels are 526px at the 560px minimum and wider with larger text; `Tabs` lays them out in one `Shrink(0)` row and cannot wrap, while `TabsBase` keeps the choice, the arrow keys and the tab roles and costs ten lines for the same look |
+| The tab names the page, so the page draws only its effect line | A heading repeating the tab label 20px under it says the same thing twice; the effect is the one line that changes meaning from page to page |
+| 保存 and 放弃修改 are disabled while the draft matches the file | A greyed primary button is the clearest "a save would write nothing"; it also keeps the keyboard order honest, because a disabled control takes no focus |
+| The bottom bar dropped 关闭 | The window's own close control already hides and discards the draft; two controls for one intent |
+| 语言 sits at the bottom of 启动 | It is the only app-level page; 高级 is diagnostics and the device identity, and the language is not a saved setting (mygo stores it) |
+| The 名称 field stays on 连接, not in the fixed bar | The bar has room for the picker and three actions at 560px; a name input beside them would wrap in English and cost the form a row |
+| Every page's controls are capped at 360 | A value does not need the window's width; the label column already aligns them, so the cap is one number |
+| Unsaved is computed from the file, not from keystrokes | Comparing the folded draft with the loaded configuration catches a profile switch, a delete and a checkbox, and cannot be fooled by typing a value the file already holds |
 | The list keeps three rows as its `MinHeight` | The window exists for the resources; a list that collapses to a heading is the 440-wide defect this phase closes |
 | Localize to zh-CN + en-US | The product already mixes them: Chinese GUI and docs, English CLI and library errors. "Chinese only" is not true today |
 | Use mygo's catalog and generated accessors, not a hand-rolled table | The toolkit already ships catalog parsing, ICU formatting, locale resolution, a persisted override and the widget strings; a second mechanism would have to be kept in step with it |
@@ -317,6 +355,7 @@ collapsing to its heading when the header and footer have taken the window.
 | Error | Attempt | Resolution |
 |---|---|---|
 | `curl https://api.github.com/repos/egoist/mygo/contents/…` returned 403 | 1 | Read the pinned module source at `~/go/pkg/mod/github.com/egoist/mygo@v0.7.1` and fetched the skill from the codeload tarball instead |
+| `act press` on the ⋯ menu button hung the app's main loop, so the smoke-test client never got its next answer | 1 | The overflow menu is a GTK popup with a loop of its own, which the automation protocol cannot drive; the run opens the settings window from the first-run panel's 更多设置… instead, a plain button |
 
 ## Notes
 
