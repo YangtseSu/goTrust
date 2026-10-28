@@ -94,6 +94,9 @@ Clash / Mihomo 分三种输出，按客户端选，不需要改键名：
 | `gotrust-cli --print-clash-merge` | Clash Verge Rev 的 Merge 配置：原样粘贴并启用（`prepend-*` 已生成） |
 | `gotrust-cli --print-clash-config` | 完整的本地 Mihomo 配置：任何客户端都可作为本地配置导入（只含 goTrust） |
 
+GUI 里也有同样的三项：托盘“复制 Clash 片段”子菜单，以及主窗口的“普通片段 / Verge Merge /
+完整配置”按钮；用的是实时授权，不是缓存。
+
 片段先放 goTrust 进程和网关直连，防止 TUN 把 goTrust 自己的连接再送回来；然后才是
 授权域名和 IP 段，不写私有段预设。TUN 模式需要 fake-IP，并且不要把授权域名放进
 `fake-ip-filter`。
