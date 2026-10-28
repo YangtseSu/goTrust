@@ -12,21 +12,22 @@ new dependency and no change to `core/session`.
 
 ## Next Step
 
-Phase 5: group the granted resources by kind, give each row one icon and one
-menu, and make the list scroll at the declared minimum size. Phase 4 is
-complete: both windows draw their own 34px title strip under the desktop's
-controls, the state is the headline with one subline of session facts, three
-controls replace nine, the footer is one line with its detail in a tooltip, and
-an action result shows once as a toast.
+Phase 6: turn the settings window into `ui.Tabs` pages (连接 / 代理 / 保活 /
+启动 / 高级 / 终端) with the profile picker in a fixed top bar and each section
+heading stating when its settings take effect. Phase 5 is complete: the granted
+resources are grouped by kind with a count each, every row is one line with the
+kind's glyph, its title, its detail at the right and one dots menu, a group of
+more than eight rows gets a filter, and the list keeps three rows at the
+window's minimum.
 
 ## Current Phase
 
-Phase 5: Resource list. Phase 4 is complete: `TitleBarHidden` with a 34px
-strip, the phase as the headline (`statusChip` at title size), one subline
-(`host:port · 内网地址 · 已保持 N 分钟`), `连接/断开` + `复制配置 ▾` + `⋯`, a
-single footer line, and `State.Status` shown once through `ui.Toast`
-(`StatusSeq`). `listeners()` from `core/proxy` now tells the footer which
-protocol each bound address speaks.
+Phase 6: Settings window. Phase 5 is complete: `ui/icons.go` holds five glyphs
+(application grid, globe, hosts, name book, and the unknown kind), the list
+groups by `ResourceKind` in a fixed order with `应用 · N 项` headings,
+`groupResources` applies the filter, `ui.SearchField` appears once a kind holds
+more than eight rows, each row's `⋯` is a dots icon with a menu of 打开 and
+复制, and `ui.Scroll` has a `MinHeight` of three rows.
 
 ## Phases
 
@@ -150,14 +151,31 @@ the desktop's window controls, so the view draws a 34px strip under them.
 
 ### Phase 5: Resource list
 
-- [ ] Group entries by `ResourceKind` with per-group counts; the `Kind` stops
+- [x] Group entries by `ResourceKind` with per-group counts; the `Kind` stops
       living inside `Detail` text
-- [ ] Row: 18px kind icon (`ui.Icon` with an inline SVG, no emoji), title,
+- [x] Row: 18px kind icon (`ui.Icon` with an inline SVG, no emoji), title,
       right-aligned detail, `⋯` row menu; 打开/复制 leave the always-visible row
-- [ ] `ui.SearchField` appears once a group holds more than eight entries
-- [ ] Fix the 440×400 collapse: `Scroll` gets a `MinHeight` so the list keeps at
+- [x] `ui.SearchField` appears once a group holds more than eight entries
+- [x] Fix the 440×400 collapse: `Scroll` gets a `MinHeight` so the list keeps at
       least three rows at the declared minimum
-- **Status:** pending
+- **Status:** complete
+
+Details: `ui/icons.go` holds the five glyphs (application grid, globe, stacked
+hosts, name book, unknown kind) plus the three dots of a row's menu, all stroked
+at mygo's own 24-grid weight. `groupResources(entries, query)` is a pure
+function of the grant and the filter; it fixes the order 应用 / 域名 / IP 地址 /
+DNS, puts a kind it does not know under 其他, and drops empty groups, so a
+heading counts only rows that are on screen. The filter matches the title or
+the detail, case-insensitively, and lives in the field's own `ui.Local` state
+rather than in `State`: no other part of the window reads it, and a new login
+must not inherit a stale query. It is one field over the whole list, shown when
+any kind exceeds eight rows, so the threshold is about the length of a group
+rather than about the field's position in the window. A row's menu is the dots
+glyph with `Element.Menu`, not `ui.MenuButton`: the arrowed button is right in
+the header, but one per row would put a border and an arrow beside every entry
+and outshout the rows. `ui.Scroll` now has `MinHeight` of three rows at the
+theme's size (18px icon line plus its 6px padding each side), so the list stops
+collapsing to its heading when the header and footer have taken the window.
 
 ### Phase 6: Settings window
 
@@ -276,6 +294,11 @@ the desktop's window controls, so the view draws a 34px strip under them.
 | The first-run panel hides the header's 连接 and the subline | The panel owns the connect action and says what is missing; two controls for one intent, and a line repeating its heading, only cost the form height |
 | `listeners()` in `core/proxy` reports the protocol | The footer names SOCKS5 and HTTP; deriving the protocol from order would tie the window to the order the server binds in |
 | Contrast becomes a test, not a review note | The failure is numeric and cheap to assert from the tokens the views paint with |
+| One filter above the list, shown when any kind exceeds eight rows | The threshold is about how long a group is, not where the field sits; a field per group would add a control to every heading and filter by kind the heading already names |
+| The filter lives in the field's `ui.Local` state, not in `State` | Nothing else reads the query, `State` is copied per frame by the app, and a new login must not inherit a stale filter |
+| A row's menu is `Element.Menu` on the dots glyph, not `ui.MenuButton` | The arrowed button belongs in the header; one per row puts a border and an arrow beside every entry and outshouts the rows |
+| A kind the build does not know is listed under 其他 | A newer gateway adds rows instead of losing them, and the window still has one place for each entry |
+| The list keeps three rows as its `MinHeight` | The window exists for the resources; a list that collapses to a heading is the 440-wide defect this phase closes |
 | Localize to zh-CN + en-US | The product already mixes them: Chinese GUI and docs, English CLI and library errors. "Chinese only" is not true today |
 | Use mygo's catalog and generated accessors, not a hand-rolled table | The toolkit already ships catalog parsing, ICU formatting, locale resolution, a persisted override and the widget strings; a second mechanism would have to be kept in step with it |
 | Source language is `zh`, not `en` | The window's text is Chinese today; making English the source would rewrite every message before a single translation exists |

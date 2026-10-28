@@ -155,9 +155,44 @@ semantic colours were measured, rather than judged from the source alone.
 
 ### Phase 5: Resource list
 
-- **Status:** pending
-- Actions taken: none
-- Files created/modified: none
+- **Status:** complete
+- Actions taken:
+  - `ui/icons.go`: five kind glyphs (application grid, globe, stacked hosts,
+    name book, unknown kind) and the three-dot row menu, all inline SVG parsed
+    once at package init, stroked at mygo's own 24-grid weight.
+  - `ui/view.go`: `resources` draws one group per `ResourceKind` in the fixed
+    order 应用 / 域名 / IP 地址 / DNS, unknown kinds under 其他; headings read
+    `应用 · 12 项` and count what the filter leaves. `groupResources` and
+    `matchesResource` are pure and tested apart from the widget tree.
+  - A row is one line: kind glyph, title, detail at the right, and a dots menu
+    holding 打开 (disabled without a URL) and 复制. The visible 打开/复制
+    buttons are gone, so each row owns one control instead of three.
+  - `ui.SearchField` appears when any kind holds more than
+    `resourceSearchAt` (8) rows; it lives in the field's own `ui.Local` state
+    and matches title or detail case-insensitively. An empty match says
+    没有匹配的资源.
+  - `ui.Scroll` gained `MinHeight(resourceListMinHeight)`: three rows at the
+    theme's size, so the 440-wide list no longer collapses to its heading.
+  - Catalog: `resourceGroupApp`, `resourceGroupDomain`, `resourceGroupAddress`,
+    `resourceGroupDNS`, `resourceGroupOther`, `resourceGroupCount`,
+    `resourceSearch`, `resourceSearchEmpty`, `resourceMenu` in both languages;
+    `resourceOpen`/`resourceCopy`, which only labelled the removed buttons, are
+    gone. `go tool mygo generate` regenerated the accessors.
+  - Render harness: `save` now calls `tester.SetLocale(lang)`, so MyGo's own
+    widget strings are in the language of the images; without it the Chinese
+    window drew the search placeholder in English.
+  - Tests: grouping and counts, an unknown kind, the row menu reaching both
+    actions and 打开 being disabled without a URL, the filter appearing at the
+    ninth row and filtering 9+1 rows, and three rows plus the footer at
+    440×480.
+- Files created/modified:
+  - `ui/icons.go` (new)
+  - `ui/view.go`
+  - `ui/view_test.go`
+  - `ui/render_test.go`
+  - `locales/zh.json`, `locales/en.json`, `locales/catalog_gen.go`
+  - `core/session/resources.go` (the `Copy` field's comment)
+  - `.planning/2026-10-28-ui-redesign/task_plan.md`
 
 ### Phase 6: Settings window
 
@@ -188,7 +223,7 @@ semantic colours were measured, rather than judged from the source alone.
 | Test | Input | Expected | Actual | Status |
 |---|---|---|---|---|
 | Render every state | `GOTRUST_RENDER_DIR=/tmp/gotrust-ui go test ./ui -run TestRenderEveryState -count=1` | every PNG, suite ok | 20 files, `ok … 0.309s` | pass |
-| Render sizes at the declared minimum | `main-small.png`, `settings-small.png` | content visible at 440×400 and 560×440 | `main-small.png` shows the resource heading with zero rows | **fail — Phase 5 fixes** |
+| Render sizes at the declared minimum | `main-small.png`, `settings-small.png` | content visible at 440×400 and 560×440 | `main-small.png` showed the resource heading with zero rows; Phase 5 closed it with `main-resources-small.png` at 440×480, which shows five rows and the footer | pass |
 | First-run form at the minimum size | `main-setup-small.png` (440×400) | the form scrolls, the action row stays | fields scroll under a pinned 保存并连接 / 仅保存 row | pass |
 | Contrast of the chip colours | `go test ./ui -run TestToneInkPassesAA` | ≥ 4.5:1 at ~11.9px in both appearances | light ink 5.06-6.29 on the window, 4.82-5.14 on the tint; dark 5.02-8.25 / 5.02-6.71; labels 13.10-15.01 | pass |
 | Literal font sizes gone | `grep -n 'FontSize(1[0-9])' ui/*.go` | none | none | pass |
@@ -208,6 +243,13 @@ semantic colours were measured, rather than judged from the source alone.
 | Guard: no literals in views | `go test ./internal/guards` | no CJK literal, equal key sets | `ok` | pass |
 | Locale switch | `go test ./ui -run TestSettingsLanguagePickerCallsSetLocale` | one `SetLocale("en")` | pass | pass |
 | Web pages in English | `go test ./core/prompt/web -run 'TestPagesSpeakEnglish\|TestResolveLanguage'` | English page, success page, env fallback | pass | pass |
+| Grouped resource list | `go test ./ui -run 'TestResourceListRendersAndActs\|TestResourceListGroupsUnknownKinds'` | headings with counts, row menu reaches 打开 and 复制, 打开 disabled without a URL | pass; the unknown kind lands under 其他 | pass |
+| Filter threshold and filtering | `go test ./ui -run TestResourceSearch` | no field at eight rows, a field at nine, typing narrows rows and headings, empty match explained | pass | pass |
+| Three rows at the minimum | `go test ./ui -run TestResourceListKeepsThreeRowsAtTheMinimumSize` (440×480, 20 rows) | three rows and the footer on screen | pass | pass |
+| Rendered long grant | `main-resources.png`, `main-resources-small.png`, `main-resources-en.png` | groups, glyphs, counts, filter, quiet row menus | 9 rows at 540×640, 5 at 440×480 with the footer intact; the Chinese placeholder reads 搜索 and the English one Search | pass |
+| Renders in both themes | `main-online.png`, `main-online-dark.png` | glyphs and counts legible in light and dark | pass | pass |
+| Whole suite after Phase 5 | `go test ./...`, `go vet ./...`, `gofmt -l .`, `go tool mygo vet .`, `reuse lint` | clean | all packages ok; 208/208 files with license information | pass |
+| CGO-free UI build after Phase 5 | `CGO_ENABLED=0 go test ./ui ./internal/gui ./internal/cli` | pass | `ok` | pass |
 
 ## Error Log
 
@@ -224,3 +266,7 @@ semantic colours were measured, rather than judged from the source alone.
 | 2026-10-28 | The resource list still pushed the footer out at 440×480 | 1 | Nothing shrank: mygo's default is shrink 0. The list column, its `Scroll`, the panel columns and the settings body now shrink |
 | 2026-10-28 | English at 440 DIP clipped the `⋯` button | 1 | The header row wraps; the actions take a second line only when they do not fit beside the headline |
 | 2026-10-28 | The first-run form scrolled at 540×640 once the header grew | 1 | Dropped the subline (it repeated the panel) and the header's 连接 (the panel owns it); the form fits again |
+| 2026-10-28 | The Chinese render of the new filter drew its placeholder as "Search" | 1 | The renders set only `MYGO_LOCALE`, which the app's catalog reads; `Tester.lang`, which MyGo's own widget strings read, stayed empty. `save` now calls `tester.SetLocale(lang)`; the placeholder reads 搜索 |
+| 2026-10-28 | `ui.MenuButton` per row put a bordered button with a dropdown arrow beside every entry | 1 | `Element.Menu` on a three-dot glyph: same menu, one icon, no arrow |
+| 2026-10-28 | `resourceListMinHeight` mixed an untyped const with `Theme.FontSize` and did not compile | 1 | `line := float32(resourceIconSize)` before comparing |
+| 2026-10-28 | The row-menu test could not click a second `⋯`: `Tester.Click` takes the first element with that text, which is the header's overflow | 1 | Each row menu carries `Label("<title> 的操作")`, its accessible name, which is also what the test clicks |
