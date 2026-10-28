@@ -169,6 +169,22 @@ func captionTone(c *ui.Context, text string, t tone) ui.Element {
 	return ui.Text(c, text).FontSize(textSize(c, captionScale)).TextColor(toneInk(c.Theme(), t))
 }
 
+// textButton is a button that keeps only its label: a secondary action in a
+// panel (撤销, 清空) stays quieter than the filled primary button, and the
+// pointer tints the padding so the target is still visible. It keeps the
+// vertical room of a filled button, so a row that mixes the two stays on one
+// line.
+func textButton(c *ui.Context, label string) ui.Element {
+	theme := c.Theme()
+	button := ui.ButtonBase(c).Padding(theme.Space(1.5), theme.Space(2)).Radius(theme.Radius)
+	if button.Hovered() {
+		button.Background(theme.SurfaceHover)
+	}
+	return button.Children(func() {
+		ui.Text(c, label).FontSize(theme.FontSize).TextColor(theme.Text)
+	})
+}
+
 // statusChip is the phase as the window's headline: a pill whose dot carries
 // the state's colour, with the label at title size in the theme's text colour.
 // The colour is the state's, so the eye finds the one changing element first,

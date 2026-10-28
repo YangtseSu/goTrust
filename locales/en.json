@@ -1,6 +1,7 @@
 {
   "@@locale": "en",
   "commonCancel": "Cancel",
+  "cancelLogin": "Cancel login",
   "commonSubmit": "Submit",
   "commonClose": "Close",
   "commonSave": "Save",
@@ -56,6 +57,7 @@
   "clashConfig": "Full Clash config",
   "resourcesTitle": "Granted resources",
   "resourceCount": "{count, plural, one {# item} other {# items}}",
+  "resourcesGranted": "{count, plural, one {# granted resource} other {# granted resources}}",
   "resourcesEmptyOnline": "The gateway granted no resources to this account",
   "resourcesEmptyConnecting": "The granted resources appear after the login",
   "resourcesEmpty": "The granted resources appear when connected",

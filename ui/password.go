@@ -217,7 +217,7 @@ func passwordPanel(c *ui.Context, state *State, actions Actions) {
 				passwordRules(c, prompt)
 			})
 		})
-		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
+		panelActions(c, actions.CancelPassword, func() {
 			label := locales.PasswordResetLogin()
 			if prompt.Skip {
 				label = locales.PasswordSkipLogin()
@@ -225,9 +225,6 @@ func passwordPanel(c *ui.Context, state *State, actions Actions) {
 			if ui.PrimaryButton(c, label).Disabled(!prompt.CanSubmit() && !prompt.Skip).Clicked() &&
 				actions.SubmitPassword != nil {
 				actions.SubmitPassword()
-			}
-			if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelPassword != nil {
-				actions.CancelPassword()
 			}
 		})
 	})

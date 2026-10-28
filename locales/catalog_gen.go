@@ -44,6 +44,16 @@ func (msgs Messages) CommonCancel() string {
 	return Catalog.Format(msgs.locale, "commonCancel", nil)
 }
 
+// CancelLogin says "取消登录"
+// in the language the app shows.
+func CancelLogin() string { return In(i18n.Locale()).CancelLogin() }
+
+// CancelLogin says "取消登录"
+// in the language of msgs.
+func (msgs Messages) CancelLogin() string {
+	return Catalog.Format(msgs.locale, "cancelLogin", nil)
+}
+
 // CommonSubmit says "提交"
 // in the language the app shows.
 func CommonSubmit() string { return In(i18n.Locale()).CommonSubmit() }
@@ -602,6 +612,16 @@ func ResourceCount(count int) string { return In(i18n.Locale()).ResourceCount(co
 // in the language of msgs.
 func (msgs Messages) ResourceCount(count int) string {
 	return Catalog.Format(msgs.locale, "resourceCount", map[string]any{"count": count})
+}
+
+// ResourcesGranted says "{count, plural, other {已获授权 # 项资源}}"
+// in the language the app shows.
+func ResourcesGranted(count int) string { return In(i18n.Locale()).ResourcesGranted(count) }
+
+// ResourcesGranted says "{count, plural, other {已获授权 # 项资源}}"
+// in the language of msgs.
+func (msgs Messages) ResourcesGranted(count int) string {
+	return Catalog.Format(msgs.locale, "resourcesGranted", map[string]any{"count": count})
 }
 
 // ResourcesEmptyOnline says "网关没有为该账号授予资源"

@@ -188,6 +188,22 @@ func renderStates(t *testing.T, dir, lang string) {
 			},
 		},
 		{
+			name: "main-code-granted",
+			state: State{
+				Session: session.State{
+					Phase:     session.PhaseConnecting,
+					Detail:    "需要二次验证",
+					Resources: resources,
+				},
+				Config: cfg,
+				Code: &CodePrompt{
+					Kind:    session.CodeSMS,
+					Message: "请输入短信验证码",
+					CanSkip: true,
+				},
+			},
+		},
+		{
 			name: "main-sso",
 			state: State{
 				Session: session.State{Phase: session.PhaseConnecting, Detail: "等待浏览器登录"},

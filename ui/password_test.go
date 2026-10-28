@@ -84,7 +84,7 @@ func TestPasswordPanelRendersAndSubmits(t *testing.T) {
 	if submitted != 1 {
 		t.Fatalf("submit calls = %d", submitted)
 	}
-	if err := tester.Click("取消"); err != nil {
+	if err := tester.Click("取消登录"); err != nil {
 		t.Fatalf("click cancel: %v", err)
 	}
 	if cancelled != 1 {

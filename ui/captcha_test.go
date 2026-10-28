@@ -107,7 +107,7 @@ func TestCaptchaPanelShowsPointsAndCallsActions(t *testing.T) {
 		t.Fatalf("image click mapped to %+v, want {25 25}", added[0])
 	}
 
-	for button, count := range map[string]*int{"撤销": &undone, "清空": &cleared, "提交": &submitted, "取消": &cancelled} {
+	for button, count := range map[string]*int{"撤销": &undone, "清空": &cleared, "提交": &submitted, "取消登录": &cancelled} {
 		if err := tester.Click(button); err != nil {
 			t.Fatalf("click %q: %v", button, err)
 		}

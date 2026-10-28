@@ -1,6 +1,7 @@
 {
   "@@locale": "zh",
   "commonCancel": "取消",
+  "cancelLogin": "取消登录",
   "commonSubmit": "提交",
   "commonClose": "关闭",
   "commonSave": "保存",
@@ -56,6 +57,7 @@
   "clashConfig": "Clash 完整配置",
   "resourcesTitle": "已获授权的资源",
   "resourceCount": "{count, plural, other {# 项}}",
+  "resourcesGranted": "{count, plural, other {已获授权 # 项资源}}",
   "resourcesEmptyOnline": "网关没有为该账号授予资源",
   "resourcesEmptyConnecting": "登录后显示网关授予的资源",
   "resourcesEmpty": "连接后显示网关授予的资源",

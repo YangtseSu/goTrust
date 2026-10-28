@@ -37,7 +37,7 @@ func TestDeviceBindPanelRendersAndAnswers(t *testing.T) {
 	if err := tester.Click("允许绑定"); err != nil {
 		t.Fatalf("click allow: %v", err)
 	}
-	if err := tester.Click("取消"); err != nil {
+	if err := tester.Click("取消登录"); err != nil {
 		t.Fatalf("click cancel: %v", err)
 	}
 	if allowed != 1 || cancelled != 1 {
@@ -92,7 +92,7 @@ func TestCodePanelRendersAndSubmits(t *testing.T) {
 	if submitted != 1 {
 		t.Fatalf("submit calls = %d", submitted)
 	}
-	if err := tester.Click("取消"); err != nil {
+	if err := tester.Click("取消登录"); err != nil {
 		t.Fatalf("click cancel: %v", err)
 	}
 	if cancelled != 1 {
@@ -172,11 +172,75 @@ func TestExternalPanelRendersAndActs(t *testing.T) {
 	if submitted != 1 {
 		t.Fatalf("submit calls = %d", submitted)
 	}
-	if err := tester.Click("取消"); err != nil {
+	if err := tester.Click("取消登录"); err != nil {
 		t.Fatalf("click cancel: %v", err)
 	}
 	if cancelled != 1 {
 		t.Fatalf("cancel calls = %d", cancelled)
+	}
+}
+
+// A login question keeps the session's facts: the header stays, and the count
+// of what the gateway already granted is still on screen under the panel.
+func TestLoginPanelKeepsHeaderAndGrantedCount(t *testing.T) {
+	state := State{
+		Session: session.State{
+			Phase:  session.PhaseConnecting,
+			Detail: "需要二次验证",
+			Resources: session.Resources{Entries: []session.ResourceEntry{
+				{Kind: session.ResourceApp, Title: "知识库", Copy: "https://wiki.example.com"},
+				{Kind: session.ResourceDomain, Title: "build.example.com", Copy: "build.example.com"},
+				{Kind: session.ResourceIP, Title: "192.0.2.10", Copy: "192.0.2.10"},
+			}},
+		},
+		Config: config.Default(),
+		Code:   &CodePrompt{Kind: session.CodeSMS},
+	}
+
+	tester := ui.NewTester(View(&state, Actions{}), 540, 640)
+	tester.Frame()
+	for _, wanted := range []string{"连接中", "已获授权 3 项资源"} {
+		if !tester.HasText(wanted) {
+			t.Fatalf("%q is missing while a panel is up: %v", wanted, tester.Texts())
+		}
+	}
+}
+
+// 取消登录 is not one more answer: it sits on the left, 提交 on the right, and
+// the secondary answers between them stay plain text.
+func TestPanelActionsPutCancelAwayFromSubmit(t *testing.T) {
+	state := State{
+		Config: config.Default(),
+		Code:   &CodePrompt{Kind: session.CodeSMS, Code: "123456"},
+	}
+	actions := Actions{CancelCode: func() {}, CancelCaptcha: func() {}}
+
+	tester := ui.NewTester(View(&state, actions), 540, 640)
+	tester.Frame()
+	cancel, ok := tester.Find("取消登录")
+	if !ok {
+		t.Fatal("the panel has no 取消登录")
+	}
+	submit, ok := tester.Find("提交")
+	if !ok {
+		t.Fatal("the panel has no 提交")
+	}
+	if cancel.X >= submit.X {
+		t.Fatalf("取消登录 at x=%v is not left of 提交 at x=%v", cancel.X, submit.X)
+	}
+
+	state.Captcha = &Captcha{Image: testBitmap(t, 100, 50), Width: 100, Height: 50, Points: []Point{{X: 10, Y: 10}}}
+	state.Code = nil
+	tester = ui.NewTester(View(&state, actions), 540, 640)
+	tester.Frame()
+	cancel, _ = tester.Find("取消登录")
+	undo, ok := tester.Find("撤销")
+	if !ok {
+		t.Fatal("the captcha panel has no 撤销")
+	}
+	submit, _ = tester.Find("提交")
+	if !(cancel.X < undo.X && undo.X < submit.X) {
+		t.Fatalf("captcha actions run in the wrong order: 取消登录 x=%v 撤销 x=%v 提交 x=%v", cancel.X, undo.X, submit.X)
 	}
 }
 
@@ -216,7 +280,7 @@ func TestChoicePanelCallsBackWithTheIndex(t *testing.T) {
 	if len(picked) != 1 || picked[0] != 1 {
 		t.Fatalf("picked = %v", picked)
 	}
-	if err := tester.Click("取消"); err != nil {
+	if err := tester.Click("取消登录"); err != nil {
 		t.Fatalf("click cancel: %v", err)
 	}
 	if cancelled != 1 {

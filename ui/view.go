@@ -133,19 +133,19 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 				header(c, state, actions)
 				switch {
 				case state.Choice != nil:
-					choicePanel(c, state, actions)
+					panelSlot(c, state, func() { choicePanel(c, state, actions) })
 				case state.Captcha != nil:
-					captchaPanel(c, state, actions)
+					panelSlot(c, state, func() { captchaPanel(c, state, actions) })
 				case state.Code != nil:
-					codePanel(c, state, actions)
+					panelSlot(c, state, func() { codePanel(c, state, actions) })
 				case state.External != nil:
-					externalPanel(c, state, actions)
+					panelSlot(c, state, func() { externalPanel(c, state, actions) })
 				case state.DeviceBind != nil:
-					deviceBindPanel(c, state, actions)
+					panelSlot(c, state, func() { deviceBindPanel(c, state, actions) })
 				case state.Password != nil:
-					passwordPanel(c, state, actions)
+					panelSlot(c, state, func() { passwordPanel(c, state, actions) })
 				case state.Setup != nil:
-					setupPanel(c, state, actions)
+					panelSlot(c, state, func() { setupPanel(c, state, actions) })
 				default:
 					resources(c, state, actions)
 				}
@@ -159,6 +159,28 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 // desktop window controls sit in. Both windows declare it, so a view drawn in a
 // tester, where no frame reports one, still leaves the same room.
 const TitleBarHeight = 34
+
+// panelSlot composes a login panel with the one line the resource list leaves
+// behind: the panel takes the room the question needs, and the count of what
+// the gateway already granted stays on screen under it. A question hides the
+// list, not the fact that the account holds resources.
+func panelSlot(c *ui.Context, state *State, panel func()) {
+	ui.Column(c).Grow(1).Shrink(1).Children(func() {
+		ui.Column(c).Grow(1).Shrink(1).Children(panel)
+		grantedLine(c, state)
+	})
+}
+
+// grantedLine is the count of granted resources, as one muted line: it is the
+// only part of the list that survives a panel, and an account with none gets no
+// line at all.
+func grantedLine(c *ui.Context, state *State) {
+	count := len(state.Session.Resources.Entries)
+	if count == 0 {
+		return
+	}
+	caption(c, locales.ResourcesGranted(count))
+}
 
 // titleBar is the window's own title bar: the brand, at caption size and
 // muted, inside the room the desktop's window controls leave. The strip drags
@@ -335,6 +357,11 @@ func KeepAliveSummary(keepAlive session.KeepAliveState) string {
 	return locales.KeepAliveFailedStatus(keepAlive.Status, keepAlive.Target)
 }
 
+// captchaMarkerSize is the diameter of a picked point's number. The web prompt
+// page draws the same marker at 26px and numbers it at caption size, so a
+// challenge answered in either surface marks the clicks the same way.
+const captchaMarkerSize float32 = 26
+
 // captchaPanel replaces the connection controls while the gateway waits for a
 // click captcha. The image is drawn at a known size so a click maps back to the
 // pixels the gateway expects, and the picked points are numbered in order.
@@ -364,10 +391,10 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 					}
 				})
 				for i, point := range captcha.Points {
-					left := float32(point.X)*width/float32(captcha.Width) - 9
-					top := float32(point.Y)*height/float32(captcha.Height) - 9
-					ui.Box(c).Absolute().Left(left).Top(top).Width(18).Height(18).
-						Radius(9).Background(c.Theme().Danger).Center().PassThrough().
+					left := float32(point.X)*width/float32(captcha.Width) - captchaMarkerSize/2
+					top := float32(point.Y)*height/float32(captcha.Height) - captchaMarkerSize/2
+					ui.Box(c).Absolute().Left(left).Top(top).Width(captchaMarkerSize).Height(captchaMarkerSize).
+						Radius(captchaMarkerSize / 2).Background(c.Theme().Danger).Center().PassThrough().
 						Children(func() {
 							ui.Text(c, strconv.Itoa(i+1)).FontSize(textSize(c, captionScale)).TextColor(c.Theme().AccentText).Bold()
 						})
@@ -375,22 +402,17 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 			})
 		}
 
-		ui.Row(c).AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-			caption(c, locales.CaptchaPicked(len(captcha.Points)))
-			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-				if ui.Button(c, locales.CaptchaUndo()).Disabled(len(captcha.Points) == 0).Clicked() && actions.UndoCaptcha != nil {
-					actions.UndoCaptcha()
-				}
-				if ui.Button(c, locales.CaptchaClear()).Disabled(len(captcha.Points) == 0).Clicked() && actions.ClearCaptcha != nil {
-					actions.ClearCaptcha()
-				}
-				if ui.PrimaryButton(c, locales.CommonSubmit()).Disabled(len(captcha.Points) == 0).Clicked() && actions.SubmitCaptcha != nil {
-					actions.SubmitCaptcha()
-				}
-				if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelCaptcha != nil {
-					actions.CancelCaptcha()
-				}
-			})
+		caption(c, locales.CaptchaPicked(len(captcha.Points)))
+		panelActions(c, actions.CancelCaptcha, func() {
+			if textButton(c, locales.CaptchaUndo()).Disabled(len(captcha.Points) == 0).Clicked() && actions.UndoCaptcha != nil {
+				actions.UndoCaptcha()
+			}
+			if textButton(c, locales.CaptchaClear()).Disabled(len(captcha.Points) == 0).Clicked() && actions.ClearCaptcha != nil {
+				actions.ClearCaptcha()
+			}
+			if ui.PrimaryButton(c, locales.CommonSubmit()).Disabled(len(captcha.Points) == 0).Clicked() && actions.SubmitCaptcha != nil {
+				actions.SubmitCaptcha()
+			}
 		})
 	})
 }

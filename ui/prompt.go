@@ -94,6 +94,22 @@ func MethodLabel(method session.AuthMethod) string {
 	return method.String()
 }
 
+// panelActions is the foot of a login panel: 取消登录 on the left, away from the
+// answers, and the panel's own controls on the right, its primary action last.
+// Abandoning the login is a different intent from answering it, so it does not
+// sit beside 提交 where a mis-click ends the flow.
+func panelActions(c *ui.Context, cancel func(), answers func()) {
+	ui.Row(c).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(rowGap).Children(func() {
+		if textButton(c, locales.CancelLogin()).Disabled(cancel == nil).Clicked() && cancel != nil {
+			cancel()
+		}
+		if answers == nil {
+			return
+		}
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(answers)
+	})
+}
+
 // codePanel replaces the connection controls while the gateway waits for a
 // one-time code.
 func codePanel(c *ui.Context, state *State, actions Actions) {
@@ -130,12 +146,9 @@ func codePanel(c *ui.Context, state *State, actions Actions) {
 			}
 		})
 
-		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
+		panelActions(c, actions.CancelCode, func() {
 			if ui.PrimaryButton(c, locales.CommonSubmit()).Disabled(!prompt.CanSubmit()).Clicked() && actions.SubmitCode != nil {
 				actions.SubmitCode()
-			}
-			if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelCode != nil {
-				actions.CancelCode()
 			}
 		})
 	})
@@ -173,13 +186,10 @@ func externalPanel(c *ui.Context, state *State, actions Actions) {
 				})
 		})
 
-		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
+		panelActions(c, actions.CancelExternal, func() {
 			if ui.PrimaryButton(c, locales.CommonSubmit()).Disabled(strings.TrimSpace(prompt.Callback) == "").Clicked() &&
 				actions.SubmitExternal != nil {
 				actions.SubmitExternal()
-			}
-			if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelExternal != nil {
-				actions.CancelExternal()
 			}
 		})
 	})
@@ -209,12 +219,9 @@ func deviceBindPanel(c *ui.Context, state *State, actions Actions) {
 			}
 		})
 
-		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
+		panelActions(c, actions.CancelDeviceBind, func() {
 			if ui.PrimaryButton(c, locales.BindAllow()).Clicked() && actions.AllowDeviceBind != nil {
 				actions.AllowDeviceBind()
-			}
-			if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelDeviceBind != nil {
-				actions.CancelDeviceBind()
 			}
 		})
 	})
@@ -237,10 +244,6 @@ func choicePanel(c *ui.Context, state *State, actions Actions) {
 				}
 			}
 		})
-		ui.Row(c).Justify(ui.End).Children(func() {
-			if ui.Button(c, locales.CommonCancel()).Clicked() && actions.CancelChoice != nil {
-				actions.CancelChoice()
-			}
-		})
+		panelActions(c, actions.CancelChoice, nil)
 	})
 }
