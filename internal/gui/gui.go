@@ -403,6 +403,7 @@ func (a *app) actions() gotrustui.Actions {
 		OpenResource: a.openResource,
 		CopyResource: a.copyResource,
 		CopyPAC:      a.copyPAC,
+		CopyClash:    a.copyClash,
 	}
 }
 
@@ -426,6 +427,32 @@ func (a *app) copyPAC() {
 		return
 	}
 	a.copyResource(url)
+}
+
+// copyClash copies one of the three Clash renderings built from the live grant.
+// The CLI prints the same three from its cache.
+func (a *app) copyClash(format gotrustui.ClashFormat) {
+	snapshot := a.pacSnapshot()
+	var (
+		text string
+		err  error
+	)
+	switch format {
+	case gotrustui.ClashPlain:
+		text, err = snapshot.Clash()
+	case gotrustui.ClashMerge:
+		text, err = snapshot.ClashMerge()
+	case gotrustui.ClashConfig:
+		text, err = snapshot.ClashConfig()
+	default:
+		a.setStatusError("未知的 Clash 格式")
+		return
+	}
+	if err != nil {
+		a.setStatusError("Clash 片段: " + err.Error())
+		return
+	}
+	a.copyResource(text)
 }
 
 // openResource opens a granted application or address in the browser. A

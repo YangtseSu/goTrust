@@ -487,3 +487,35 @@ func TestKeepAliveSummary(t *testing.T) {
 		})
 	}
 }
+
+// The three Clash formats must be reachable from the window with the same
+// selection the CLI flags expose.
+func TestClashButtonsCopyEachFormat(t *testing.T) {
+	cases := []struct {
+		label string
+		want  ClashFormat
+	}{
+		{label: "Clash 片段", want: ClashPlain},
+		{label: "Verge Merge", want: ClashMerge},
+		{label: "Clash 完整配置", want: ClashConfig},
+	}
+	for _, testCase := range cases {
+		t.Run(string(testCase.want), func(t *testing.T) {
+			state := State{
+				Session: session.State{Phase: session.PhaseOnline},
+				Config:  config.Default(),
+			}
+			var copied []ClashFormat
+			actions := Actions{CopyClash: func(format ClashFormat) {
+				copied = append(copied, format)
+			}}
+			tester := ui.NewTester(View(&state, actions), 520, 620)
+			if err := tester.Click(testCase.label); err != nil {
+				t.Fatalf("click %q: %v", testCase.label, err)
+			}
+			if len(copied) != 1 || copied[0] != testCase.want {
+				t.Fatalf("copied = %v, want [%s]", copied, testCase.want)
+			}
+		})
+	}
+}

@@ -53,6 +53,16 @@ type State struct {
 	Password *PasswordPrompt
 }
 
+// ClashFormat selects one of the three Clash/Mihomo renderings. It mirrors the
+// CLI flags so both front-ends expose the same outputs.
+type ClashFormat string
+
+const (
+	ClashPlain  ClashFormat = "clash"
+	ClashMerge  ClashFormat = "clash-merge"
+	ClashConfig ClashFormat = "clash-config"
+)
+
 // Actions are what the window and the tray can ask the application to do.
 type Actions struct {
 	Login      func()
@@ -91,10 +101,11 @@ type Actions struct {
 	CancelPassword func()
 	// OpenResource opens a granted resource's suggested URL in the browser;
 	// CopyResource puts an entry's copy value on the clipboard. CopyPAC copies
-	// the PAC URL.
+	// the PAC URL; CopyClash copies one of the three Clash renderings.
 	OpenResource func(string)
 	CopyResource func(string)
 	CopyPAC      func()
+	CopyClash    func(ClashFormat)
 }
 
 // View renders one frame of the main window.
@@ -332,6 +343,17 @@ func controls(c *ui.Context, state *State, actions Actions) {
 				busyLine(c)
 			}
 		})
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			if ui.Button(c, "Clash 片段").Clicked() && actions.CopyClash != nil {
+				actions.CopyClash(ClashPlain)
+			}
+			if ui.Button(c, "Verge Merge").Clicked() && actions.CopyClash != nil {
+				actions.CopyClash(ClashMerge)
+			}
+			if ui.Button(c, "Clash 完整配置").Clicked() && actions.CopyClash != nil {
+				actions.CopyClash(ClashConfig)
+			}
+		})
 	})
 }
 
@@ -558,6 +580,28 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		copyPAC.Disabled = true
 	}
 
+	clashItems := []*mygo.MenuItem{
+		{ID: "copy-clash", Label: "普通片段", Click: func(*mygo.MenuItem, *mygo.Window) {
+			if actions.CopyClash != nil {
+				actions.CopyClash(ClashPlain)
+			}
+		}},
+		{ID: "copy-clash-merge", Label: "Verge Merge", Click: func(*mygo.MenuItem, *mygo.Window) {
+			if actions.CopyClash != nil {
+				actions.CopyClash(ClashMerge)
+			}
+		}},
+		{ID: "copy-clash-config", Label: "完整配置", Click: func(*mygo.MenuItem, *mygo.Window) {
+			if actions.CopyClash != nil {
+				actions.CopyClash(ClashConfig)
+			}
+		}},
+	}
+	copyClash := &mygo.MenuItem{ID: "copy-clash-menu", Label: "复制 Clash 片段", Submenu: clashItems}
+	if actions.CopyClash == nil {
+		copyClash.Disabled = true
+	}
+
 	settingsItem := &mygo.MenuItem{ID: "settings", Label: "设置…", Click: func(*mygo.MenuItem, *mygo.Window) {
 		if actions.Settings != nil {
 			actions.Settings()
@@ -578,6 +622,7 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		show,
 		openApp,
 		copyPAC,
+		copyClash,
 		settingsItem,
 		mygo.Separator(),
 		quit,
