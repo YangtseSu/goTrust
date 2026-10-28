@@ -272,9 +272,40 @@ semantic colours were measured, rather than judged from the source alone.
 
 ### Phase 8: Keyboard, feedback, tray
 
-- **Status:** pending
-- Actions taken: none
-- Files created/modified: none
+- **Status:** complete
+- Actions taken:
+  - `windowShortcuts` declares the four keys at the window scope from `View`:
+    `Ctrl+Enter` (the header's action: logout while a session is active, login
+    while idle and not busy), `Ctrl+,` (设置), `Esc` (`panelCancel`, in the
+    same order View shows the panels, the first-run form excluded) and `/`
+    (the resource filter).
+  - `Ctrl+Enter` does nothing while a panel owns the login; the test drives
+    both a live session and a code panel and asserts logout stays at one.
+  - `/` is registered only while the resource list and its filter are on
+    screen and the field is unfocused. The field follows a focus token in a
+    window `ui.Local` through `FocusBind`, so the shortcut focuses it and then
+    leaves the key to the text.
+  - The tray lost `copy-pac` and the three Clash copy entries; 复制配置 in the
+    window is the only owner, and `trayClashPlain`, `trayClashScript`,
+    `trayClashConfig` and `trayCopyClash` left both catalogs.
+  - `SettingsState.SetStatus` sets `Status`/`StatusError` and advances
+    `StatusSeq`; every assignment in `ui/settings.go` and `internal/gui/gui.go`
+    goes through it, and the settings window reports through the same
+    `statusToast` as the main window. The persistent line under the form is
+    gone, as is the discovery progress status (the picker already says
+    正在获取…).
+  - `statusToast` now takes the text, the sequence and the failure flag, so
+    both windows share it; a failure adds `Type: "error"`.
+  - README gained the four keys, with the macOS modifier noted.
+  - Tests: the shortcuts reach login/logout/settings, Esc cancels a code panel
+    and Ctrl+Enter does not end it, `/` leaves `TextInputActive` true, the
+    settings toast shows and then fades (same text twice advances the
+    sequence), and the tray carries no `copy` item.
+- Files created/modified:
+  - `ui/view.go`, `ui/settings.go`, `ui/view_test.go`, `ui/settings_test.go`
+  - `internal/gui/gui.go`
+  - `locales/zh.json`, `locales/en.json`, `locales/catalog_gen.go`
+  - `README.md`
 
 ### Phase 9: Verification and docs
 
@@ -326,6 +357,13 @@ semantic colours were measured, rather than judged from the source alone.
 | Panel layouts read | `main-captcha.png`, `main-code-granted-en.png`, `main-sso-en.png`, `main-choice.png`, `main-password-small.png` | cancel left, plain 撤销/清空, 26px markers, grant line | the captcha row reads 取消登录 … 撤销 清空 提交; the count line sits above the divider | pass |
 | Whole suite after Phase 7 | `go test ./...`, `go vet ./...`, `gofmt -l .`, `go tool mygo vet .`, `reuse lint` | clean | all packages ok; 208/208 files with license information | pass |
 | CGO-free UI build after Phase 7 | `CGO_ENABLED=0 go test ./ui ./internal/gui ./internal/cli` | pass | `ok` | pass |
+| Window shortcuts | `go test ./ui -run TestWindowShortcuts` | login on idle, logout on a live session, settings, Esc cancels a panel, Ctrl+Enter does not | pass | pass |
+| `/` focuses the filter | `go test ./ui -run TestSlashFocusesTheResourceSearch` (20-row grant) | no text input before, the filter after | pass | pass |
+| The settings result is a toast | `go test ./ui -run TestSettingsStatusShowsAsAToast` | visible at 250ms, gone after 6s; the same text advances the sequence | pass | pass |
+| The tray has no copy actions | `go test ./ui -run TestTrayMenuStatusProfilesAndToggle` | no item ID starting with `copy` | pass | pass |
+| Every state rendered | `GOTRUST_RENDER_DIR=/tmp/gotrust-ui-phase8 go test ./ui -run TestRenderEveryState -count=1` | 58 PNGs, settings without the result line, main window unchanged | pass | pass |
+| Whole suite after Phase 8 | `go test ./...`, `go vet ./...`, `gofmt -l .`, `go tool mygo vet .`, `reuse lint` | clean | all packages ok; 208/208 files with license information | pass |
+| CGO-free UI build after Phase 8 | `CGO_ENABLED=0 go test ./ui ./internal/gui ./internal/cli` | pass | `ok` | pass |
 
 ## Error Log
 

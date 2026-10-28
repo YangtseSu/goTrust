@@ -12,20 +12,21 @@ new dependency and no change to `core/session`.
 
 ## Next Step
 
-Phase 8: keyboard, feedback and the tray — `Ctrl+Enter` for 连接/断开, `Ctrl+,`
-for 设置, `Esc` for the panel's 取消登录, `/` for the resource filter, one owner
-per copy action between the window and the tray, and `ui.Toast` for copy and
-save results. Phase 7 is complete: every login panel renders inside the window
-under the untouched header, the granted count stays as one line above the
-footer, and 取消登录 sits left of the answers while 提交 stays the only filled
-control.
+Phase 9: verification and docs — re-render every state against
+`/tmp/gotrust-ui-before`, run the whole check list (`CGO_ENABLED=0 go test
+./...`, `go vet`, `go tool mygo vet`, `gofmt`, `reuse lint`), drive the tray app
+on the operator's Wayland session, and record the design rules in `docs/`.
+Phase 8 is complete: the window answers `Ctrl+Enter`, `Ctrl+,`, `Esc` and `/`,
+the tray no longer repeats the window's copy actions, and every result is a
+toast rather than a line that stays.
 
 ## Current Phase
 
-Phase 8: Keyboard, feedback, tray. Phase 7 is complete: `panelSlot` keeps the
-header and pins `grantedLine` above the footer, `panelActions` puts 取消登录 on
-the left and the panel's answers on the right, `textButton` draws 撤销/清空
-without a face, and the captcha marker is 26px in both surfaces.
+Phase 9: Verification and docs. Phase 8 is complete: `windowShortcuts` declares
+the four keys at the window scope, `panelCancel` is the one Esc route,
+`resourceSearchShown` gates `/` to the visible filter, the tray lost its copy
+items, and `SettingsState.SetStatus` gives the settings window the same
+once-per-result toast as the main window.
 
 ## Phases
 
@@ -248,12 +249,29 @@ web page's own, where the browser scales it).
 
 ### Phase 8: Keyboard, feedback, tray
 
-- [ ] `c.OnShortcut`: `Ctrl+Enter` connect/disconnect, `Ctrl+,` settings, `Esc`
+- [x] `c.OnShortcut`: `Ctrl+Enter` connect/disconnect, `Ctrl+,` settings, `Esc`
       cancel the current panel, `/` focus the resource search
-- [ ] Tray menu stops duplicating the window's copy actions; one owner per
+- [x] Tray menu stops duplicating the window's copy actions; one owner per
       action, one wording
-- [ ] `ui.Toast` reports copy/save results instead of a persistent footer line
-- **Status:** pending
+- [x] `ui.Toast` reports copy/save results instead of a persistent footer line
+- **Status:** complete
+
+Details: `windowShortcuts` declares all four keys at the window scope, so they
+work wherever the focus is. `Ctrl+Enter` follows the header: 断开 while a
+session is active, 连接 while idle and not busy, and nothing while a panel owns
+the login — a mis-typed shortcut must not end the login the panel is asking
+about; Esc is that panel's 取消登录, routed by `panelCancel` in the same order
+View shows the panels, with the first-run form excluded because it is not a
+question. `/` is registered only while the resource list and its filter are on
+screen and the field does not have the focus: once it has, the key belongs to
+the text, so a slash in a search stays a slash. The field follows a focus token
+in a window `ui.Local`, through `FocusBind`. The tray now holds the status, the
+toggle, the profiles, 显示窗口, 打开默认应用, 设置… and 退出; 复制配置 in the
+window is the only owner of the PAC and Clash copies, and the four tray-only
+catalog keys are gone. The settings window’s persistent result line became the
+same `statusToast` the main window uses; `SettingsState.SetStatus` advances
+`StatusSeq`, so the same text saved twice is two toasts, and the discovery
+progress message was dropped because the picker already says 正在获取….
 
 ### Phase 9: Verification and docs
 
@@ -339,6 +357,10 @@ web page's own, where the browser scales it).
 | 取消登录 sits left, away from 提交 | Abandoning the login is not a variant of answering it; beside the primary button it was the easiest control to mis-click |
 | 撤销/清空 are `ButtonBase` with a label, not filled buttons | Four filled controls in one row gave the two corrections the same weight as the answer; a plain label with a hover tint keeps the keyboard target and the hierarchy |
 | 取消登录 renders disabled without a callback | The control's presence follows the panel, not the wiring; a tester render then shows the row the app draws, and the click still guards on the callback |
+| `Ctrl+Enter` does nothing while a login panel is up | The panel owns the flow; the key is one keystroke away from 断开, and a mis-press would end the login the panel is answering. Esc is the way out, and the header's 断开 is still there for a deliberate stop |
+| `/` is registered only while the filter is visible and unfocused | A window-level `/` swallows the character from any focused text field; gating it on the field it belongs to keeps the shortcut and lets the search take a slash |
+| The settings result is a toast with a sequence | The line under the form stayed for the window's whole life, so an old result read as the current state; a sequence keeps the same text a second result instead of a silent no-op |
+| The tray keeps no copy actions | 复制配置 already owns the PAC and the three Clash renderings; the tray copy items were a second wording for every export and a second place to keep in sync |
 | The title strip names the profile | The subline's job is the session; the account is static, so it belongs where it does not compete, and a fresh install still shows which profile is being filled |
 | The header row wraps instead of clipping | At 440 DIP the English labels of three controls plus the headline exceed the width; a wrapped second row keeps `⋯` reachable, where a clipped row would hide settings and quit |
 | The first-run panel hides the header's 连接 and the subline | The panel owns the connect action and says what is missing; two controls for one intent, and a line repeating its heading, only cost the form height |
