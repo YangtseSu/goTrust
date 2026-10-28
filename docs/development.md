@@ -186,10 +186,12 @@ front-end supplies, and `gotrust-cli` renders the same snapshot on demand.
 - PAC tests literal IPv4 against `isInNet` and names against `dnsDomainIs`; a
   hostname is never handed to `isInNet`, because that would invoke the browser's
   resolver. PAC has no UDP notion.
-- The Clash fragment starts with `PROCESS-NAME` for both binaries and with the
-  gateway host, so a TUN capture cannot send goTrust's own TLS back through the
-  proxy; then come the granted suffixes and prefixes. It adds no private-range
-  preset.
+- Three Clash renderings share one rule set: `Clash` uses the plain
+  `proxies`/`proxy-groups`/`rules` keys, `ClashMerge` uses Clash Verge Rev's
+  `prepend-*` keys, and `ClashConfig` is a standalone config with a
+  `MATCH,DIRECT` fallback for a local profile. All start with `PROCESS-NAME` for
+  both binaries and with the gateway host, then the granted suffixes and
+  prefixes; none adds a private-range preset.
 - Both listeners are loopback only. The PAC server starts before the first login
   and serves a direct-only script while no data path is usable.
 - No DNS listener exists. The browser or Clash sends the name to the proxy and

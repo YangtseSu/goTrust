@@ -86,15 +86,20 @@ goTrust 本身已经按授权分流：被授权的目的走隧道，其余从本
 * 如果资源只授权了 IP、你却用域名访问，PAC 不知道这个名字对应哪个 IP；把浏览器全局
   指向 goTrust（或 Clash 的 fake-IP）即可，让 goTrust 在隧道内解析。
 
-Clash / Mihomo（Clash Verge Rev、FlClash 等）：
+Clash / Mihomo 分三种输出，按客户端选，不需要改键名：
 
-```sh
-gotrust-cli --print-clash
-```
+| 命令 | 用法 |
+|---|---|
+| `gotrust-cli --print-clash` | 普通片段：粘进 Mihomo/Clash 配置的 `proxies`、`proxy-groups`、`rules` |
+| `gotrust-cli --print-clash-merge` | Clash Verge Rev 的 Merge 配置：原样粘贴并启用（`prepend-*` 已生成） |
+| `gotrust-cli --print-clash-config` | 完整的本地 Mihomo 配置：任何客户端都可作为本地配置导入（只含 goTrust） |
 
-把输出粘进现有配置的 `proxies`、`proxy-groups`、`rules`。片段先放 goTrust 进程和网关
-直连，防止 TUN 把 goTrust 自己的连接再送回来；然后才是授权域名和 IP 段，不写私有段
-预设。TUN 模式需要 fake-IP，并且不要把授权域名放进 `fake-ip-filter`。
+片段先放 goTrust 进程和网关直连，防止 TUN 把 goTrust 自己的连接再送回来；然后才是
+授权域名和 IP 段，不写私有段预设。TUN 模式需要 fake-IP，并且不要把授权域名放进
+`fake-ip-filter`。
+
+FlClash 的标准覆写只能追加规则，不能新增代理和策略组；用 `--print-clash-config` 作为
+本地配置导入，或在它的自定义配置里手工加 SOCKS5 `127.0.0.1:1080`。
 
 不经过外部程序的用法：
 
@@ -188,7 +193,9 @@ gotrust-cli [--config 文件] --status         # 该配置是否正被某个进�
 gotrust-cli [--config 文件] --print-resources
 gotrust-cli --pac-url                        # 运行中的 PAC 地址
 gotrust-cli --print-pac                      # 用缓存的授权打印 PAC
-gotrust-cli --print-clash                    # 用缓存的授权打印 Clash 片段
+gotrust-cli --print-clash                    # 普通 Clash/Mihomo 片段
+gotrust-cli --print-clash-merge              # Clash Verge Rev 的 Merge 配置
+gotrust-cli --print-clash-config             # 完整的本地 Mihomo 配置
 gotrust-cli --json                           # 资源与状态以 JSON 输出
 gotrust-cli --version
 ```

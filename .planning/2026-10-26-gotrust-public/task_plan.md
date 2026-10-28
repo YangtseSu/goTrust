@@ -450,8 +450,11 @@ Design constraints:
 
 **Clash/Mihomo fragment**
 
-- [x] `--print-clash` renders a paste-in fragment: a `socks5` proxy entry
-  (`udp: true`), a selector group `goTrust-routes`, and rules in this order:
+- [x] `--print-clash` renders a paste-in fragment, `--print-clash-merge` the
+  same lists under Clash Verge Rev's `prepend-*` keys, and
+  `--print-clash-config` a standalone config with a `MATCH` fallback. Each has a
+  `socks5` proxy entry (`udp: true`), a selector group `goTrust-routes`, and
+  rules in this order:
   `PROCESS-NAME,gotrust` and `gotrust-cli` (plus the `.exe` spellings) →
   `DIRECT`, the gateway host → `DIRECT` (`IP-CIDR,<ip>/32` when the profile
   address is an IP, `DOMAIN,<host>` when it is a name), granted
