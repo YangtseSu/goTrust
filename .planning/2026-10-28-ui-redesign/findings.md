@@ -150,60 +150,78 @@ The view side:
 * At 540×640 the form fits without scrolling: heading, one caption, four fields
   with their labels above the input (`ui.Field` stacks), the 保存密码 check box,
   then the action row. The header above it still says `配置 默认 ｜ 尚未填写网关`,
-  which Phase 3 replaces with the state as the headline.
+  which Phase 4 replaces with the state as the headline.
 * At 440×400 the fields scroll under a pinned action row, because `setupPanel`
-  uses the same `Scroll` + fixed row shape as `passwordPanel`. Phase 3's
+  uses the same `Scroll` + fixed row shape as `passwordPanel`. Phase 4's
   `MinHeight` change should make this the exception rather than the rule.
 * `ui.Tester.Click` on a disabled button is a no-op, which is what makes the
   "an incomplete form is never submitted" assertion possible without inspecting
   the widget state.
 * The footer still prints `代理端口尚未开启` under the form. It is correct and
-  noise at the same time; Phase 3 collapses the footer to one line.
+  noise at the same time; Phase 4 collapses the footer to one line.
 
 ## Language survey (2026-10-28)
 
-Question: do the comparable clients ship English, and should goTrust?
+Question: what language does goTrust speak today, and should it be one language?
 
-### What goTrust does today
-
-Measured, not read off the README:
+### Measured surfaces
 
 | Surface | Language | Evidence |
 |---|---|---|
-| Tray app (`ui/`, `internal/gui`) | Chinese | 355 distinct Chinese string literals, 421 occurrences, in non-test Go under `ui/` and `internal/gui/` |
-| Web prompt pages (`core/prompt/web`) | Chinese | 70 CJK lines across `pages.go` and `challenges.go`, plus the inline CSS/HTML templates |
+| Tray app (`ui/`, `internal/gui`) | Chinese | 355 distinct Chinese string literals, 421 occurrences, in non-test Go |
+| Web prompt pages (`core/prompt/web`) | Chinese | 70 CJK lines across `pages.go` and `challenges.go`, plus the inline templates |
 | Headless CLI (`internal/cli`) | **English** | zero CJK in the package; every message is `fmt.Fprintf` English |
-| `core/config`, `core/session` errors | English | library boundary; `README`'s own first-run path used to surface them raw |
-| `README.md` and `docs/*.md` | Chinese | README states 界面为中文; `docs/configuration.md` is Chinese |
-| Code, comments, commits, `AGENTS.md` | English | repository rule |
+| `core/config`, `core/session` errors | English | library boundary; the first-run path used to surface them raw |
+| `README.md` and `docs/*.md` | Chinese | README states 界面为中文 |
 
-So the product is not "Chinese only": it is Chinese in the GUI and the docs,
-English in the CLI and the library errors. That split is the actual defect; a
-Chinese-only README hides it.
+The product does not have one language. It has Chinese wherever a person looks
+at a window or a document, and English wherever a person looks at a terminal or
+an error from the library. The same user meets both in one session: the window
+says 已连接 while a failed action prints `server address is empty`.
 
-### The three references
-
-| Source | Languages | Evidence |
-|---|---|---|
-| `zju-connect` (protocol layer upstream) | docs zh + en, CLI en | `README.md` plus `README_en.md`, `docs/service_en.md`, `docs/docker_en.md`; `zju-connect -h` prints English flags and descriptions; the imported tree has 15 CJK lines, nearly all gateway test fixtures and one leftover Chinese log line |
-| `EZ4Connect` (Qt GUI over that core) | Chinese | README, `docs/ADVANCED_USAGE.md` and `docs/ARCHITECTURE.md` are Chinese; the repository file listing has no translations/l10n directory, and the README's own UI walkthrough is Chinese |
-| Official aTrust client, installed 2.5.16.41 | **zh-CN + en-US only** | main process: 122 `{"zh-CN": …, "en-US": …}` entries in its language service; renderer: a 2651-entry Chinese→English dictionary plus `web/locale/{zh-CN,en-US}`; the Electron `locales/*.pak` are Chromium's own strings and say nothing about the product |
-
-The official client's pair is the useful datum: the vendor itself ships exactly
-two UI languages, both of which goTrust already half-supports.
+The first-run fix already forced the first boundary translation
+(`ProfileProblem`). That is the shape of the whole problem: a string crossing
+from `core/*` into the window has no owner.
 
 ### Cost, measured
 
-* GUI: 355 distinct literals (`ui/settings.go` alone 105, `ui/view.go` 64,
+* GUI: 355 distinct literals (`ui/settings.go` 105, `ui/view.go` 64,
   `internal/gui/gui.go` 53, `ui/password.go` 43, `ui/prompt.go` 31,
-  `ui/setup.go` 20).
-* Web prompt pages: 70 CJK lines, of which the HTML templates are the visible
-  text.
+  `ui/setup.go` 20, `ui/theme.go` 3).
+* Web prompt pages: 70 CJK lines.
 * Docs: `README.md` plus six files under `docs/`.
-* CLI: nothing to do.
+* CLI: nothing to do; it is English and stays English.
 
-### Consequence for the plan
+### Decision
 
-The redesign phases rewrite most of those GUI strings (Phases 3-7), so a
-translation written first would be rewritten twice. Localization therefore goes
-last, with the catalog built so a string has one home.
+Two locales, zh-CN and en-US, chosen from the desktop environment and
+overridable in the settings file. The catalog is keyed by the Chinese message
+(as gettext keys by the source string), so a translation is one line next to its
+source text, a missing translation falls back to Chinese instead of showing a
+key, and a test can prove there is no Chinese literal outside the catalog.
+
+Because most of those 355 strings are rewritten by Phases 3-7, the catalog goes
+in first: after it exists, a redesign edits one catalog line per string instead
+of hunting literals, and the translation survives.
+
+## mygo 0.7.1 localization stack
+
+Read from the pinned module, because Phase 2 uses it instead of a second
+mechanism:
+
+| Piece | Location | Behaviour |
+|---|---|---|
+| `i18n.Catalog` | `i18n/catalog.go` | One ARB-style JSON per language, `<tag>.json`, ICU MessageFormat; the source language's file holds every message and the metadata keys (`@@locale`, `@key`); a translation is read on first use and kept |
+| `mygo generate` | `cmd/mygo` | With `i18n` in `mygo.json` (`{"dir": "locales", "source": "zh"}`), it validates the catalogs and writes typed accessors into the catalog directory as a Go package; without a frontend it writes no TypeScript |
+| Generated accessors | `internal/i18ngen/testdata/app/catalog_gen.go` | `locales.Title()`, `locales.FilesSelected(count)`, each reading `i18n.Locale()`, plus `locales.In(tag)` for an explicit language; `init` calls `i18n.NewCatalog` and `i18n.Register`, which makes the catalog's languages the app's |
+| `App.Locale` / `SetLocale` / `OnLocaleChanged` | `locale.go` | The desktop's languages on Linux are `LANGUAGE`, then `LC_ALL`, `LC_MESSAGES`, `LANG`; `SetLocale` shows a chosen tag at once and stores it (PathUserData), `""` follows the desktop again, and `MYGO_LOCALE` overrides one run |
+| Language packs | `locales/{ja,zh-Hans,zh-Hant}` | mygo's own widget strings, which `ui` asks through `l10n.In(lang)`: the text field's 撤销/剪切/复制/粘贴 menu, the date picker, the token field |
+
+Two consequences:
+
+* goTrust links no pack today, so mygo's own menus are **English inside the
+  Chinese window** — a second instance of the same defect, and one import fixes
+  it.
+* `internal/guards` judges the whole `go list -deps` graph, so `core/prompt/web`
+  cannot import the generated `locales` package. The web pages take the language
+  tag and keep their own 35 lines of text.
