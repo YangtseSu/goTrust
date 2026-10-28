@@ -18,18 +18,19 @@ capability, no TUN device, no system proxy and no elevation.
 
 ## Next Step
 
-Phase 9 is complete. CI is green, the installed `r105` package passed its live
-login, and Dependabot's security alerts are on with one grouped update run a
-day per ecosystem. Phase 10 is planned, with 10a as the first step; no code for
-it has started.
+Phase 10 is code complete. Local gates and the PAC/Mihomo smoke pass; the
+live-login gate needs an operator run on a gateway that grants domain
+resources. Phase 9 is complete: CI is green, the installed `r105` package
+passed its live login, and Dependabot's security alerts are on with one grouped
+update run a day per ecosystem.
 
 ## Current Phase
 
-Phase 10 is planned, narrowed to two targets: browsers and ZeroOmega through a
-PAC served on loopback, and the Clash/Mihomo family (Clash Verge Rev, FlClash)
-through a pasted rule fragment. No DNS listener is added: the chosen targets
-send the name to the proxy and goTrust resolves it through the tunnel; dae is
-out because it has no fake-IP and would force one.
+Phase 10 is code complete, narrowed to two targets: browsers and ZeroOmega
+through a PAC served on loopback, and the Clash/Mihomo family (Clash Verge Rev,
+FlClash) through a pasted rule fragment. No DNS listener is added: the chosen
+targets send the name to the proxy and goTrust resolves it through the tunnel;
+dae is out because it has no fake-IP and would force one.
 Phase 9 is code complete. Every declared module is current: the patch/minor set,
 mygo 0.7.1, gvisor's newest buildable `go` branch commit, and ttlcache in place
 of the dormant cache. The workflows use the current action majors, Dependabot
@@ -380,7 +381,7 @@ chased first.
 - **Risk:** the gvisor module is a branch commit, not a release. If the stack
   breaks later, pin the newest commit that passes and record why here.
 
-### Phase 10: Browser and Clash-family handoff (planned)
+### Phase 10: Browser and Clash-family handoff
 
 Goal: a browser (through ZeroOmega or the system proxy) sends only the granted
 intranet destinations to goTrust, and a Clash/Mihomo user can do the same or
@@ -420,71 +421,76 @@ Design constraints:
 
 **Snapshot**
 
-- [ ] `core/handoff`: `Snapshot{Generated, Profile, Gateway, TunnelIP, Online,
+- [x] `core/handoff`: `Snapshot{Generated, Profile, Gateway, TunnelIP, Online,
   SOCKS5, HTTP, Prefixes []netip.Prefix, Domains []string}` built from
   `config.Config` and `session.State`.
-- [ ] Prefixes: merge `IPRule.From`/`To` into the smallest IPv4 prefix set,
+- [x] Prefixes: merge `IPRule.From`/`To` into the smallest IPv4 prefix set,
   dedupe and sort. Ports are ignored: goTrust enforces them and dials an
   ungranted port directly.
-- [ ] Domains: label-suffix set from `Resources.Domains` and `Resources.DNS`
+- [x] Domains: label-suffix set from `Resources.Domains` and `Resources.DNS`
   names, `*.` removed, lower-cased, deduped. `App.WebDomains` never becomes a
   rule.
-- [ ] `Snapshot.PAC()` and `Snapshot.Clash()` are pure and tested.
+- [x] `Snapshot.PAC()` and `Snapshot.Clash()` are pure and tested.
 
 **PAC endpoint**
 
-- [ ] `handoff.listen` (default `127.0.0.1:1082`, empty disables) serves
+- [x] `handoff.listen` (default `127.0.0.1:1082`, empty disables) serves
   `GET /proxy.pac`; GET only, `no-store`, loopback only.
-- [ ] PAC: a literal IPv4 inside a granted prefix, or a host equal to or under a
+- [x] PAC: a literal IPv4 inside a granted prefix, or a host equal to or under a
   granted suffix, returns the HTTP proxy (`PROXY`) when it is configured, or
   the SOCKS5 proxy (`SOCKS5`) when only SOCKS5 is enabled; `localhost`, loopback
   and the gateway host return `DIRECT`; everything else `DIRECT`. Never
   `isInNet` on a hostname.
-- [ ] Generated per request from the live session state; disconnected serves a
+- [x] Generated per request from the live session state; disconnected serves a
   DIRECT-only script so the browser keeps working while goTrust reconnects.
-- [ ] The server runs for the life of each front-end, before the first login.
-- [ ] CLI: `--pac-url` prints the URL and `--print-pac` prints the script; both
+- [x] The server runs for the life of each front-end, before the first login.
+- [x] CLI: `--pac-url` prints the URL and `--print-pac` prints the script; both
   read the cached grant and the settings, no login.
-- [ ] GUI: a tray item "复制 PAC 地址" and the same action in the main window.
+- [x] GUI: a tray item "复制 PAC 地址" and the same action in the main window.
 
 **Clash/Mihomo fragment**
 
-- [ ] `--print-clash` renders a paste-in fragment: a `socks5` proxy entry
+- [x] `--print-clash` renders a paste-in fragment: a `socks5` proxy entry
   (`udp: true`), a selector group `goTrust-routes`, and rules in this order:
   `PROCESS-NAME,gotrust` and `gotrust-cli` (plus the `.exe` spellings) →
   `DIRECT`, the gateway host → `DIRECT` (`IP-CIDR,<ip>/32` when the profile
   address is an IP, `DOMAIN,<host>` when it is a name), granted
   `DOMAIN-SUFFIX` → the group, granted `IP-CIDR,…,no-resolve` → the group.
-- [ ] The fragment assumes the user's own fallback (usually `DIRECT`) and adds
+- [x] The fragment assumes the user's own fallback (usually `DIRECT`) and adds
   no private-range preset: a grant may be public, and a grant may sit inside a
   private range.
-- [ ] Docs: where to paste, the `fake-ip` requirement for TUN mode, and “do not
+- [x] Docs: where to paste, the `fake-ip` requirement for TUN mode, and “do not
   put the granted suffixes in `fake-ip-filter`”.
 
 **Docs and gates**
 
-- [ ] README: ZeroOmega PAC profile (URL), system proxy (PAC URL), Clash Verge
+- [x] README: ZeroOmega PAC profile (URL), system proxy (PAC URL), Clash Verge
   Rev/FlClash (fragment + fake-IP), and a limits table: IPv4 only; the HTTP
   proxy is TCP-only and PAC cannot carry UDP; ungranted destinations go direct;
   a name-only grant needs the name to survive; the endpoint is loopback.
-- [ ] README also documents the zero-artifact usage: point one program at the
+- [x] README also documents the zero-artifact usage: point one program at the
   existing SOCKS5/HTTP proxy (`ALL_PROXY`/`HTTPS_PROXY`, `curl --proxy`, an SSH
   `ProxyCommand`, a systemd `Environment=`). goTrust already splits by grant, so
   a consumer needs no rules at all; the PAC and the Clash fragment exist for a
   browser-only scope or for coexistence with another proxy that owns the default
   route.
-- [ ] README states the PAC boundary: it matches only names present in the grant
+- [x] README states the PAC boundary: it matches only names present in the grant
   (`Resources.Domains` and the gateway's name→IP map). An IP-only grant reached
   by a name needs the global proxy mode (browser profile or environment), or
   Clash fake-IP; PAC will not resolve an unknown name to test its prefix.
-- [ ] Tests: prefix merge (ranges, adjacency, duplicates), domain
+- [x] Tests: prefix merge (ranges, adjacency, duplicates), domain
   normalisation, PAC matching for suffix, literal IP, loopback and gateway,
   Clash rule order and `no-resolve`, offline PAC, bind failure, config
   validation.
-- [ ] Smoke: evaluate the PAC in a JavaScript engine against representative
-  URLs; paste the Clash fragment into a real config and start it; one live login
-  fetching the PAC and reaching a granted resource through the HTTP proxy.
-- **Status:** planned.
+- [x] Smoke: the PAC evaluated in Bun against eight representative URLs
+  (suffix, literal prefix, gateway, loopback, non-matching); the live
+  `/proxy.pac` served from `gotrust-cli` on a loopback port; the Clash fragment
+  accepted by `mihomo -t`. A live login that grants domain resources still needs
+  a gateway run.
+- **Status:** code complete. gofmt, vet, `go test ./...` and `reuse lint`
+  192/192 pass. The PAC, the live endpoint and the Clash fragment were exercised
+  as above. The live-login gate (a grant with domain resources, a fetched PAC,
+  and a proxied request) waits for an operator run.
 - **Risk:** a static Clash fragment goes stale when the grant changes; the PAC
   does not. Regenerate the fragment after a login that changes the grant.
 - **Risk:** PAC cannot carry UDP, so QUIC and WebRTC bypass the proxy; the docs
