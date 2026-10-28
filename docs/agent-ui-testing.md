@@ -1,58 +1,58 @@
 # UI testing on this workstation
 
-Manual smoke tests for the native UI. The app is a tray application, and a
-crash looks like an exit: always capture stderr.
+Smoke tests for the native UI. The app is a tray application, and a crash looks
+like an exit: always capture stderr.
 
-## Safety
+Run the app as a **Wayland client of a headless mutter**. The operator's
+desktop is a Wayland session, and the X11/GLX path hides Wayland-only failures
+outright (see "Frame rules").
 
-- Run with temporary `XDG_CONFIG_HOME` and `XDG_STATE_HOME` unless the test
-  specifically needs the operator's profile. Their real config holds
-  credentials.
-- Screenshots of the desktop may contain private data. Keep them in `/tmp`,
-  crop to the app, and delete them when done. Never commit or paste one.
-- Do not leave the app, `ydotoold`, or injected input running after the test.
-- Confirm the desktop is idle before injecting input. The operator may keep
-  using the machine: a window can open or rise between the screenshot and the
-  click, and a stale coordinate then hits the wrong application. Take the
-  screenshot and click in the same step, and stop the smoke if the layout
-  changed.
-
-## Headless session (preferred)
-
-Most of the native smoke can run without touching the operator's desktop: a
-headless mutter plus its own Xwayland gives an isolated display whose windows,
-screenshots and injected clicks stay inside it. Nothing appears on the real
-screen, and the capture cannot contain the operator's data.
+## Headless Wayland session
 
 ```sh
 root=/tmp/gt-nested
 mkdir -p "$root/runtime" "$root/config" "$root/state"
 chmod 700 "$root/runtime"
-XDG_RUNTIME_DIR="$root/runtime" mutter --headless --no-x11 \
-  --wayland-display=wayland-gt --virtual-monitor 1280x1024 &
-XDG_RUNTIME_DIR="$root/runtime" WAYLAND_DISPLAY=wayland-gt Xwayland :99 &
-sleep 2
-DISPLAY=:99 GDK_BACKEND=x11 XDG_CONFIG_HOME="$root/config" \
-  XDG_STATE_HOME="$root/state" ./gotrust --config "$root/config/config.toml" &
+
+dbus-run-session -- bash -c '
+  root=/tmp/gt-nested
+  export XDG_RUNTIME_DIR="$root/runtime"
+  mutter --headless --no-x11 --wayland-display=wayland-gt \
+    --virtual-monitor 1280x1024 &
+  mpid=$!
+  trap "kill $mpid 2>/dev/null" EXIT
+  # the compositor is up once its socket exists
+  for _ in $(seq 1 40); do [ -S "$root/runtime/wayland-gt" ] && break; sleep 0.1; done
+  unset DISPLAY                       # or GDK picks X11
+  export WAYLAND_DISPLAY=wayland-gt GDK_BACKEND=wayland
+  XDG_CONFIG_HOME="$root/config" XDG_STATE_HOME="$root/state" \
+    /usr/bin/gotrust --config "$root/config/config.toml"
+'
 ```
 
-- Capture with `import -display :99 -window root "$root/shot.png"`: only the
-  nested display is in the image. `grim` and `flameshot` are not involved.
-- Click and move with XTEST through python-xlib:
-  `from Xlib.ext import xtest; xtest.fake_input(d, X.ButtonPress, 1)` after a
-  `MotionNotify` warp; coordinates are the ones in the capture.
-- There is no window manager: windows take their requested size, and the
-  Xwayland screen starts at 640x480, which clips a 600x760 settings window.
-  Enlarge it on :99 (the "against an Xwayland server" warning is expected;
-  `--newmode` may report `BadName` yet still work):
-  `xrandr --newmode "1024x768" ...`, `xrandr --addmode XWAYLAND0 1024x768`,
-  `xrandr --output XWAYLAND0 --mode 1024x768`.
-- The same `--config` rules apply. A profile with `auto_connect = true`,
-  `store_password = true`, a password and a listener that accepts but never
-  answers puts the window in `连接中`, which is how 断开 during a login is
-  exercised in a real window.
-- Kill the app, `Xwayland :99` and the headless mutter when done. The real
-  desktop is still needed for tray/panel behaviour (icon, menu, double-click).
+- A Wayland client takes the EGL path the operator's GNOME session takes. The
+  headless mutter needs a session bus, hence `dbus-run-session`; without one it
+  aborts with `assertion failed: (session_bus)`.
+- There is no screenshot tool for this display: mutter has no wlr-screencopy,
+  so `grim` cannot see it. Check stderr and the exit code (a crash, a GL
+  warning, `goTrust ready`, SIGTERM = 0). To look at the interface, render it:
+  `GOTRUST_RENDER_DIR=/tmp/gotrust-ui go test ./ui -run TestRenderEveryState`.
+- Temporary `XDG_CONFIG_HOME` and `XDG_STATE_HOME` keep the operator's config
+  and credentials out of the test.
+- `--config` is the same file the app reads. A profile with
+  `auto_connect = true`, `store_password = true`, a password and a listener
+  that accepts but never answers puts the window in `连接中`, which is how
+  断开 during a login is exercised in a real window.
+- Stop the app and the compositor when the check is done; nothing may outlive
+  it.
+- Tray and panel behaviour (icon, menu, double-click) still needs a real
+  desktop; that check is the operator's, not a nested session's.
+
+## The real desktop
+
+The nested display cannot be screenshotted, so a picture of the app as the
+operator sees it, and anything the panel or the tray owns, runs on the real
+session with the tools below.
 
 ## GNOME hot corner
 
@@ -114,25 +114,23 @@ Only inspect the cropped app area. Delete every screenshot after use.
 
 ## Launch and quit
 
+A clean start, the ready line, and a clean stop. The packaged binary is
+`/usr/bin/gotrust`; the appindicator deprecation warning on stderr is expected.
+
 ```sh
 tmp=$(mktemp -d)
 mkdir -p "$tmp/config" "$tmp/state"
 XDG_CONFIG_HOME="$tmp/config" XDG_STATE_HOME="$tmp/state" ./gotrust \
   >"$tmp/stderr.log" 2>&1 &
 pid=$!
-# wait for the ready line
 grep -q 'goTrust ready' "$tmp/state/gotrust/gotrust.log"
 kill -TERM "$pid"
 wait "$pid"               # expect 0
 ```
 
-The packaged binary is `/usr/bin/gotrust`. The appindicator deprecation warning
-on stderr is expected.
-
 ## mygo window rules
 
-Measured on 0.6.3, 0.6.4 and 0.7.1 in the nested X11 session and on the
-operator's GNOME Wayland session, with the repro in "Frame rules" below:
+Measured on 0.6.3, 0.6.4 and 0.7.1, nested and on the operator's session:
 
 - `NewWindow` inside a frame is safe from 0.6.4 on. In 0.6.3 it made the new
   window's GtkGLArea fail (`OpenGL 0.0 is too old`, then `native UI shows
@@ -147,21 +145,14 @@ operator's GNOME Wayland session, with the repro in "Frame rules" below:
 - So only the hide hop is required: hide through
   `go func() { mygo.RunOnMain(fn) }()`. Creating a window in the frame that asked
   for it is fine, and `Close` there is deferred by mygo itself.
-- The headless X11 session below does **not** reproduce the crash: the GL
-  context works there, so the frame rules cannot be validated by this smoke
-  alone. Run the repro on the operator's session instead.
 - The settings window hides on close; reopening reloads the saved draft.
-- The headless mutter needs a session bus: without
-  `DBUS_SESSION_BUS_ADDRESS` it aborts with
-  `assertion failed: (session_bus)`. Start a private one with
-  `eval $(dbus-launch --sh-syntax)` or wrap the smoke in
-  `dbus-run-session`.
 
 ## Frame rules
 
 A window's build runs inside mygo's frame, so an action that runs while the
-view builds runs there too. What each operation does from there, measured on
-the operator's GNOME Wayland session with a second window carrying a `Scroll`:
+view builds runs there too. What each operation does from there, measured in
+the headless Wayland session and on the operator's GNOME session, with a second
+window carrying a `Scroll`:
 
 | Operation, from | Where | 0.6.3 | 0.6.4 | 0.7.1 |
 |---|---|---|---|---|
