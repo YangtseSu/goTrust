@@ -187,11 +187,13 @@ front-end supplies, and `gotrust-cli` renders the same snapshot on demand.
   hostname is never handed to `isInNet`, because that would invoke the browser's
   resolver. PAC has no UDP notion.
 - Three Clash renderings share one rule set: `Clash` uses the plain
-  `proxies`/`proxy-groups`/`rules` keys, `ClashMerge` uses Clash Verge Rev's
-  `prepend-*` keys, and `ClashConfig` is a standalone config with a
-  `MATCH,DIRECT` fallback for a local profile. All start with `PROCESS-NAME` for
-  both binaries and with the gateway host, then the granted suffixes and
-  prefixes; none adds a private-range preset.
+  `proxies`/`proxy-groups`/`rules` keys, `ClashScript` is a Clash Verge Rev
+  Script that prepends the same proxy, group and rules to the runtime config
+  (Verge's Merge replaces lists and does not implement `prepend-*`), and
+  `ClashConfig` is a standalone config with a `MATCH,DIRECT` fallback for a
+  local profile. All start with `PROCESS-NAME` for both binaries and with the
+  gateway host, then the granted suffixes and prefixes; none adds a
+  private-range preset.
 - Both listeners are loopback only. The PAC server starts before the first login
   and serves a direct-only script while no data path is usable.
 - No DNS listener exists. The browser or Clash sends the name to the proxy and

@@ -450,8 +450,8 @@ Design constraints:
 
 **Clash/Mihomo fragment**
 
-- [x] `--print-clash` renders a paste-in fragment, `--print-clash-merge` the
-  same lists under Clash Verge Rev's `prepend-*` keys, and
+- [x] `--print-clash` renders a paste-in fragment, `--print-clash-script` a
+  Clash Verge Rev Script that prepends the same proxy, group and rules, and
   `--print-clash-config` a standalone config with a `MATCH` fallback. Each has a
   `socks5` proxy entry (`udp: true`), a selector group `goTrust-routes`, and
   rules in this order:

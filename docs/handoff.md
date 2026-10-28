@@ -54,10 +54,10 @@ ZeroOmega：
 | 命令 | 用法 |
 |---|---|
 | `gotrust-cli --print-clash` | 普通片段：粘进 Mihomo/Clash 配置的 `proxies`、`proxy-groups`、`rules` |
-| `gotrust-cli --print-clash-merge` | Clash Verge Rev 的 Merge 配置：原样粘贴并启用 |
+| `gotrust-cli --print-clash-script` | Clash Verge Rev 的全局扩展脚本（Script） |
 | `gotrust-cli --print-clash-config` | 完整的本地 Mihomo 配置：任何客户端都可作为本地配置导入（只含 goTrust） |
 
-GUI 的托盘“复制 Clash 片段”子菜单和主窗口的 `Clash 片段` / `Verge Merge` /
+GUI 的托盘“复制 Clash 片段”子菜单和主窗口的 `Clash 片段` / `Verge 脚本` /
 `Clash 完整配置` 按钮等同于上面三项，用的是实时授权，不是缓存。
 
 三种输出共用一套规则，顺序是：
@@ -80,15 +80,25 @@ GUI 的托盘“复制 Clash 片段”子菜单和主窗口的 `Clash 片段` / 
 
 订阅更新会覆盖主配置，长期使用建议用下面的 Merge 或独立配置。
 
-### Clash Verge Rev 的 Merge 配置
+### Clash Verge Rev 的全局扩展脚本（Script）
 
-1. 运行 `gotrust-cli --print-clash-merge`，输出已经是 `prepend-proxies` /
-   `prepend-proxy-groups` / `prepend-rules`。
-2. Verge Rev → “配置/订阅”页 → 右上角 **+** → 类型选 **Merge（合并）** → 名称 `goTrust`。
-3. 原样粘贴，保存，点卡片右上角 🔥（或右键 → Enable）启用；卡片出现颜色标记表示生效。
-4. 改了内容后要重新启用一次。多个 Merge 按启用顺序执行。
+**不要用 Merge 配置**：Verge Rev 的 Merge 是对配置做深合并，列表键会被整体替换，并且
+当前版本并不实现 `prepend-rules` / `prepend-proxies` 这类前插键。把片段放进 Merge 后，
+这些键会原样留在运行配置里、被 Mihomo 忽略，`rules:` 仍是订阅原样，规则不会生效。
 
-用 `prepend-rules`，不要用 `append-rules`：后者插到主配置的 `MATCH` 之后，规则不会生效。
+正确做法是用 Script：
+
+1. 运行 `gotrust-cli --print-clash-script`。
+2. Verge Rev → “配置/订阅”页 → 全局扩展配置里的 **Script（脚本）** → 粘贴，保存并启用 🔥。
+3. 脚本会把 `goTrust` 代理、`goTrust-routes` 组和规则前插到每份配置；订阅更新不受影响。
+4. 如果使用每份配置自己的 Script，效果相同，但只对那份配置生效；改完要重新启用一次。
+
+脚本会先去掉同名的旧代理/组/规则，再前插回去，所以重复执行不会产生重复项。规则顺序仍是
+进程/网关直连 → 授权域名 → 授权 IP。
+
+替代做法：Verge Rev 每份配置有“扩展规则 / 扩展代理 / 扩展策略组”三个文件，格式是
+`prepend:` / `append:` / `delete:` 列表；把 `--print-clash` 的内容拆到这三个 `prepend`
+里也可以，不需要脚本引擎。
 
 ### 完整配置（本地配置导入）
 
@@ -103,7 +113,7 @@ FlClash 的**标准覆写只能追加规则，不能新增代理和策略组**�
 
 - 要独立用 goTrust：把 `--print-clash-config` 作为本地配置导入；
 - 要和订阅共存：在 FlClash 的自定义配置里手工加 SOCKS5 `127.0.0.1:1080`，或用它的
-  脚本覆写。Verge 的 `prepend-*` 键在 FlClash 不适用。
+  脚本覆写。Verge 的全局扩展脚本只适用于 Verge Rev。
 
 ### TUN 与 fake-IP
 
@@ -125,10 +135,10 @@ FlClash 的**标准覆写只能追加规则，不能新增代理和策略组**�
 | 现象 | 原因与处理 |
 |---|---|
 | 内网访问没有命中 goTrust | 目标不在本次授权；重新登录后重新生成。或者用域名访问但授权只有 IP，且 TUN 未开 fake-IP |
-| 规则完全不生效 | 用了 `append-rules`，被 `MATCH` 挡在后面；改成 `prepend-rules` 并重新启用 |
+| 规则完全不生效 | 把片段放进了 Merge 配置（Verge 不实现 `prepend-*`）；改用 Script 或“扩展规则/代理/组” |
 | 启动后没有 `goTrust` 代理 | 片段端口与 goTrust 实际 SOCKS5 端口不一致；改 `proxies` 里的 `port` |
 | 与已有名称冲突 | 已有同名 `goTrust` / `goTrust-routes` 时先改名 |
-| 订阅更新后规则消失 | 直接改了主配置；改用 Merge 配置或独立本地配置 |
+| 订阅更新后规则消失 | 直接改了主配置；改用全局扩展脚本或独立本地配置 |
 | TUN 下 goTrust 自己连不上网关 | 片段最前面的 `PROCESS-NAME` 和网关直连规则被删了；保留它们 |
 | 想让 goTrust 掉线时自动绕过 | 把组类型从 `select` 改成 `fallback`，成员顺序保持 `goTrust`、`DIRECT` |
 

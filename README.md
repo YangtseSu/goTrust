@@ -77,9 +77,9 @@ goTrust 已经按授权分流：把程序直接指向上面的代理端口即可
 
 - **浏览器 / ZeroOmega**：用运行期的 PAC URL，默认 `http://127.0.0.1:1082/proxy.pac`；
   GUI 和 `gotrust-cli --pac-url` 都能给出。
-- **Clash / Mihomo**：`gotrust-cli --print-clash`（普通片段）、`--print-clash-merge`
-  （Clash Verge Rev 的 Merge）、`--print-clash-config`（完整本地配置）。GUI 的托盘和
-  主窗口有同样的三项。
+- **Clash / Mihomo**：`gotrust-cli --print-clash`（普通片段）、`--print-clash-script`
+  （Clash Verge Rev 的全局扩展脚本）、`--print-clash-config`（完整本地配置）。GUI 的
+  托盘和主窗口有同样的三项。
 - **不经过外部程序**：直接把程序指向 SOCKS5/HTTP，例如
   `ALL_PROXY=socks5h://127.0.0.1:1080`。
 
@@ -171,7 +171,7 @@ gotrust-cli [--config 文件] --print-resources
 gotrust-cli --pac-url                        # 运行中的 PAC 地址
 gotrust-cli --print-pac                      # 用缓存的授权打印 PAC
 gotrust-cli --print-clash                    # 普通 Clash/Mihomo 片段
-gotrust-cli --print-clash-merge              # Clash Verge Rev 的 Merge 配置
+gotrust-cli --print-clash-script             # Clash Verge Rev 的全局扩展脚本
 gotrust-cli --print-clash-config             # 完整的本地 Mihomo 配置
 gotrust-cli --json                           # 资源与状态以 JSON 输出
 gotrust-cli --version
