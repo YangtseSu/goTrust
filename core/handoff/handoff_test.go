@@ -249,3 +249,42 @@ func TestFromStateIgnoresProgressDetail(t *testing.T) {
 		t.Fatal("a connecting session must not be rendered as online")
 	}
 }
+
+func TestClashMergeUsesPrependKeys(t *testing.T) {
+	cfg := testConfig()
+	snapshot := FromState(cfg, session.State{Phase: session.PhaseOnline, Resources: testResources()})
+	merge, err := snapshot.ClashMerge()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"prepend-proxies:", "prepend-proxy-groups:", "prepend-rules:"} {
+		if !strings.Contains(merge, want) {
+			t.Fatalf("merge is missing %q:\n%s", want, merge)
+		}
+	}
+	if strings.Contains(merge, "\nproxies:") {
+		t.Fatalf("merge must not use the plain keys:\n%s", merge)
+	}
+	if index(merge, "prepend-rules:") > index(merge, "PROCESS-NAME") {
+		t.Fatalf("prepend-rules must hold the rules:\n%s", merge)
+	}
+}
+
+func TestClashConfigIsStandalone(t *testing.T) {
+	cfg := testConfig()
+	snapshot := FromState(cfg, session.State{Phase: session.PhaseOnline, Resources: testResources()})
+	config, err := snapshot.ClashConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"mixed-port: 7890", "mode: rule", "proxies:", "proxy-groups:", "rules:"} {
+		if !strings.Contains(config, want) {
+			t.Fatalf("config is missing %q:\n%s", want, config)
+		}
+	}
+	if !strings.HasSuffix(strings.TrimSpace(config), "MATCH,DIRECT") {
+		t.Fatalf("config must end with a fallback:\n%s", config)
+	}
+}
+
+func index(text, needle string) int { return strings.Index(text, needle) }

@@ -25,7 +25,61 @@ var ErrNoProxy = errors.New("no proxy listener is configured")
 // The first rules keep goTrust's own traffic out of the tunnel. A TUN
 // configuration captures the process's TLS to the gateway as well, and sending
 // that back through the proxy would either loop or add a pointless hop.
-func (s Snapshot) Clash() (string, error) {
+// Clash returns the plain fragment a Mihomo/Clash configuration consumes: the
+// lists are called proxies, proxy-groups and rules.
+func (s Snapshot) Clash() (string, error) { return s.clashFragment(false) }
+
+// ClashMerge returns the same content under the prepend-* keys Clash Verge
+// Rev's Merge profile uses, so the profile can be pasted without editing.
+func (s Snapshot) ClashMerge() (string, error) { return s.clashFragment(true) }
+
+// ClashConfig returns a complete standalone Mihomo configuration. Any client
+// can import it as a local profile; it carries goTrust only and assumes the
+// client manages ports, DNS and TUN.
+func (s Snapshot) ClashConfig() (string, error) {
+	body, err := s.clashBody(false)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "# goTrust standalone Mihomo config, generated %s\n", s.Generated.UTC().Format(time.RFC3339))
+	if s.Profile != "" {
+		fmt.Fprintf(&b, "# profile: %s\n", s.Profile)
+	}
+	if s.Gateway != "" {
+		fmt.Fprintf(&b, "# gateway: %s\n", s.Gateway)
+	}
+	b.WriteString("# Import as a local profile. It carries goTrust only; a subscription\n")
+	b.WriteString("# profile needs its own merge mechanism.\n")
+	b.WriteString("mixed-port: 7890\nallow-lan: false\nmode: rule\nlog-level: info\n\n")
+	b.WriteString(body)
+	b.WriteString("  - MATCH,DIRECT\n")
+	return b.String(), nil
+}
+
+func (s Snapshot) clashFragment(prepend bool) (string, error) {
+	body, err := s.clashBody(prepend)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "# goTrust Clash/Mihomo fragment, generated %s\n", s.Generated.UTC().Format(time.RFC3339))
+	if s.Profile != "" {
+		fmt.Fprintf(&b, "# profile: %s\n", s.Profile)
+	}
+	if s.Gateway != "" {
+		fmt.Fprintf(&b, "# gateway: %s\n", s.Gateway)
+	}
+	if prepend {
+		b.WriteString("# A Clash Verge Rev Merge profile; paste it as-is and enable it.\n")
+	} else {
+		b.WriteString("# Paste under proxies / proxy-groups / rules. Keep your own fallback.\n")
+	}
+	b.WriteString(body)
+	return b.String(), nil
+}
+
+func (s Snapshot) clashBody(prepend bool) (string, error) {
 	listen, proxyType := s.SOCKS5, "socks5"
 	if listen == "" {
 		listen, proxyType = s.HTTP, "http"
@@ -38,16 +92,13 @@ func (s Snapshot) Clash() (string, error) {
 		return "", fmt.Errorf("proxy listener %q: %w", listen, err)
 	}
 
+	proxiesKey, groupsKey, rulesKey := "proxies", "proxy-groups", "rules"
+	if prepend {
+		proxiesKey, groupsKey, rulesKey = "prepend-proxies", "prepend-proxy-groups", "prepend-rules"
+	}
+
 	var b strings.Builder
-	fmt.Fprintf(&b, "# goTrust Clash/Mihomo fragment, generated %s\n", s.Generated.UTC().Format(time.RFC3339))
-	if s.Profile != "" {
-		fmt.Fprintf(&b, "# profile: %s\n", s.Profile)
-	}
-	if s.Gateway != "" {
-		fmt.Fprintf(&b, "# gateway: %s\n", s.Gateway)
-	}
-	b.WriteString("# Paste under proxies / proxy-groups / rules. Keep your own fallback.\n")
-	b.WriteString("proxies:\n")
+	fmt.Fprintf(&b, "%s:\n", proxiesKey)
 	b.WriteString("  - name: goTrust\n")
 	fmt.Fprintf(&b, "    type: %s\n", proxyType)
 	fmt.Fprintf(&b, "    server: %s\n", scalar(host))
@@ -56,14 +107,14 @@ func (s Snapshot) Clash() (string, error) {
 		b.WriteString("    udp: true\n")
 	}
 
-	b.WriteString("proxy-groups:\n")
+	fmt.Fprintf(&b, "%s:\n", groupsKey)
 	b.WriteString("  - name: goTrust-routes\n")
 	b.WriteString("    type: select\n")
 	b.WriteString("    proxies:\n")
 	b.WriteString("      - goTrust\n")
 	b.WriteString("      - DIRECT\n")
 
-	b.WriteString("rules:\n")
+	fmt.Fprintf(&b, "%s:\n", rulesKey)
 	for _, process := range []string{"gotrust", "gotrust-cli", "gotrust.exe", "gotrust-cli.exe"} {
 		fmt.Fprintf(&b, "  - PROCESS-NAME,%s,DIRECT\n", process)
 	}
