@@ -37,7 +37,11 @@ type SettingsState struct {
 	Ports      []string
 	Targets    []string
 	Status     string
-	// StatusError paints the status as a failure instead of a confirmation.
+	// StatusSeq increases with every SetStatus, so the window shows the same
+	// text a second time as a second toast.
+	StatusSeq uint64
+	// StatusError marks the last status as a failure instead of a
+	// confirmation.
 	StatusError bool
 	LogDir      string
 	Busy        bool
@@ -264,8 +268,15 @@ func (s *SettingsState) SetMethods(methods []session.AuthMethod, target, status 
 	s.Methods = methods
 	s.MethodsFrom = target
 	s.Discovering = false
-	s.Status = status
+	s.SetStatus(status, failed)
+}
+
+// SetStatus records the result of an action for the window's toast. The
+// sequence makes the same text a second result rather than a silent no-op.
+func (s *SettingsState) SetStatus(text string, failed bool) {
+	s.Status = text
 	s.StatusError = failed
+	s.StatusSeq++
 }
 
 // dropStaleMethods forgets a list that belongs to another gateway.
@@ -314,8 +325,7 @@ func (s *SettingsState) SelectAuth(index int) {
 	profile := &s.Draft.Profiles[s.Selected]
 	if index == 0 {
 		profile.Auth.AuthType = ""
-		s.Status = locales.AuthAuto()
-		s.StatusError = false
+		s.SetStatus(locales.AuthAuto(), false)
 		return
 	}
 	if index-1 >= len(s.Methods) || index < 0 {
@@ -324,8 +334,7 @@ func (s *SettingsState) SelectAuth(index int) {
 	method := s.Methods[index-1]
 	profile.Auth.AuthType = method.Type
 	profile.Auth.Domain = method.Domain
-	s.Status = locales.AuthChosen(MethodLabel(method))
-	s.StatusError = false
+	s.SetStatus(locales.AuthChosen(MethodLabel(method)), false)
 }
 
 // Target is the gateway the editor points at, with the port from its text
@@ -353,14 +362,12 @@ func (s *SettingsState) AddProfile() {
 		name = locales.ProfileBaseNameN(suffix)
 	}
 	if _, err := s.Draft.AddProfile(name); err != nil {
-		s.Status = err.Error()
-		s.StatusError = true
+		s.SetStatus(err.Error(), true)
 		return
 	}
 	s.refresh()
 	s.Select(s.Draft.ProfileIndex(name))
-	s.Status = locales.ProfileCreated(name)
-	s.StatusError = false
+	s.SetStatus(locales.ProfileCreated(name), false)
 }
 
 // DuplicateProfile copies the selected profile.
@@ -377,8 +384,7 @@ func (s *SettingsState) DuplicateProfile() {
 		name = locales.ProfileCopyNameN(source.Name, suffix)
 	}
 	if _, err := s.Draft.DuplicateProfile(index, name); err != nil {
-		s.Status = err.Error()
-		s.StatusError = true
+		s.SetStatus(err.Error(), true)
 		return
 	}
 	s.refresh()
@@ -388,8 +394,7 @@ func (s *SettingsState) DuplicateProfile() {
 		s.Targets[copied] = targets
 	}
 	s.Select(copied)
-	s.Status = locales.ProfileCopied(name)
-	s.StatusError = false
+	s.SetStatus(locales.ProfileCopied(name), false)
 }
 
 // DeleteProfile removes the selected profile, unless it is the last one.
@@ -398,8 +403,7 @@ func (s *SettingsState) DeleteProfile() {
 	index := s.Selected
 	removed := s.Draft.Profiles[index]
 	if err := s.Draft.DeleteProfile(index); err != nil {
-		s.Status = err.Error()
-		s.StatusError = true
+		s.SetStatus(err.Error(), true)
 		return
 	}
 	// The stored material is removed only after a save; until then the draft is
@@ -416,8 +420,7 @@ func (s *SettingsState) DeleteProfile() {
 		active = 0
 	}
 	s.Select(active)
-	s.Status = locales.ProfileDeleted()
-	s.StatusError = false
+	s.SetStatus(locales.ProfileDeleted(), false)
 }
 
 // Apply folds the buffers into a configuration ready to validate and save. It
@@ -560,7 +563,12 @@ func splitTargets(text string) []string {
 func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Context) {
 	return func(c *ui.Context) {
 		state.refresh()
-		ui.Column(c).Fill().Children(func() {
+		root := ui.Column(c).Fill()
+		// A save, a profile change or a failed file write is a result, not a
+		// line that stays under the form: the window reports it once, as the
+		// main window reports a copy.
+		statusToast(c, root, state.Status, state.StatusSeq, state.StatusError)
+		root.Children(func() {
 			titleBar(c, "")
 			ui.Column(c).Grow(1).Shrink(1).Padding(windowPadding).Gap(sectionGap).Children(func() {
 				settingsBody(c, state, actions)
@@ -627,14 +635,6 @@ func settingsBody(c *ui.Context, state *SettingsState, actions SettingsActions) 
 		})
 
 		ui.Divider(c)
-		if state.Status != "" {
-			line := ui.Text(c, state.Status).FontSize(c.Theme().FontSize)
-			if state.StatusError {
-				line.TextColor(toneInk(c.Theme(), toneDanger))
-			} else {
-				line.TextColor(c.Theme().TextMuted)
-			}
-		}
 		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 			if ui.PrimaryButton(c, locales.CommonSave()).Disabled(!dirty).Clicked() && actions.Save != nil {
 				actions.Save()
@@ -828,8 +828,7 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 					caption(c, locales.TotpStored())
 					if ui.Button(c, locales.CommonRemove()).Clicked() {
 						profile.Auth.TOTPSecret = ""
-						state.Status = locales.TotpRemoved()
-						state.StatusError = false
+						state.SetStatus(locales.TotpRemoved(), false)
 					}
 				})
 			})

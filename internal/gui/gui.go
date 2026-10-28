@@ -531,8 +531,7 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 			cfg := a.currentConfig()
 			mutate(func(state *gotrustui.SettingsState) {
 				state.Reload(cfg)
-				state.Status = locales.SettingsDiscarded()
-				state.StatusError = false
+				state.SetStatus(locales.SettingsDiscarded(), false)
 			})
 		},
 		NewProfile: func() {
@@ -611,16 +610,14 @@ func (a *app) openConfig() {
 	a.mu.RUnlock()
 	if path == "" {
 		if state != nil {
-			state.Status = locales.ConfigPathUnavailable()
-			state.StatusError = true
+			state.SetStatus(locales.ConfigPathUnavailable(), true)
 			a.invalidateSettings()
 		}
 		return
 	}
 	if err := mygo.Shell.OpenPath(path); err != nil {
 		if state != nil {
-			state.Status = locales.OpenConfigFailed(err.Error())
-			state.StatusError = true
+			state.SetStatus(locales.OpenConfigFailed(err.Error()), true)
 			a.invalidateSettings()
 		}
 		a.logf("open config: %v", err)
@@ -1313,14 +1310,12 @@ func (a *app) saveSettings() {
 
 	cfg, err := state.Apply()
 	if err != nil {
-		state.Status = err.Error()
-		state.StatusError = true
+		state.SetStatus(err.Error(), true)
 		a.invalidateSettings()
 		return
 	}
 	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
-		state.Status = locales.SaveFailed(err.Error())
-		state.StatusError = true
+		state.SetStatus(locales.SaveFailed(err.Error()), true)
 		a.invalidateSettings()
 		a.logf("save settings: %v", err)
 		return
@@ -1340,8 +1335,7 @@ func (a *app) saveSettings() {
 	a.mu.RUnlock()
 	if settings != nil {
 		settings.Reload(cfg)
-		settings.Status = locales.SettingsSaved()
-		settings.StatusError = false
+		settings.SetStatus(locales.SettingsSaved(), false)
 	}
 
 	a.reconcileProfileSwitch(previous, cfg)
@@ -1385,7 +1379,7 @@ func (a *app) selectProfile(name string) {
 	a.mu.RUnlock()
 	if settings != nil {
 		settings.Reload(cfg)
-		settings.Status = locales.ProfileSwitched()
+		settings.SetStatus(locales.ProfileSwitched(), false)
 		a.invalidateSettings()
 	}
 }
@@ -1467,8 +1461,7 @@ func (a *app) setAutostart(on bool) {
 
 	if err := mygo.App.SetOpenAtLogin(on); err != nil {
 		if state != nil {
-			state.Status = locales.AutostartFailed(err.Error())
-			state.StatusError = true
+			state.SetStatus(locales.AutostartFailed(err.Error()), true)
 			a.invalidateSettings()
 		}
 		a.logf("autostart: %v", err)
@@ -1476,11 +1469,11 @@ func (a *app) setAutostart(on bool) {
 	}
 	a.persistFlag(func(cfg *config.Config) { cfg.App.Autostart = on })
 	if state != nil {
-		state.Status = locales.AutostartOn()
+		status := locales.AutostartOn()
 		if !on {
-			state.Status = locales.AutostartOff()
+			status = locales.AutostartOff()
 		}
-		state.StatusError = false
+		state.SetStatus(status, false)
 		a.invalidateSettings()
 	}
 }
@@ -1511,16 +1504,14 @@ func (a *app) openLogs() {
 	a.mu.RUnlock()
 	if a.logDir == "" {
 		if state != nil {
-			state.Status = locales.LogDirUnavailable()
-			state.StatusError = true
+			state.SetStatus(locales.LogDirUnavailable(), true)
 			a.invalidateSettings()
 		}
 		return
 	}
 	if err := mygo.Shell.OpenPath(a.logDir); err != nil {
 		if state != nil {
-			state.Status = locales.OpenLogsFailed(err.Error())
-			state.StatusError = true
+			state.SetStatus(locales.OpenLogsFailed(err.Error()), true)
 			a.invalidateSettings()
 		}
 		a.logf("open logs: %v", err)
@@ -1540,8 +1531,7 @@ func (a *app) discoverAuth() {
 
 	target, err := state.Target()
 	if err != nil {
-		state.Status = err.Error()
-		state.StatusError = true
+		state.SetStatus(err.Error(), true)
 		a.invalidateSettings()
 		return
 	}
@@ -1550,7 +1540,6 @@ func (a *app) discoverAuth() {
 	state.Discovering = true
 	state.Methods = nil
 	state.MethodsFrom = ""
-	state.Status = locales.MethodsDiscovering()
 	a.invalidateSettings()
 
 	go func() {

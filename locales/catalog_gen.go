@@ -868,46 +868,6 @@ func (msgs Messages) TrayOpenApp() string {
 	return Catalog.Format(msgs.locale, "trayOpenApp", nil)
 }
 
-// TrayClashPlain says "普通片段"
-// in the language the app shows.
-func TrayClashPlain() string { return In(i18n.Locale()).TrayClashPlain() }
-
-// TrayClashPlain says "普通片段"
-// in the language of msgs.
-func (msgs Messages) TrayClashPlain() string {
-	return Catalog.Format(msgs.locale, "trayClashPlain", nil)
-}
-
-// TrayClashScript says "Verge 脚本"
-// in the language the app shows.
-func TrayClashScript() string { return In(i18n.Locale()).TrayClashScript() }
-
-// TrayClashScript says "Verge 脚本"
-// in the language of msgs.
-func (msgs Messages) TrayClashScript() string {
-	return Catalog.Format(msgs.locale, "trayClashScript", nil)
-}
-
-// TrayClashConfig says "完整配置"
-// in the language the app shows.
-func TrayClashConfig() string { return In(i18n.Locale()).TrayClashConfig() }
-
-// TrayClashConfig says "完整配置"
-// in the language of msgs.
-func (msgs Messages) TrayClashConfig() string {
-	return Catalog.Format(msgs.locale, "trayClashConfig", nil)
-}
-
-// TrayCopyClash says "复制 Clash 片段"
-// in the language the app shows.
-func TrayCopyClash() string { return In(i18n.Locale()).TrayCopyClash() }
-
-// TrayCopyClash says "复制 Clash 片段"
-// in the language of msgs.
-func (msgs Messages) TrayCopyClash() string {
-	return Catalog.Format(msgs.locale, "trayCopyClash", nil)
-}
-
 // TraySettings says "设置…"
 // in the language the app shows.
 func TraySettings() string { return In(i18n.Locale()).TraySettings() }

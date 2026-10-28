@@ -6,6 +6,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -890,5 +891,31 @@ func TestIdentitySummaryOmitsTheEmptyProcess(t *testing.T) {
 	})
 	if withProcess != "Windows · 2.5.16.41 · agent" {
 		t.Fatalf("summary = %q", withProcess)
+	}
+}
+
+// A save's result is a toast: it shows once and goes, instead of holding a line
+// under the form for the rest of the window's life. The sequence makes the
+// same text a second result.
+func TestSettingsStatusShowsAsAToast(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/home/user/.local/state/gotrust")
+	state.SetStatus(locales.SettingsSaved(), false)
+	first := state.StatusSeq
+	state.SetStatus(locales.SettingsSaved(), false)
+	if state.StatusSeq <= first {
+		t.Fatal("repeating the same result did not advance the sequence")
+	}
+
+	tester := ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760)
+	tester.Frame()
+	tester.Advance(250 * time.Millisecond)
+	tester.Frame()
+	if !tester.HasText(locales.SettingsSaved()) {
+		t.Fatalf("the result is not on screen: %v", tester.Texts())
+	}
+	tester.Advance(6 * time.Second)
+	tester.Frame()
+	if tester.HasText(locales.SettingsSaved()) {
+		t.Fatal("the result stayed on screen instead of fading as a toast")
 	}
 }

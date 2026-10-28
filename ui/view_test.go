@@ -451,6 +451,13 @@ func TestTrayMenuStatusProfilesAndToggle(t *testing.T) {
 	if !items[0].Disabled {
 		t.Fatal("the status line is clickable")
 	}
+	// 复制配置 keeps the copy actions; the tray's job is the session, not a
+	// second wording for every export.
+	for _, item := range items {
+		if strings.HasPrefix(item.ID, "copy") {
+			t.Fatalf("the tray repeats the window's copy action: %q", item.Label)
+		}
+	}
 
 	var toggle, profiles *mygo.MenuItem
 	for _, item := range items {
@@ -688,5 +695,84 @@ func TestClashButtonsCopyEachFormat(t *testing.T) {
 				t.Fatalf("copied = %v, want [%s]", copied, testCase.want)
 			}
 		})
+	}
+}
+
+// The window answers its own keys: Ctrl+Enter is the state's action, Ctrl+,
+// opens the settings window, and Esc is the 取消登录 of the panel on screen.
+func TestWindowShortcuts(t *testing.T) {
+	var login, logout, settings int
+	actions := Actions{
+		Login:    func() { login++ },
+		Logout:   func() { logout++ },
+		Settings: func() { settings++ },
+	}
+
+	idle := State{Session: session.State{Phase: session.PhaseIdle}, Config: config.Default()}
+	tester := ui.NewTester(View(&idle, actions), 540, 640)
+	tester.Frame()
+	tester.Key(ui.Cmd, ui.KeyEnter)
+	if login != 1 {
+		t.Fatalf("Ctrl+Enter on an idle window called login %d times, want 1", login)
+	}
+	tester.Key(ui.Cmd, ui.KeyComma)
+	if settings != 1 {
+		t.Fatalf("Ctrl+, called settings %d times, want 1", settings)
+	}
+
+	online := idle
+	online.Session.Phase = session.PhaseOnline
+	tester = ui.NewTester(View(&online, actions), 540, 640)
+	tester.Frame()
+	tester.Key(ui.Cmd, ui.KeyEnter)
+	if logout != 1 {
+		t.Fatalf("Ctrl+Enter on a live session called logout %d times, want 1", logout)
+	}
+
+	// A panel owns the login: Esc cancels it, and Ctrl+Enter does not end the
+	// session behind it.
+	var cancelled int
+	panel := State{Config: config.Default(), Code: &CodePrompt{Kind: session.CodeSMS}}
+	tester = ui.NewTester(View(&panel, Actions{
+		Logout:     func() { logout++ },
+		CancelCode: func() { cancelled++ },
+	}), 540, 640)
+	tester.Frame()
+	tester.Key(ui.Cmd, ui.KeyEnter)
+	if logout != 1 {
+		t.Fatalf("Ctrl+Enter ended a login the panel was asking about: logout=%d", logout)
+	}
+	tester.Key(0, ui.KeyEscape)
+	if cancelled != 1 {
+		t.Fatalf("Esc called cancel %d times, want 1", cancelled)
+	}
+}
+
+// / reaches the resource filter, and once the field has the focus the key
+// belongs to the text again.
+func TestSlashFocusesTheResourceSearch(t *testing.T) {
+	state := State{
+		Session:   longGrant(),
+		Config:    config.Default(),
+		Listeners: renderListeners(),
+	}
+	tester := ui.NewTester(View(&state, Actions{}), 540, 640)
+	tester.Frame()
+	if active, _ := tester.TextInputActive(); active {
+		t.Fatal("a text input has the focus before /")
+	}
+	tester.Key(0, ui.KeySlash)
+	if active, _ := tester.TextInputActive(); !active {
+		t.Fatal("/ did not focus the resource filter")
+	}
+
+	// A panel replaces the list; when the list returns, the filter must not
+	// take the focus back on its own.
+	state.Code = &CodePrompt{Kind: session.CodeSMS}
+	tester.Frame()
+	state.Code = nil
+	tester.Frame()
+	if active, _ := tester.TextInputActive(); active {
+		t.Fatal("the filter took the focus back without a key press")
 	}
 }

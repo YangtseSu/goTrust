@@ -126,7 +126,9 @@ type Actions struct {
 func View(state *State, actions Actions) func(c *ui.Context) {
 	return func(c *ui.Context) {
 		root := ui.Column(c).Fill()
-		statusToast(c, root, state)
+		statusToast(c, root, state.Status, state.StatusSeq, state.StatusError)
+		searchFocus := ui.Local(root, "search-focus", func() uint64 { return 0 })
+		windowShortcuts(c, state, actions, searchFocus)
 		root.Children(func() {
 			titleBar(c, activeProfileName(state.Config))
 			ui.Column(c).Grow(1).Shrink(1).Padding(windowPadding).Gap(sectionGap).Children(func() {
@@ -147,7 +149,7 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 				case state.Setup != nil:
 					panelSlot(c, state, func() { setupPanel(c, state, actions) })
 				default:
-					resources(c, state, actions)
+					resources(c, state, actions, searchFocus)
 				}
 				footer(c, state)
 			})
@@ -159,6 +161,79 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 // desktop window controls sit in. Both windows declare it, so a view drawn in a
 // tester, where no frame reports one, still leaves the same room.
 const TitleBarHeight = 34
+
+// windowShortcuts are the keys the window answers wherever the focus is: the
+// state's own action (Ctrl+Enter, or Cmd on a platform that has one), the
+// settings window (Ctrl+,), the way out of a login question (Esc) and the
+// resource filter (/). A panel owns the flow while it is up, so Ctrl+Enter
+// waits instead of ending a login the user is answering; Esc is what cancels.
+func windowShortcuts(c *ui.Context, state *State, actions Actions, searchFocus *uint64) {
+	if actions.Settings != nil {
+		c.OnShortcut(ui.Cmd, ui.KeyComma, actions.Settings)
+	}
+	switch {
+	case panelOpen(state):
+		// The panel's own foot has 取消登录; Esc does the same.
+		if cancel := panelCancel(state, actions); cancel != nil {
+			c.OnShortcut(0, ui.KeyEscape, cancel)
+		}
+	case phaseActive(state.Session.Phase):
+		if actions.Logout != nil {
+			c.OnShortcut(ui.Cmd, ui.KeyEnter, actions.Logout)
+		}
+	case !state.Busy && actions.Login != nil:
+		c.OnShortcut(ui.Cmd, ui.KeyEnter, actions.Login)
+	}
+	if searchFocus != nil && *searchFocus != 0 && !resourceSearchShown(state) {
+		// The filter left with the list; a request kept for it would focus the
+		// next list the user never asked to search.
+		*searchFocus = 0
+	}
+	if searchFocus == nil || *searchFocus != 0 || !resourceSearchShown(state) {
+		return
+	}
+	// While the field has the focus, / belongs to the text: the shortcut
+	// exists to reach the filter, not to stop it from taking a slash.
+	if ui.FocusedValue(c, searchFocus) != 0 {
+		return
+	}
+	c.OnShortcut(0, ui.KeySlash, func() { *searchFocus = 1 })
+}
+
+// panelOpen reports whether a pre-login panel owns the window body.
+func panelOpen(state *State) bool {
+	return state.Choice != nil || state.Captcha != nil || state.Code != nil ||
+		state.External != nil || state.DeviceBind != nil || state.Password != nil ||
+		state.Setup != nil
+}
+
+// panelCancel is the way out of the panel on screen, in the order View shows
+// them. nil means no login question is up, so Esc has nothing to cancel; the
+// first-run form is not a question and keeps its fields.
+func panelCancel(state *State, actions Actions) func() {
+	switch {
+	case state.Choice != nil:
+		return actions.CancelChoice
+	case state.Captcha != nil:
+		return actions.CancelCaptcha
+	case state.Code != nil:
+		return actions.CancelCode
+	case state.External != nil:
+		return actions.CancelExternal
+	case state.DeviceBind != nil:
+		return actions.CancelDeviceBind
+	case state.Password != nil:
+		return actions.CancelPassword
+	default:
+		return nil
+	}
+}
+
+// resourceSearchShown reports whether the body is the resource list and that
+// list has a filter. A panel replaces the list, and a short list needs none.
+func resourceSearchShown(state *State) bool {
+	return !panelOpen(state) && resourceSearchNeeded(state.Session.Resources.Entries)
+}
 
 // panelSlot composes a login panel with the one line the resource list leaves
 // behind: the panel takes the room the question needs, and the count of what
@@ -216,17 +291,22 @@ func activeProfileName(cfg config.Config) string {
 }
 
 // statusToast reports the last action's result once. The window never keeps it
-// on screen: a result is something that happened, not a permanent line.
-func statusToast(c *ui.Context, root ui.Element, state *State) {
-	if state.Status == "" {
+// on screen: a result is something that happened, not a permanent line. Both
+// windows share it, each with its own sequence.
+func statusToast(c *ui.Context, root ui.Element, text string, seq uint64, failed bool) {
+	if text == "" {
 		return
 	}
 	shown := ui.Local[uint64](root, "status-seq", func() uint64 { return 0 })
-	if shown == nil || *shown == state.StatusSeq {
+	if shown == nil || *shown == seq {
 		return
 	}
-	*shown = state.StatusSeq
-	c.AddToast(ui.Toast{ID: "status", Title: state.Status})
+	*shown = seq
+	toast := ui.Toast{ID: "status", Title: text}
+	if failed {
+		toast.Type = "error"
+	}
+	c.AddToast(toast)
 }
 
 // header is the state and what it acts on: the phase as the window's headline,
@@ -578,7 +658,8 @@ func matchesResource(entry session.ResourceEntry, filter string) bool {
 }
 
 // resources lists what the gateway granted this account, one group per kind.
-func resources(c *ui.Context, state *State, actions Actions) {
+// searchFocus is the window's focus request for the filter, so / reaches it.
+func resources(c *ui.Context, state *State, actions Actions, searchFocus *uint64) {
 	granted := state.Session.Resources
 
 	ui.Column(c).Grow(1).Shrink(1).Gap(rowGap).Children(func() {
@@ -601,7 +682,7 @@ func resources(c *ui.Context, state *State, actions Actions) {
 
 		var filter string
 		if resourceSearchNeeded(granted.Entries) {
-			filter = resourceSearch(c)
+			filter = resourceSearch(c, searchFocus)
 		}
 		groups := groupResources(granted.Entries, filter)
 		if len(groups) == 0 {
@@ -637,12 +718,16 @@ func resourceSearchNeeded(entries []session.ResourceEntry) bool {
 
 // resourceSearch is the filter above the list. What the user types belongs to
 // the field, not to the app state: no other part of the window reads it, and a
-// new login can replace the rows without carrying a stale query.
-func resourceSearch(c *ui.Context) string {
+// new login can replace the rows without carrying a stale query. The field
+// follows focus, which is how the window's / reaches it.
+func resourceSearch(c *ui.Context, focus *uint64) string {
 	row := ui.Row(c).AlignItems(ui.Center)
 	query := ui.Local(row, "resource-query", func() string { return "" })
 	row.Children(func() {
-		ui.SearchField(c, query).Label(locales.ResourceSearch()).Grow(1)
+		field := ui.SearchField(c, query).Label(locales.ResourceSearch()).Grow(1)
+		if focus != nil {
+			field.FocusBind(focus, *focus)
+		}
 	})
 	return *query
 }
@@ -820,7 +905,10 @@ func truncate(text string, limit int) string {
 }
 
 // TrayMenu builds the tray menu for the current state: a status line, the
-// connect toggle, the profile submenu, and the window commands.
+// connect toggle, the profile submenu, and the window commands. Copying a
+// PAC or a Clash rendering belongs to the window's 复制配置 menu alone: one
+// owner per action, one wording, and a tray menu that does not repeat the
+// window's exports.
 func TrayMenu(state *State, actions Actions) *mygo.Menu {
 	status := &mygo.MenuItem{
 		ID:       "status",
@@ -886,37 +974,6 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		openApp.Disabled = true
 	}
 
-	copyPAC := &mygo.MenuItem{ID: "copy-pac", Label: locales.CopyPAC()}
-	if state.PACURL != "" && actions.CopyPAC != nil {
-		copyPAC.Click = func(*mygo.MenuItem, *mygo.Window) {
-			actions.CopyPAC()
-		}
-	} else {
-		copyPAC.Disabled = true
-	}
-
-	clashItems := []*mygo.MenuItem{
-		{ID: "copy-clash", Label: locales.TrayClashPlain(), Click: func(*mygo.MenuItem, *mygo.Window) {
-			if actions.CopyClash != nil {
-				actions.CopyClash(ClashPlain)
-			}
-		}},
-		{ID: "copy-clash-script", Label: locales.TrayClashScript(), Click: func(*mygo.MenuItem, *mygo.Window) {
-			if actions.CopyClash != nil {
-				actions.CopyClash(ClashScript)
-			}
-		}},
-		{ID: "copy-clash-config", Label: locales.TrayClashConfig(), Click: func(*mygo.MenuItem, *mygo.Window) {
-			if actions.CopyClash != nil {
-				actions.CopyClash(ClashConfig)
-			}
-		}},
-	}
-	copyClash := &mygo.MenuItem{ID: "copy-clash-menu", Label: locales.TrayCopyClash(), Submenu: clashItems}
-	if actions.CopyClash == nil {
-		copyClash.Disabled = true
-	}
-
 	settingsItem := &mygo.MenuItem{ID: "settings", Label: locales.TraySettings(), Click: func(*mygo.MenuItem, *mygo.Window) {
 		if actions.Settings != nil {
 			actions.Settings()
@@ -936,8 +993,6 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		mygo.Separator(),
 		show,
 		openApp,
-		copyPAC,
-		copyClash,
 		settingsItem,
 		mygo.Separator(),
 		quit,

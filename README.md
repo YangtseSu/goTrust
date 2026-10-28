@@ -54,6 +54,10 @@ yay -S gotrust-cli    # 无界面版，只依赖 glibc
 启动时保留。`gotrust-cli` 的输出仍然是英文，因为它在终端和日志里阅读；它的登录提示页
 跟随 `LC_ALL`、`LC_MESSAGES` 或 `LANG`。
 
+主窗口支持键盘操作（macOS 上把 Ctrl 换成 Command）：`Ctrl+Enter` 连接或断开，
+`Ctrl+,` 打开设置，`/` 跳到资源搜索框。登录面板打开时 `Esc` 等于“取消登录”，
+`Ctrl+Enter` 不会替你结束正在回答的登录。
+
 ## 代理怎么用
 
 默认监听：
