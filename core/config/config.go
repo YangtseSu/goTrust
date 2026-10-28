@@ -43,6 +43,7 @@ const (
 	defaultLoginDomain     = "local"
 	defaultSocksBind       = "127.0.0.1:1080"
 	defaultHTTPBind        = "127.0.0.1:1081"
+	defaultHandoffBind     = "127.0.0.1:1082"
 	defaultKeepAlivePeriod = 90 * time.Second
 )
 
@@ -52,6 +53,7 @@ type Config struct {
 	ActiveProfile string         `toml:"active_profile"`
 	App           AppConfig      `toml:"app"`
 	Proxy         ProxyConfig    `toml:"proxy"`
+	Handoff       HandoffConfig  `toml:"handoff"`
 	Logging       LoggingConfig  `toml:"logging"`
 	Identity      IdentityConfig `toml:"identity"`
 	Profiles      []Profile      `toml:"profiles"`
@@ -298,6 +300,13 @@ type ProxyConfig struct {
 	HTTPBind   string `toml:"http_bind"`
 }
 
+// HandoffConfig holds the loopback endpoint that serves the PAC. An empty
+// listen disables it; the default is set when the file names no handoff
+// section at all, so an explicit empty value stays disabled.
+type HandoffConfig struct {
+	Listen string `toml:"listen"`
+}
+
 // Profile is one account: the gateway, the credentials, the keep-alive and
 // the diagnostics that go with it.
 type Profile struct {
@@ -377,6 +386,7 @@ func Default() Config {
 			SOCKS5Bind: defaultSocksBind,
 			HTTPBind:   defaultHTTPBind,
 		},
+		Handoff:  HandoffConfig{Listen: defaultHandoffBind},
 		Profiles: []Profile{NewProfile(DefaultProfileName)},
 	}
 }
@@ -448,6 +458,11 @@ func LoadFile(path string) (Config, error) {
 		return Config{}, fmt.Errorf(
 			"%s uses settings version %d, which this build does not understand (latest %d)",
 			path, cfg.Version, CurrentVersion)
+	}
+	// A file written before the handoff section existed gets the endpoint on by
+	// default; a file that names an empty listen keeps it disabled.
+	if !meta.IsDefined("handoff", "listen") {
+		cfg.Handoff.Listen = defaultHandoffBind
 	}
 	cfg.path = path
 	cfg.normalise()
@@ -751,6 +766,11 @@ func (c Config) Validate() error {
 		}
 		if err := ValidateBind(listener.bind); err != nil {
 			return fmt.Errorf("%s proxy bind: %w", listener.name, err)
+		}
+	}
+	if listen := strings.TrimSpace(c.Handoff.Listen); listen != "" {
+		if err := ValidateBind(listen); err != nil {
+			return fmt.Errorf("handoff bind: %w", err)
 		}
 	}
 	return nil

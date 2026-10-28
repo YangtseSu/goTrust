@@ -749,3 +749,51 @@ func TestLoadOrCreatePersistsTheIdentityOnce(t *testing.T) {
 		t.Fatalf("device id = %q, want the stored %q", second.Identity.DeviceID, first.Identity.DeviceID)
 	}
 }
+
+func TestHandoffDefaultsToLoopback(t *testing.T) {
+	if got := Default().Handoff.Listen; got != defaultHandoffBind {
+		t.Fatalf("handoff listen = %q, want %q", got, defaultHandoffBind)
+	}
+}
+
+func TestHandoffCanBeDisabledExplicitly(t *testing.T) {
+	cfg := Default()
+	cfg.Handoff.Listen = ""
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := SaveFile(path, cfg); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load settings: %v", err)
+	}
+	if loaded.Handoff.Listen != "" {
+		t.Fatalf("handoff listen = %q, want it disabled", loaded.Handoff.Listen)
+	}
+}
+
+func TestAnOlderFileGetsTheHandoffDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	raw := "version = 2\nactive_profile = \"" + DefaultProfileName + "\"\n"
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load settings: %v", err)
+	}
+	if loaded.Handoff.Listen != defaultHandoffBind {
+		t.Fatalf("handoff listen = %q, want the default %q", loaded.Handoff.Listen, defaultHandoffBind)
+	}
+}
+
+func TestHandoffBindMustStayOnLoopback(t *testing.T) {
+	cfg := Default()
+	cfg.Profiles[0].Server.Address = "vpn.example.com"
+	cfg.Profiles[0].Auth.Username = "alice"
+	cfg.Handoff.Listen = "0.0.0.0:1082"
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "handoff bind") {
+		t.Fatalf("validate error = %v, want a handoff bind error", err)
+	}
+}
