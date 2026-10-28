@@ -131,24 +131,53 @@ on stderr is expected.
 
 ## mygo window rules
 
-- Open and hide windows outside their own frame:
-  `go func() { mygo.RunOnMain(fn) }()`.
-- mygo 0.7.1 defers a destroy that happens during a frame (upstream PR #674),
-  but not `Hide`, and a window created inside a frame can still come up without
-  a GL context (issue #680, open). On the operator's GNOME Wayland session that
-  is a SIGSEGV in `gtk_main` (`addr=0x40`, "signal arrived during cgo
-  execution") on 关闭 and on 退出 after it.
-- The headless X11 session below does **not** reproduce it: the GL context
-  works there, so the frame rules cannot be validated by this smoke alone.
-- Creating a native window inside a frame can leave it without a GL context:
-  read stderr for `OpenGL 0.0 is too old` or
-  `native UI shows nothing: no current context`.
+Measured on 0.6.3, 0.6.4 and 0.7.1 in the nested X11 session and on the
+operator's GNOME Wayland session, with the repro in "Frame rules" below:
+
+- `NewWindow` inside a frame is safe from 0.6.4 on. In 0.6.3 it made the new
+  window's GtkGLArea fail (`OpenGL 0.0 is too old`, then `native UI shows
+  nothing: gl: no current context`) and the window stayed blank: 0.6.4's
+  `gl.MakeAreaCurrent` before an in-memory present fixed that half (issue #680's
+  logs).
+- `Hide` of a window from **its own frame** still crashes GTK on Wayland:
+  SIGSEGV `addr=0x40` in `gdk_cairo_draw_from_gl` → `gdk_gl_context_make_current`
+  → `wl_proxy_get_version` with a NULL proxy. The same on 0.6.4 and 0.7.1;
+  upstream defers `Close` during a frame (PR #674) but not `Hide`. Hiding one
+  window from another window's frame is fine, and so is `Show`.
+- So only the hide hop is required: hide through
+  `go func() { mygo.RunOnMain(fn) }()`. Creating a window in the frame that asked
+  for it is fine, and `Close` there is deferred by mygo itself.
+- The headless X11 session below does **not** reproduce the crash: the GL
+  context works there, so the frame rules cannot be validated by this smoke
+  alone. Run the repro on the operator's session instead.
 - The settings window hides on close; reopening reloads the saved draft.
 - The headless mutter needs a session bus: without
   `DBUS_SESSION_BUS_ADDRESS` it aborts with
   `assertion failed: (session_bus)`. Start a private one with
   `eval $(dbus-launch --sh-syntax)` or wrap the smoke in
   `dbus-run-session`.
+
+## Frame rules
+
+A window's build runs inside mygo's frame, so an action that runs while the
+view builds runs there too. What each operation does from there, measured on
+the operator's GNOME Wayland session with a second window carrying a `Scroll`:
+
+| Operation, from | Where | 0.6.3 | 0.6.4 | 0.7.1 |
+|---|---|---|---|---|
+| `NewWindow` | a frame | blank window, `no current context` | renders | renders |
+| `Close` | a frame | destroys at once, no crash in this run | deferred by mygo | deferred by mygo |
+| `Hide` | the window's own frame | SIGSEGV | SIGSEGV | SIGSEGV |
+| `Hide` | another window's frame | fine | fine | fine |
+| `Show` | a frame | fine | fine | fine |
+
+To repeat it: one window's build calls `NewWindow` once for a second window,
+and a timer posts `Update` to ask that window to call `Hide` from its own build;
+swap the calls for `go func() { mygo.RunOnMain(fn) }()` to see them pass. A
+crash prints `SIGSEGV ... addr=0x40` and
+`signal arrived during cgo execution`; `gdb -batch -ex run -ex bt` lands in
+`gdk_cairo_draw_from_gl`, so the fault is GTK painting a GtkGLArea whose Wayland
+context the hide released, not a Go frame.
 
 ## Autostart smoke
 

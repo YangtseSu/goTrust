@@ -60,12 +60,12 @@ each release are in `docs/development.md`.
 - Views are pure: no network, no global state; render them in tests.
 - A prompt page lives on the loopback interface only, under a single-use token,
   and never logs what was typed into it.
-- mygo quirk: create and hide windows outside their own frame
-  (`go func() { mygo.RunOnMain(fn) }()`). 0.7.1 defers a destroy that happens
-  during a frame (upstream PR #674), but it does not defer `Hide`, and a window
-  created in a frame can still come up without a GL context (issue #680). Both
-  crash GTK on the operator's Wayland session. See
-  `docs/agent-ui-testing.md`.
+- mygo quirk: hide a window outside its own frame
+  (`go func() { mygo.RunOnMain(fn) }()`). 0.6.4 fixed what an in-frame
+  `NewWindow` did to the new window's GL context (blank window, issue #680's
+  logs), and mygo defers a `Close` made during a frame (PR #674), but `Hide`
+  from the window's own frame still crashes GTK on Wayland (`addr=0x40` in
+  `gdk_cairo_draw_from_gl`), through 0.7.1. See `docs/agent-ui-testing.md`.
 - Never put real gateways, accounts, intranet addresses or client data in code,
   tests, commits or screenshots. Use `192.0.2.0/24`, `203.0.113.0/24`,
   `example.com`.

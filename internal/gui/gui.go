@@ -311,6 +311,10 @@ func (a *app) showWindow() {
 // openSettings creates the settings window, or reveals the one already open.
 // Each opening starts from the saved settings, so closing without 保存 really
 // discards the edits.
+//
+// It runs in whatever frame asked for it, 设置 in the ⋯ menu included: a window
+// created or shown inside a frame is safe since 0.6.4. Hiding it is the hop
+// (see hideSettings).
 func (a *app) openSettings() {
 	a.bumpSettingsEpoch()
 
@@ -403,7 +407,7 @@ func (a *app) actions() gotrustui.Actions {
 	return gotrustui.Actions{
 		Login:         a.startLogin,
 		Logout:        a.disconnect,
-		Settings:      func() { go func() { mygo.RunOnMain(a.openSettings) }() },
+		Settings:      a.openSettings,
 		ShowWindow:    a.showWindow,
 		SelectProfile: a.selectProfile,
 		Quit:          func() { mygo.App.Quit() },
@@ -858,10 +862,11 @@ func (a *app) closeSettings() {
 }
 
 // hideSettings hides the settings window after the current frame, then discards
-// its draft so reopening loads the saved settings again. Hiding it from the
-// button action itself runs GTK calls while the frame still builds, which
-// crashed GTK's GL teardown; mygo's deferred destroy (PR #674) covers Close,
-// not Hide.
+// its draft so reopening loads the saved settings again. Hiding a window from
+// its own frame makes GTK paint a GtkGLArea whose Wayland GL context the hide
+// released, which is a SIGSEGV inside gdk_cairo_draw_from_gl on 0.6.4 and
+// 0.7.1; mygo defers Close during a frame (PR #674) but not Hide. Creating the
+// window from a frame needs no such hop since 0.6.4 (see openSettings).
 //
 // The epoch check belongs on the main thread with the hide, because openSettings
 // bumps the epoch there: a reopen either runs before the claim (and the queued
