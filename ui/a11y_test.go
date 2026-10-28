@@ -115,9 +115,12 @@ func TestMainWindowTabOrder(t *testing.T) {
 }
 
 // The settings window is a long form: the actions at the bottom must be
-// reachable with Tab, in Save then Close order, whatever the form contains.
+// reachable with Tab, in Save then Discard order, whatever the page contains.
+// Both are disabled while the draft matches the file, and a disabled control
+// takes no focus, so the draft is edited first.
 func TestSettingsTabOrderReachesTheActions(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
+	state.Ports[0] = "8443"
 	tester := ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760)
 	tester.Frame()
 
@@ -136,8 +139,8 @@ func TestSettingsTabOrderReachesTheActions(t *testing.T) {
 
 	tester.Key(0, ui.KeyTab)
 	tester.Frame()
-	if !tester.Focused("关闭") {
-		t.Fatal("Tab after 保存 did not reach 关闭")
+	if !tester.Focused("放弃修改") {
+		t.Fatal("Tab after 保存 did not reach 放弃修改")
 	}
 }
 

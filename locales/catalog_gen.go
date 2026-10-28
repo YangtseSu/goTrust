@@ -1690,14 +1690,84 @@ func (msgs Messages) SettingsTitle() string {
 	return Catalog.Format(msgs.locale, "settingsTitle", nil)
 }
 
-// SettingsHint says "保存后：连接信息在下次登录生效，代理端口与保活在下次连接生效。"
+// SettingsUnsaved says "未保存的修改"
 // in the language the app shows.
-func SettingsHint() string { return In(i18n.Locale()).SettingsHint() }
+func SettingsUnsaved() string { return In(i18n.Locale()).SettingsUnsaved() }
 
-// SettingsHint says "保存后：连接信息在下次登录生效，代理端口与保活在下次连接生效。"
+// SettingsUnsaved says "未保存的修改"
 // in the language of msgs.
-func (msgs Messages) SettingsHint() string {
-	return Catalog.Format(msgs.locale, "settingsHint", nil)
+func (msgs Messages) SettingsUnsaved() string {
+	return Catalog.Format(msgs.locale, "settingsUnsaved", nil)
+}
+
+// SettingsDiscard says "放弃修改"
+// in the language the app shows.
+func SettingsDiscard() string { return In(i18n.Locale()).SettingsDiscard() }
+
+// SettingsDiscard says "放弃修改"
+// in the language of msgs.
+func (msgs Messages) SettingsDiscard() string {
+	return Catalog.Format(msgs.locale, "settingsDiscard", nil)
+}
+
+// SettingsDiscarded says "已放弃修改"
+// in the language the app shows.
+func SettingsDiscarded() string { return In(i18n.Locale()).SettingsDiscarded() }
+
+// SettingsDiscarded says "已放弃修改"
+// in the language of msgs.
+func (msgs Messages) SettingsDiscarded() string {
+	return Catalog.Format(msgs.locale, "settingsDiscarded", nil)
+}
+
+// SettingsEffectLogin says "下次登录生效"
+// in the language the app shows.
+func SettingsEffectLogin() string { return In(i18n.Locale()).SettingsEffectLogin() }
+
+// SettingsEffectLogin says "下次登录生效"
+// in the language of msgs.
+func (msgs Messages) SettingsEffectLogin() string {
+	return Catalog.Format(msgs.locale, "settingsEffectLogin", nil)
+}
+
+// SettingsEffectConnect says "下次连接生效"
+// in the language the app shows.
+func SettingsEffectConnect() string { return In(i18n.Locale()).SettingsEffectConnect() }
+
+// SettingsEffectConnect says "下次连接生效"
+// in the language of msgs.
+func (msgs Messages) SettingsEffectConnect() string {
+	return Catalog.Format(msgs.locale, "settingsEffectConnect", nil)
+}
+
+// SettingsEffectStartup says "下次启动生效"
+// in the language the app shows.
+func SettingsEffectStartup() string { return In(i18n.Locale()).SettingsEffectStartup() }
+
+// SettingsEffectStartup says "下次启动生效"
+// in the language of msgs.
+func (msgs Messages) SettingsEffectStartup() string {
+	return Catalog.Format(msgs.locale, "settingsEffectStartup", nil)
+}
+
+// SettingsEffectAdvanced says "详细日志立即生效；客户端数据下次登录生效"
+// in the language the app shows.
+func SettingsEffectAdvanced() string { return In(i18n.Locale()).SettingsEffectAdvanced() }
+
+// SettingsEffectAdvanced says "详细日志立即生效；客户端数据下次登录生效"
+// in the language of msgs.
+func (msgs Messages) SettingsEffectAdvanced() string {
+	return Catalog.Format(msgs.locale, "settingsEffectAdvanced", nil)
+}
+
+// SettingsEffectLive says "随连接实时读取"
+// in the language the app shows.
+func SettingsEffectLive() string { return In(i18n.Locale()).SettingsEffectLive() }
+
+// SettingsEffectLive says "随连接实时读取"
+// in the language of msgs.
+func (msgs Messages) SettingsEffectLive() string {
+	return Catalog.Format(msgs.locale, "settingsEffectLive", nil)
 }
 
 // SettingsSwitchHint says "保存后将切换到配置 {name}"
@@ -1708,16 +1778,6 @@ func SettingsSwitchHint(name string) string { return In(i18n.Locale()).SettingsS
 // in the language of msgs.
 func (msgs Messages) SettingsSwitchHint(name string) string {
 	return Catalog.Format(msgs.locale, "settingsSwitchHint", map[string]any{"name": name})
-}
-
-// ProfileSection says "配置"
-// in the language the app shows.
-func ProfileSection() string { return In(i18n.Locale()).ProfileSection() }
-
-// ProfileSection says "配置"
-// in the language of msgs.
-func (msgs Messages) ProfileSection() string {
-	return Catalog.Format(msgs.locale, "profileSection", nil)
 }
 
 // CurrentProfile says "当前配置"
@@ -2444,14 +2504,14 @@ func (msgs Messages) MethodsDiscoverFailed(error string) string {
 	return Catalog.Format(msgs.locale, "methodsDiscoverFailed", map[string]any{"error": error})
 }
 
-// TerminalsSection says "终端管理"
+// TerminalsTab says "终端"
 // in the language the app shows.
-func TerminalsSection() string { return In(i18n.Locale()).TerminalsSection() }
+func TerminalsTab() string { return In(i18n.Locale()).TerminalsTab() }
 
-// TerminalsSection says "终端管理"
+// TerminalsTab says "终端"
 // in the language of msgs.
-func (msgs Messages) TerminalsSection() string {
-	return Catalog.Format(msgs.locale, "terminalsSection", nil)
+func (msgs Messages) TerminalsTab() string {
+	return Catalog.Format(msgs.locale, "terminalsTab", nil)
 }
 
 // TerminalsOffline says "连接后可读取终端列表"

@@ -527,6 +527,14 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 	return gotrustui.SettingsActions{
 		Save:  a.saveSettings,
 		Close: a.closeSettings,
+		Discard: func() {
+			cfg := a.currentConfig()
+			mutate(func(state *gotrustui.SettingsState) {
+				state.Reload(cfg)
+				state.Status = locales.SettingsDiscarded()
+				state.StatusError = false
+			})
+		},
 		NewProfile: func() {
 			mutate(func(state *gotrustui.SettingsState) { state.AddProfile() })
 		},

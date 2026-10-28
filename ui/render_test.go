@@ -233,14 +233,58 @@ func renderStates(t *testing.T, dir, lang string) {
 		})
 	}
 
-	t.Run("settings", func(t *testing.T) {
+	// The settings window is six pages now. Each one is rendered, because a
+	// page that does not fit shows its own scroll rather than the next
+	// section's fields.
+	settingsPage := func(name string, tab int, mutate func(*SettingsState)) {
+		t.Helper()
 		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
-		save("settings", ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760))
-	})
+		state.Tab = tab
+		if mutate != nil {
+			mutate(state)
+		}
+		save(name, ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760))
+	}
 
-	t.Run("settings-full", func(t *testing.T) {
+	t.Run("settings", func(t *testing.T) { settingsPage("settings", settingsTabConnection, nil) })
+	t.Run("settings-proxy", func(t *testing.T) { settingsPage("settings-proxy", settingsTabProxy, nil) })
+	t.Run("settings-keepalive", func(t *testing.T) {
+		settingsPage("settings-keepalive", settingsTabKeepAlive, nil)
+	})
+	t.Run("settings-startup", func(t *testing.T) { settingsPage("settings-startup", settingsTabStartup, nil) })
+	t.Run("settings-advanced", func(t *testing.T) {
+		settingsPage("settings-advanced", settingsTabAdvanced, nil)
+	})
+	t.Run("settings-terminal", func(t *testing.T) {
+		settingsPage("settings-terminal", settingsTabTerminals, func(state *SettingsState) {
+			state.Online = true
+			state.TrustKnown = true
+			state.Trusted = true
+			state.TerminalsKnown = true
+			state.Terminals = &session.Terminals{
+				SelfID: "self",
+				Trusted: []session.Terminal{{
+					ID: "trusted-1", DeviceName: "desk-01", OS: "Linux", OSVersion: "7.3.0",
+					LastLoginAddress: "LAN", LastLoginIP: "192.0.2.10", LastLoginTime: "2026-10-25 13:17:59",
+				}},
+				Temporary: []session.Terminal{{
+					ID: "self", DeviceName: "desk-02", OS: "Linux", OSVersion: "7.3.0",
+					OnlineStatus: true, LastLoginAddress: "LAN", LastLoginIP: "192.0.2.11",
+					LastLoginTime: "2026-10-25 13:17:59",
+				}},
+			}
+		})
+	})
+	t.Run("settings-unsaved", func(t *testing.T) {
+		settingsPage("settings-unsaved", settingsTabConnection, func(state *SettingsState) {
+			state.Ports[0] = "8443"
+		})
+	})
+	// The minimum width the window declares, tall enough for the whole page:
+	// the labels that share a row with a button are the ones that overflow.
+	t.Run("settings-narrow", func(t *testing.T) {
 		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
-		save("settings-full", ui.NewTester(SettingsView(state, SettingsActions{}), 600, 1500))
+		save("settings-narrow", ui.NewTester(SettingsView(state, SettingsActions{}), 560, 760))
 	})
 
 	t.Run("main-online-dark", func(t *testing.T) {

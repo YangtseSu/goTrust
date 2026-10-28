@@ -43,6 +43,7 @@ func TestSettingsLanguagePickerCallsSetLocale(t *testing.T) {
 		SetLocale: func(tag string) { chosen = append(chosen, tag) },
 	}), 600, 2200)
 	tester.Frame()
+	openSettingsPage(t, tester, "启动")
 
 	if err := tester.Click("English"); err != nil {
 		t.Fatalf("click English: %v; texts: %v", err, tester.Texts())
