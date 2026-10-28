@@ -440,8 +440,8 @@ func (a *app) copyClash(format gotrustui.ClashFormat) {
 	switch format {
 	case gotrustui.ClashPlain:
 		text, err = snapshot.Clash()
-	case gotrustui.ClashMerge:
-		text, err = snapshot.ClashMerge()
+	case gotrustui.ClashScript:
+		text, err = snapshot.ClashScript()
 	case gotrustui.ClashConfig:
 		text, err = snapshot.ClashConfig()
 	default:

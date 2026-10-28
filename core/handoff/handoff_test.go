@@ -250,23 +250,24 @@ func TestFromStateIgnoresProgressDetail(t *testing.T) {
 	}
 }
 
-func TestClashMergeUsesPrependKeys(t *testing.T) {
+func TestClashScriptPrependsTheGrant(t *testing.T) {
 	cfg := testConfig()
 	snapshot := FromState(cfg, session.State{Phase: session.PhaseOnline, Resources: testResources()})
-	merge, err := snapshot.ClashMerge()
+	script, err := snapshot.ClashScript()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"prepend-proxies:", "prepend-proxy-groups:", "prepend-rules:"} {
-		if !strings.Contains(merge, want) {
-			t.Fatalf("merge is missing %q:\n%s", want, merge)
+	for _, want := range []string{
+		"function main(config, profileName)",
+		"config.proxies.unshift(proxy)",
+		"config[\"proxy-groups\"].unshift(group)",
+		"config.rules = trustRules.concat(config.rules)",
+		"\"name\":\"goTrust\"",
+		"IP-CIDR,192.0.2.0/24,goTrust-routes,no-resolve",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("script is missing %q:\n%s", want, script)
 		}
-	}
-	if strings.Contains(merge, "\nproxies:") {
-		t.Fatalf("merge must not use the plain keys:\n%s", merge)
-	}
-	if index(merge, "prepend-rules:") > index(merge, "PROCESS-NAME") {
-		t.Fatalf("prepend-rules must hold the rules:\n%s", merge)
 	}
 }
 

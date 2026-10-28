@@ -422,15 +422,17 @@ func TestReportingCommandsAreExclusive(t *testing.T) {
 	}
 }
 
-func TestPrintClashMerge(t *testing.T) {
+func TestPrintClashScript(t *testing.T) {
 	_, path := testSettings(t)
 	seedGrant(t, path)
-	code, stdout, stderr := run(t, "-config", path, "-print-clash-merge")
+	code, stdout, stderr := run(t, "-config", path, "-print-clash-script")
 	if code != ExitOK {
 		t.Fatalf("exit = %d (stderr %q)", code, stderr)
 	}
-	if !strings.Contains(stdout, "prepend-rules:") || !strings.Contains(stdout, "prepend-proxies:") {
-		t.Fatalf("merge output:\n%s", stdout)
+	for _, want := range []string{"function main(config, profileName)", "config.proxies.unshift(proxy)", "trustRules"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("script is missing %q:\n%s", want, stdout)
+		}
 	}
 }
 

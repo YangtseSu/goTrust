@@ -59,7 +59,7 @@ type ClashFormat string
 
 const (
 	ClashPlain  ClashFormat = "clash"
-	ClashMerge  ClashFormat = "clash-merge"
+	ClashScript ClashFormat = "clash-script"
 	ClashConfig ClashFormat = "clash-config"
 )
 
@@ -347,8 +347,8 @@ func controls(c *ui.Context, state *State, actions Actions) {
 			if ui.Button(c, "Clash 片段").Clicked() && actions.CopyClash != nil {
 				actions.CopyClash(ClashPlain)
 			}
-			if ui.Button(c, "Verge Merge").Clicked() && actions.CopyClash != nil {
-				actions.CopyClash(ClashMerge)
+			if ui.Button(c, "Verge 脚本").Clicked() && actions.CopyClash != nil {
+				actions.CopyClash(ClashScript)
 			}
 			if ui.Button(c, "Clash 完整配置").Clicked() && actions.CopyClash != nil {
 				actions.CopyClash(ClashConfig)
@@ -586,9 +586,9 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 				actions.CopyClash(ClashPlain)
 			}
 		}},
-		{ID: "copy-clash-merge", Label: "Verge Merge", Click: func(*mygo.MenuItem, *mygo.Window) {
+		{ID: "copy-clash-script", Label: "Verge 脚本", Click: func(*mygo.MenuItem, *mygo.Window) {
 			if actions.CopyClash != nil {
-				actions.CopyClash(ClashMerge)
+				actions.CopyClash(ClashScript)
 			}
 		}},
 		{ID: "copy-clash-config", Label: "完整配置", Click: func(*mygo.MenuItem, *mygo.Window) {

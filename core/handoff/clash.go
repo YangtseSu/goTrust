@@ -4,6 +4,7 @@
 package handoff
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -16,39 +17,31 @@ import (
 // ErrNoProxy reports a snapshot whose proxy listeners are both disabled.
 var ErrNoProxy = errors.New("no proxy listener is configured")
 
-// Clash renders a fragment for a Clash/Mihomo configuration: one proxy entry,
-// a selector group and the rules in first-match order. The fragment assumes
-// the configuration's own fallback (usually DIRECT) and deliberately adds no
-// private-range preset: a grant may be public, and a grant may sit inside a
-// private range.
-//
-// The first rules keep goTrust's own traffic out of the tunnel. A TUN
-// configuration captures the process's TLS to the gateway as well, and sending
-// that back through the proxy would either loop or add a pointless hop.
 // Clash returns the plain fragment a Mihomo/Clash configuration consumes: the
-// lists are called proxies, proxy-groups and rules.
-func (s Snapshot) Clash() (string, error) { return s.clashFragment(false) }
-
-// ClashMerge returns the same content under the prepend-* keys Clash Verge
-// Rev's Merge profile uses, so the profile can be pasted without editing.
-func (s Snapshot) ClashMerge() (string, error) { return s.clashFragment(true) }
+// lists are called proxies, proxy-groups and rules. It is meant to be merged
+// into an existing configuration, before its MATCH rule.
+func (s Snapshot) Clash() (string, error) {
+	body, err := s.clashBody()
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	s.writeHeader(&b, "Clash/Mihomo fragment", "# ")
+	b.WriteString("# Paste under proxies / proxy-groups / rules. Keep your own fallback.\n")
+	b.WriteString(body)
+	return b.String(), nil
+}
 
 // ClashConfig returns a complete standalone Mihomo configuration. Any client
 // can import it as a local profile; it carries goTrust only and assumes the
 // client manages ports, DNS and TUN.
 func (s Snapshot) ClashConfig() (string, error) {
-	body, err := s.clashBody(false)
+	body, err := s.clashBody()
 	if err != nil {
 		return "", err
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "# goTrust standalone Mihomo config, generated %s\n", s.Generated.UTC().Format(time.RFC3339))
-	if s.Profile != "" {
-		fmt.Fprintf(&b, "# profile: %s\n", s.Profile)
-	}
-	if s.Gateway != "" {
-		fmt.Fprintf(&b, "# gateway: %s\n", s.Gateway)
-	}
+	s.writeHeader(&b, "standalone Mihomo config", "# ")
 	b.WriteString("# Import as a local profile. It carries goTrust only; a subscription\n")
 	b.WriteString("# profile needs its own merge mechanism.\n")
 	b.WriteString("mixed-port: 7890\nallow-lan: false\nmode: rule\nlog-level: info\n\n")
@@ -57,75 +50,133 @@ func (s Snapshot) ClashConfig() (string, error) {
 	return b.String(), nil
 }
 
-func (s Snapshot) clashFragment(prepend bool) (string, error) {
-	body, err := s.clashBody(prepend)
+// ClashScript returns a Clash Verge Rev Script. Verge's Merge config is a deep
+// merge that replaces lists, so a fragment cannot be appended there; the
+// Script enhancement receives the whole configuration and prepends the proxy,
+// the group and the rules without losing the subscription's own entries.
+func (s Snapshot) ClashScript() (string, error) {
+	proxyType, host, port, udp, err := s.clashProxy()
 	if err != nil {
 		return "", err
 	}
+	proxy := map[string]any{
+		"name":   "goTrust",
+		"type":   proxyType,
+		"server": host,
+		"port":   port,
+	}
+	if udp {
+		proxy["udp"] = true
+	}
+	group := map[string]any{
+		"name":    "goTrust-routes",
+		"type":    "select",
+		"proxies": []string{"goTrust", "DIRECT"},
+	}
+	proxyJSON, err := json.Marshal(proxy)
+	if err != nil {
+		return "", err
+	}
+	groupJSON, err := json.Marshal(group)
+	if err != nil {
+		return "", err
+	}
+	rulesJSON, err := json.Marshal(s.clashRules())
+	if err != nil {
+		return "", err
+	}
+
 	var b strings.Builder
-	fmt.Fprintf(&b, "# goTrust Clash/Mihomo fragment, generated %s\n", s.Generated.UTC().Format(time.RFC3339))
-	if s.Profile != "" {
-		fmt.Fprintf(&b, "# profile: %s\n", s.Profile)
-	}
-	if s.Gateway != "" {
-		fmt.Fprintf(&b, "# gateway: %s\n", s.Gateway)
-	}
-	if prepend {
-		b.WriteString("# A Clash Verge Rev Merge profile; paste it as-is and enable it.\n")
-	} else {
-		b.WriteString("# Paste under proxies / proxy-groups / rules. Keep your own fallback.\n")
-	}
-	b.WriteString(body)
+	s.writeHeader(&b, "Clash Verge Rev script", "// ")
+	b.WriteString("// Paste into 配置 → 全局扩展脚本 (Script), save and enable it.\n")
+	b.WriteString("function main(config, profileName) {\n")
+	fmt.Fprintf(&b, "  var proxy = %s;\n", proxyJSON)
+	fmt.Fprintf(&b, "  var group = %s;\n", groupJSON)
+	fmt.Fprintf(&b, "  var trustRules = %s;\n", rulesJSON)
+	b.WriteString("  config.proxies = (config.proxies || []).filter(function (item) { return item.name !== proxy.name; });\n")
+	b.WriteString("  config.proxies.unshift(proxy);\n")
+	b.WriteString("  config[\"proxy-groups\"] = (config[\"proxy-groups\"] || []).filter(function (item) { return item.name !== group.name; });\n")
+	b.WriteString("  config[\"proxy-groups\"].unshift(group);\n")
+	b.WriteString("  config.rules = (config.rules || []).filter(function (rule) { return trustRules.indexOf(rule) < 0; });\n")
+	b.WriteString("  config.rules = trustRules.concat(config.rules);\n")
+	b.WriteString("  return config;\n}\n")
 	return b.String(), nil
 }
 
-func (s Snapshot) clashBody(prepend bool) (string, error) {
+func (s Snapshot) writeHeader(b *strings.Builder, kind, comment string) {
+	fmt.Fprintf(b, "%sgoTrust %s, generated %s\n", comment, kind, s.Generated.UTC().Format(time.RFC3339))
+	if s.Profile != "" {
+		fmt.Fprintf(b, "%sprofile: %s\n", comment, s.Profile)
+	}
+	if s.Gateway != "" {
+		fmt.Fprintf(b, "%sgateway: %s\n", comment, s.Gateway)
+	}
+}
+
+func (s Snapshot) clashProxy() (proxyType, host string, port int, udp bool, err error) {
 	listen, proxyType := s.SOCKS5, "socks5"
 	if listen == "" {
 		listen, proxyType = s.HTTP, "http"
 	}
 	if listen == "" {
-		return "", ErrNoProxy
+		return "", "", 0, false, ErrNoProxy
 	}
-	host, port, err := net.SplitHostPort(listen)
+	host, portText, err := net.SplitHostPort(listen)
 	if err != nil {
-		return "", fmt.Errorf("proxy listener %q: %w", listen, err)
+		return "", "", 0, false, fmt.Errorf("proxy listener %q: %w", listen, err)
 	}
+	number, err := strconv.Atoi(portText)
+	if err != nil {
+		return "", "", 0, false, fmt.Errorf("proxy listener %q: %w", listen, err)
+	}
+	return proxyType, host, number, proxyType == "socks5", nil
+}
 
-	proxiesKey, groupsKey, rulesKey := "proxies", "proxy-groups", "rules"
-	if prepend {
-		proxiesKey, groupsKey, rulesKey = "prepend-proxies", "prepend-proxy-groups", "prepend-rules"
+// clashRules is the ordered rule set every rendering shares: goTrust's own
+// traffic and the gateway stay direct, then the granted suffixes and prefixes.
+func (s Snapshot) clashRules() []string {
+	rules := make([]string, 0, 4+len(s.Domains)+len(s.Prefixes)+1)
+	for _, process := range []string{"gotrust", "gotrust-cli", "gotrust.exe", "gotrust-cli.exe"} {
+		rules = append(rules, "PROCESS-NAME,"+process+",DIRECT")
+	}
+	if rule := gatewayRule(s.gatewayHost()); rule != "" {
+		rules = append(rules, rule)
+	}
+	for _, domain := range s.Domains {
+		rules = append(rules, "DOMAIN-SUFFIX,"+domain+",goTrust-routes")
+	}
+	for _, prefix := range s.Prefixes {
+		rules = append(rules, "IP-CIDR,"+prefix.String()+",goTrust-routes,no-resolve")
+	}
+	return rules
+}
+
+func (s Snapshot) clashBody() (string, error) {
+	proxyType, host, port, udp, err := s.clashProxy()
+	if err != nil {
+		return "", err
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s:\n", proxiesKey)
+	b.WriteString("proxies:\n")
 	b.WriteString("  - name: goTrust\n")
 	fmt.Fprintf(&b, "    type: %s\n", proxyType)
 	fmt.Fprintf(&b, "    server: %s\n", scalar(host))
-	fmt.Fprintf(&b, "    port: %s\n", port)
-	if proxyType == "socks5" {
+	fmt.Fprintf(&b, "    port: %d\n", port)
+	if udp {
 		b.WriteString("    udp: true\n")
 	}
 
-	fmt.Fprintf(&b, "%s:\n", groupsKey)
+	b.WriteString("proxy-groups:\n")
 	b.WriteString("  - name: goTrust-routes\n")
 	b.WriteString("    type: select\n")
 	b.WriteString("    proxies:\n")
 	b.WriteString("      - goTrust\n")
 	b.WriteString("      - DIRECT\n")
 
-	fmt.Fprintf(&b, "%s:\n", rulesKey)
-	for _, process := range []string{"gotrust", "gotrust-cli", "gotrust.exe", "gotrust-cli.exe"} {
-		fmt.Fprintf(&b, "  - PROCESS-NAME,%s,DIRECT\n", process)
-	}
-	if rule := gatewayRule(s.gatewayHost()); rule != "" {
+	b.WriteString("rules:\n")
+	for _, rule := range s.clashRules() {
 		fmt.Fprintf(&b, "  - %s\n", rule)
-	}
-	for _, domain := range s.Domains {
-		fmt.Fprintf(&b, "  - DOMAIN-SUFFIX,%s,goTrust-routes\n", domain)
-	}
-	for _, prefix := range s.Prefixes {
-		fmt.Fprintf(&b, "  - IP-CIDR,%s,goTrust-routes,no-resolve\n", prefix)
 	}
 	return b.String(), nil
 }

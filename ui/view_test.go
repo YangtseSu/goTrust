@@ -496,7 +496,7 @@ func TestClashButtonsCopyEachFormat(t *testing.T) {
 		want  ClashFormat
 	}{
 		{label: "Clash 片段", want: ClashPlain},
-		{label: "Verge Merge", want: ClashMerge},
+		{label: "Verge 脚本", want: ClashScript},
 		{label: "Clash 完整配置", want: ClashConfig},
 	}
 	for _, testCase := range cases {

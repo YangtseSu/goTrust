@@ -56,8 +56,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		"print a PAC built from the cached grant, then exit")
 	printClash := flags.Bool("print-clash", false,
 		"print a Clash/Mihomo rule fragment built from the cached grant, then exit")
-	printClashMerge := flags.Bool("print-clash-merge", false,
-		"print a Clash Verge Rev Merge profile built from the cached grant, then exit")
+	printClashScript := flags.Bool("print-clash-script", false,
+		"print a Clash Verge Rev Script built from the cached grant, then exit")
 	printClashConfig := flags.Bool("print-clash-config", false,
 		"print a complete standalone Mihomo config built from the cached grant, then exit")
 	asJSON := flags.Bool("json", false, "encode the reported grant and status as JSON")
@@ -76,7 +76,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return ExitUsage
 	}
 	commands := 0
-	for _, command := range []bool{*status, *printResources, *pacURL, *printPAC, *printClash, *printClashMerge, *printClashConfig} {
+	for _, command := range []bool{*status, *printResources, *pacURL, *printPAC, *printClash, *printClashScript, *printClashConfig} {
 		if command {
 			commands++
 		}
@@ -108,8 +108,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return reportRender(stdout, stderr, cfg, path, "pac")
 	case *printClash:
 		return reportRender(stdout, stderr, cfg, path, "clash")
-	case *printClashMerge:
-		return reportRender(stdout, stderr, cfg, path, "clash-merge")
+	case *printClashScript:
+		return reportRender(stdout, stderr, cfg, path, "clash-script")
 	case *printClashConfig:
 		return reportRender(stdout, stderr, cfg, path, "clash-config")
 	default:

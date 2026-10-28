@@ -167,8 +167,8 @@ func reportRender(stdout, stderr io.Writer, cfg config.Config, configPath string
 		text = snapshot.PAC()
 	case "clash":
 		text, err2 = snapshot.Clash()
-	case "clash-merge":
-		text, err2 = snapshot.ClashMerge()
+	case "clash-script":
+		text, err2 = snapshot.ClashScript()
 	case "clash-config":
 		text, err2 = snapshot.ClashConfig()
 	default:
