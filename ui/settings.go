@@ -21,11 +21,12 @@ import (
 // SettingsState is the window's settings draft. It is a clone of the live
 // configuration, edited by the pages for the life of the window: a page
 // switch or hiding the window keeps the edits, and 保存, 放弃, a profile
-// switch and a setup save reload it from the file.
+// switch and a login that saves the draft reload it from the file.
 //
-// The text fields edit the draft directly. Port and keep-alive targets need
-// string buffers because the file stores an integer and a list, so those live
-// in parallel slices indexed like Draft.Profiles.
+// The text fields edit the draft directly, except the gateway and the
+// keep-alive targets: the file stores an address and a port separately and the
+// targets as a list, so those live in parallel slices indexed like
+// Draft.Profiles.
 type SettingsState struct {
 	Draft    config.Config
 	Selected int
@@ -33,9 +34,11 @@ type SettingsState struct {
 	// view maps it back to Selected.
 	SelectText string
 	NameText   string
-	Ports      []string
-	Targets    []string
-	Status     string
+	// Gateways is one host:port per profile: what an administrator hands over
+	// and what the field shows. ParseGateway splits it when the draft is saved.
+	Gateways []string
+	Targets  []string
+	Status   string
 	// StatusSeq increases with every SetStatus, so the window shows the same
 	// text a second time as a second toast.
 	StatusSeq uint64
@@ -178,12 +181,12 @@ func (s *SettingsState) refresh() {
 	if s.Selected < 0 || s.Selected >= len(s.Draft.Profiles) {
 		s.Selected = 0
 	}
-	for len(s.Ports) < len(s.Draft.Profiles) {
-		profile := s.Draft.Profiles[len(s.Ports)]
-		s.Ports = append(s.Ports, strconv.Itoa(profile.Server.Port))
+	for len(s.Gateways) < len(s.Draft.Profiles) {
+		profile := s.Draft.Profiles[len(s.Gateways)]
+		s.Gateways = append(s.Gateways, gatewayText(profile))
 		s.Targets = append(s.Targets, strings.Join(profile.Keep.Targets, "\n"))
 	}
-	s.Ports = s.Ports[:len(s.Draft.Profiles)]
+	s.Gateways = s.Gateways[:len(s.Draft.Profiles)]
 	s.Targets = s.Targets[:len(s.Draft.Profiles)]
 }
 
@@ -229,7 +232,7 @@ func (s *SettingsState) Reload(cfg config.Config) {
 	if s.Selected < 0 {
 		s.Selected = 0
 	}
-	s.Ports = nil
+	s.Gateways = nil
 	s.Targets = nil
 	s.refresh()
 	if len(s.Draft.Profiles) > 0 {
@@ -289,27 +292,18 @@ func (s *SettingsState) dropStaleMethods() {
 	}
 }
 
-// targetKey names the gateway the draft points at, port buffer included. Two
-// gateways at different ports are different targets even at one address.
+// targetKey names the gateway the draft points at, parsed from its text field:
+// the same key gui.keyForTarget derives from a saved profile.
 func (s *SettingsState) targetKey() string {
 	s.refresh()
 	if s.Selected < 0 || s.Selected >= len(s.Draft.Profiles) {
 		return ""
 	}
-	profile := s.Draft.Profiles[s.Selected]
-	return targetKey(profile.ServerAddress(), s.Ports[s.Selected])
-}
-
-// targetKey is the key discovery records and the draft checks: the address
-// without surrounding spaces and the port as a number, so " 0443 " names the
-// same gateway as "443". main.keyForTarget writes the same form.
-func targetKey(address, port string) string {
-	address = strings.TrimSpace(address)
-	port = strings.TrimSpace(port)
-	if number, err := strconv.Atoi(port); err == nil {
-		port = strconv.Itoa(number)
+	address, port, problem := ParseGateway(s.Gateways[s.Selected])
+	if problem != "" {
+		return ""
 	}
-	return address + "|" + port
+	return address + "|" + strconv.Itoa(port)
 }
 
 // SelectAuth stores the method at index in the draft: 0 is automatic and the
@@ -335,22 +329,25 @@ func (s *SettingsState) SelectAuth(index int) {
 	s.SetStatus(locales.AuthChosen(MethodLabel(method)), false)
 }
 
-// Target is the gateway the editor points at, with the port from its text
-// field. Discovery has to use the draft: the user is usually editing a new
-// gateway when asking what it offers.
+// Target is the gateway the editor points at, parsed from its text field.
+// Discovery has to use the draft: the user is usually editing a new gateway
+// when asking what it offers.
 func (s *SettingsState) Target() (config.Profile, error) {
-	s.refresh()
-	profile := s.Draft.Profiles[s.Selected]
-	port, err := strconv.Atoi(strings.TrimSpace(s.Ports[s.Selected]))
-	if err != nil || port < 1 || port > 65535 {
-		return profile, errors.New(locales.ErrPort())
+	index, profile := s.selection()
+	if profile == nil {
+		return config.Profile{}, errors.New(locales.ErrNoProfiles())
 	}
-	profile.Server.Port = port
-	profile.Server.Address = strings.TrimSpace(profile.Server.Address)
-	if profile.ServerAddress() == "" {
-		return profile, errors.New(locales.ErrAddress())
+	address, port, problem := ParseGateway(s.Gateways[index])
+	if problem != "" {
+		return *profile, errors.New(problem)
 	}
-	return profile, nil
+	if address == "" {
+		return *profile, errors.New(locales.ProblemAddress())
+	}
+	target := *profile
+	target.Server.Address = address
+	target.Server.Port = port
+	return target, nil
 }
 
 // AddProfile appends a blank profile and selects it.
@@ -373,10 +370,10 @@ func (s *SettingsState) DuplicateProfile() {
 	s.refresh()
 	index := s.Selected
 	source := s.Draft.Profiles[index]
-	// The copy shows what the editor shows; the draft's stored port and
+	// The copy shows what the editor shows; the draft's stored gateway and
 	// targets can be older than the text fields. DuplicateProfile appends it,
 	// so its buffers are written at the end after refresh.
-	port, targets := s.Ports[index], s.Targets[index]
+	gateway, targets := s.Gateways[index], s.Targets[index]
 	name := locales.ProfileCopyName(source.Name)
 	for suffix := 2; s.Draft.ProfileIndex(name) >= 0; suffix++ {
 		name = locales.ProfileCopyNameN(source.Name, suffix)
@@ -387,8 +384,8 @@ func (s *SettingsState) DuplicateProfile() {
 	}
 	s.refresh()
 	copied := s.Draft.ProfileIndex(name)
-	if copied >= 0 && copied < len(s.Ports) {
-		s.Ports[copied] = port
+	if copied >= 0 && copied < len(s.Gateways) {
+		s.Gateways[copied] = gateway
 		s.Targets[copied] = targets
 	}
 	s.Select(copied)
@@ -409,8 +406,8 @@ func (s *SettingsState) DeleteProfile() {
 	s.removedProfiles = append(s.removedProfiles, removed)
 	s.renamed = nil
 	// The buffers are positional: truncating them would hand the deleted
-	// profile's port and targets to the profile that moved up.
-	s.Ports = append(s.Ports[:index], s.Ports[index+1:]...)
+	// profile's gateway and targets to the profile that moved up.
+	s.Gateways = append(s.Gateways[:index], s.Gateways[index+1:]...)
 	s.Targets = append(s.Targets[:index], s.Targets[index+1:]...)
 	s.refresh()
 	active := s.Draft.ActiveIndex()
@@ -422,7 +419,7 @@ func (s *SettingsState) DeleteProfile() {
 }
 
 // Apply folds the buffers into a configuration ready to validate and save. It
-// deliberately allows an incomplete account: the first run has to be able to
+// deliberately allows an incomplete account: a fresh install has to be able to
 // store the proxy ports before the user knows the gateway address. Login
 // validates the rest.
 func (s *SettingsState) Apply() (config.Config, error) {
@@ -441,9 +438,18 @@ func (s *SettingsState) Apply() (config.Config, error) {
 		return cfg, errors.New(locales.ErrProfileNameExists(name))
 	}
 
-	port, err := strconv.Atoi(strings.TrimSpace(s.Ports[index]))
-	if err != nil || port < 1 || port > 65535 {
-		return cfg, errors.New(locales.ErrPort())
+	// Every profile's gateway is folded, not just the selected one: the user
+	// edits one profile at a time, and a switch between two edits must not
+	// throw the first one away.
+	for profileIndex := range cfg.Profiles {
+		address, port, problem := ParseGateway(s.Gateways[profileIndex])
+		if problem != "" {
+			return cfg, errors.New(problem)
+		}
+		cfg.Profiles[profileIndex].Server.Address = address
+		if port > 0 {
+			cfg.Profiles[profileIndex].Server.Port = port
+		}
 	}
 
 	interval := strings.TrimSpace(cfg.Profiles[index].Keep.Interval)
@@ -461,8 +467,6 @@ func (s *SettingsState) Apply() (config.Config, error) {
 	profile := &cfg.Profiles[index]
 	previousName := profile.Name
 	profile.Name = name
-	profile.Server.Address = strings.TrimSpace(profile.Server.Address)
-	profile.Server.Port = port
 	profile.Auth.Username = strings.TrimSpace(profile.Auth.Username)
 	profile.Auth.Domain = strings.TrimSpace(profile.Auth.Domain)
 	profile.Auth.AuthType = strings.TrimSpace(profile.Auth.AuthType)
@@ -513,10 +517,16 @@ func (s *SettingsState) folded() config.Config {
 	// The name is folded even when it is blank: an empty name is an edit, and
 	// the window has to offer 保存 so the validation error can explain it.
 	profile.Name = strings.TrimSpace(s.NameText)
-	if port, err := strconv.Atoi(strings.TrimSpace(s.Ports[index])); err == nil && port > 0 && port <= 65535 {
-		profile.Server.Port = port
+	for profileIndex := range cfg.Profiles {
+		address, port, problem := ParseGateway(s.Gateways[profileIndex])
+		if problem != "" {
+			continue
+		}
+		cfg.Profiles[profileIndex].Server.Address = address
+		if port > 0 {
+			cfg.Profiles[profileIndex].Server.Port = port
+		}
 	}
-	profile.Server.Address = strings.TrimSpace(profile.Server.Address)
 	profile.Auth.Username = strings.TrimSpace(profile.Auth.Username)
 	profile.Auth.Domain = strings.TrimSpace(profile.Auth.Domain)
 	profile.Auth.AuthType = strings.TrimSpace(profile.Auth.AuthType)
@@ -534,7 +544,17 @@ func (s *SettingsState) Changed() bool {
 	if len(s.Draft.Profiles) == 0 {
 		return false
 	}
-	return !reflect.DeepEqual(s.baseline, s.folded())
+	if !reflect.DeepEqual(s.baseline, s.folded()) {
+		return true
+	}
+	// A gateway field that does not parse is still an edit: the save bar has
+	// to offer 保存 so Apply can say what is wrong with it.
+	for index := range s.Draft.Profiles {
+		if _, _, problem := ParseGateway(s.Gateways[index]); problem != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // splitTargets parses the keep-alive text area: one target per line, and
@@ -572,17 +592,21 @@ const methodPickerWidth = 240
 func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActions, profile *config.Profile, index int) {
 	caption(c, locales.SettingsEffectLogin())
 	ui.Form(c, func() {
-		ui.Field(c, locales.NameField(), func() {
-			ui.TextInput(c, &state.NameText).MaxWidth(fieldWidth)
-		})
 		ui.Field(c, locales.FieldGateway(), func() {
-			ui.TextInput(c, &profile.Server.Address).Placeholder("vpn.example.com").MaxWidth(fieldWidth)
-		})
-		ui.Field(c, locales.FieldPort(), func() {
-			ui.TextInput(c, &state.Ports[index]).Placeholder("443").MaxWidth(fieldWidth)
+			ui.TextInput(c, &state.Gateways[index]).Placeholder("vpn.example.com:443").MaxWidth(fieldWidth)
 		})
 		ui.Field(c, locales.FieldUsername(), func() {
 			ui.TextInput(c, &profile.Auth.Username).MaxWidth(fieldWidth)
+		})
+		// The password and 保存密码 are one row: the check box belongs to the
+		// value beside it, and the hint about a gateway that asks later is the
+		// placeholder it cannot be if it is a caption under the field.
+		ui.Field(c, locales.FieldPassword(), func() {
+			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).MaxWidth(fieldWidth).Children(func() {
+				ui.TextInput(c, &profile.Auth.Password).Password().Grow(1).Shrink(1).
+					Placeholder(locales.PasswordPlaceholder())
+				ui.Checkbox(c, &profile.Auth.StorePass, locales.StorePassword())
+			})
 		})
 		ui.Field(c, locales.AuthMethod(), func() {
 			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(8).Children(func() {
@@ -602,9 +626,6 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 		ui.Field(c, locales.LoginDomain(), func() {
 			ui.TextInput(c, &profile.Auth.Domain).Placeholder("local").MaxWidth(fieldWidth)
 		})
-		ui.Field(c, locales.FieldPassword(), func() {
-			ui.TextInput(c, &profile.Auth.Password).Password().MaxWidth(fieldWidth)
-		})
 		ui.Field(c, locales.PasswordSecurity(), func() {
 			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(8).Children(func() {
 				if ui.Button(c, locales.ResetPassword()).Disabled(!state.CanChangePassword()).Clicked() && actions.OpenPassword != nil {
@@ -616,9 +637,6 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 					caption(c, locales.ResetOnlyActive())
 				}
 			})
-		})
-		ui.Field(c, "", func() {
-			ui.Checkbox(c, &profile.Auth.StorePass, locales.StorePassword())
 		})
 		if profile.Auth.TOTPSecret != "" {
 			ui.Field(c, locales.TotpSection(), func() {

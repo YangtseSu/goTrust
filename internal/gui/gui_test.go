@@ -177,10 +177,10 @@ func TestSaveSettingsWritesAndApplies(t *testing.T) {
 
 	state := gotrustui.NewSettingsState(cfg, "/tmp/logs")
 	state.NameText = "工作"
-	state.Draft.Profiles[0].Server.Address = "vpn.example.com"
+	state.Gateways[0] = "vpn.example.com:8443"
 	state.Draft.Profiles[0].Auth.Username = "alice"
+	state.Draft.Profiles[0].Auth.StorePass = false
 	state.Draft.Profiles[0].Auth.Password = "memory-only"
-	state.Ports[0] = "8443"
 	application.settings = state
 
 	application.saveSettings()
@@ -227,7 +227,7 @@ func TestTheSettingsDraftIsLongLived(t *testing.T) {
 		t.Fatal("a page switch replaced the draft")
 	}
 
-	draft.Ports[0] = "8443"
+	draft.Gateways[0] = "vpn.example.com:8443"
 	application.saveSettings()
 	if application.settings != draft {
 		t.Fatal("saving replaced the draft")
@@ -250,7 +250,7 @@ func TestSaveSettingsRejectsBadValues(t *testing.T) {
 	application.view.Config = cfg
 
 	state := gotrustui.NewSettingsState(cfg, "/tmp/logs")
-	state.Ports[0] = "0"
+	state.Gateways[0] = "vpn.example.com:0"
 	application.settings = state
 
 	application.saveSettings()
@@ -666,21 +666,24 @@ func TestProfileLockIsHeldForOneLiveLogin(t *testing.T) {
 	application.releaseProfileLock()
 }
 
-// A fresh installation cannot log in: 连接 reveals the first-run form instead of
-// reporting an error the window offers no way to fix, and the connect path
-// answers in the window's words rather than the library's English.
-func TestFirstRunSetupReplacesTheConnectingError(t *testing.T) {
+// 连接 on an incomplete saved profile opens 账户 instead of reporting an error
+// the window offers no way to fix, and the connect path answers in the window's
+// words rather than the library's English.
+func TestIncompleteProfileOpensTheAccountPage(t *testing.T) {
 	cfg := config.Default()
 	application := &app{cfg: cfg, configPath: filepath.Join(t.TempDir(), "config.toml")}
 	application.view.Config = cfg
 
 	application.startLogin()
 
-	if application.view.Setup == nil {
-		t.Fatal("连接 on an incomplete profile did not reveal the first-run form")
+	if application.view.Page != gotrustui.PageAccount {
+		t.Fatalf("page = %d, want 账户", application.view.Page)
 	}
 	if application.attempt != nil {
 		t.Fatal("an incomplete profile started a login")
+	}
+	if !strings.Contains(application.view.Status, "请填写网关地址") {
+		t.Fatalf("status = %q, want the window's sentence", application.view.Status)
 	}
 
 	err := application.connect(context.Background())
@@ -689,29 +692,26 @@ func TestFirstRunSetupReplacesTheConnectingError(t *testing.T) {
 	}
 }
 
-// The first-run form writes the settings file, applies it, and clears itself.
-func TestFirstRunSetupWritesTheConfiguration(t *testing.T) {
+// 连接 saves a dirty draft first, so the gateway typed on 账户 is the one the
+// login uses. A new profile stores its password by default.
+func TestLoginSavesTheDraftFirst(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	cfg := config.Default()
-	application := &app{cfg: cfg, configPath: path}
+	application := &app{cfg: cfg, configPath: path, logf: func(string, ...any) {}}
 	application.view.Config = cfg
-	application.refreshSetup()
+	state := gotrustui.NewSettingsState(cfg, "/tmp/logs")
+	state.Gateways[0] = " https://vpn.example.com:8443/ "
+	state.Draft.Profiles[0].Auth.Username = "alice"
+	state.Draft.Profiles[0].Auth.Password = "s3cret"
+	application.settings = state
 
-	if application.view.Setup == nil {
-		t.Fatal("no first-run form for an empty profile")
+	if !application.saveDraftForLogin() {
+		t.Fatalf("the draft was rejected: %q", state.Status)
 	}
-	draft := *application.view.Setup
-	draft.Address = "vpn.example.com"
-	draft.Port = "8443"
-	draft.Username = "alice"
-	draft.Password = "s3cret"
-	draft.StorePass = true
-
-	application.saveSetup(draft, false)
-
-	if application.view.Setup != nil {
-		t.Fatal("the first-run form stayed after a successful save")
+	if state.Changed() {
+		t.Fatal("the saved draft is still marked as an edit")
 	}
+
 	onDisk, err := config.LoadFile(path)
 	if err != nil {
 		t.Fatalf("load: %v", err)
@@ -721,32 +721,36 @@ func TestFirstRunSetupWritesTheConfiguration(t *testing.T) {
 		profile.Auth.Username != "alice" {
 		t.Fatalf("on-disk profile = %+v", profile)
 	}
-	if profile.Auth.Password != "s3cret" || !profile.Auth.StorePass {
-		t.Fatalf("stored password = %q", profile.Auth.Password)
+	if !profile.Auth.StorePass || profile.Auth.Password != "s3cret" {
+		t.Fatalf("stored password = %q (store %v)", profile.Auth.Password, profile.Auth.StorePass)
 	}
 	if live := application.currentConfig().Active(); live.Server.Port != 8443 || live.Auth.Username != "alice" {
 		t.Fatalf("live profile = %+v", live)
 	}
 }
 
-// A form that cannot be applied is reported inside the form and leaves both the
-// file and the live settings alone.
-func TestFirstRunSetupReportsARejectedSave(t *testing.T) {
+// A draft that cannot be saved keeps its edits and moves the window to 账户;
+// both the file and the live settings stay as they were.
+func TestRejectedDraftSelectsTheAccountPage(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	cfg := config.Default()
-	application := &app{cfg: cfg, configPath: path}
+	application := &app{cfg: cfg, configPath: path, logf: func(string, ...any) {}}
 	application.view.Config = cfg
-	application.refreshSetup()
+	state := gotrustui.NewSettingsState(cfg, "/tmp/logs")
+	state.Gateways[0] = "vpn.example.com:0"
+	state.Draft.Profiles[0].Auth.Username = "alice"
+	application.settings = state
 
-	draft := *application.view.Setup
-	draft.Address = "vpn.example.com"
-	draft.Username = "alice"
-	draft.Port = "0"
+	application.startLogin()
 
-	application.saveSetup(draft, false)
-
-	if application.view.Setup == nil || application.view.Setup.Error == "" {
-		t.Fatalf("a rejected save left no reason in the form: %+v", application.view.Setup)
+	if application.view.Page != gotrustui.PageAccount {
+		t.Fatalf("page = %d, want 账户", application.view.Page)
+	}
+	if state.Status == "" || state.Status == "设置已保存" {
+		t.Fatalf("status = %q, want the rejection", state.Status)
+	}
+	if state.Gateways[0] != "vpn.example.com:0" {
+		t.Fatalf("the draft lost its edit: %q", state.Gateways[0])
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("a rejected save wrote the file: %v", err)

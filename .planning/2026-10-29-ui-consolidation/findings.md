@@ -156,6 +156,35 @@ status
   so hiding the window (the close handler only calls `Hide`) no longer runs
   code that discards it.
 
+## Phase 2 facts
+
+- `ParseGateway` (ui/account.go) returns `(address, port, problem)`. An empty
+  text is not a problem: it is an account without a gateway, the port is 0 and
+  the caller keeps the stored one. That keeps "save the proxy settings before
+  you know the gateway" working. `https://` is the only scheme; a path or a
+  trailing slash is cut; a bracketed IPv6 address may carry a port, and a bare
+  address typed without brackets is accepted as the host with 443.
+- `gatewayText` is the inverse: `host:port`, IPv6 bracketed, empty for a profile
+  without an address. The field shows `vpn.example.com:443` rather than the
+  file's two keys.
+- `Apply` folds every profile's gateway, not only the selected one: the account
+  page edits one profile at a time, and the old positional buffers only folded
+  the selected profile, which would lose the first edit after a switch.
+- `Changed` has to check the text separately: a gateway that does not parse
+  folds to nothing, so the draft would look clean and the save bar (and the
+  reason) would never appear.
+- `config.NewProfile` sets `StorePass`, and `normalise` does not: a loaded
+  profile keeps the value in its file, so an upgrade cannot silently start
+  storing passwords for accounts that never opted in.
+- The window's 连接 and the tray's 连接 are different actions. `saveDraftForLogin`
+  writes the draft when `Changed()` (through `writeDraft`, the same path 保存
+  uses) and selects 账户 on a rejection; `startSavedLogin` is the saved-only
+  path the tray calls. An incomplete saved profile from either path selects
+  `账户` and reports `ProfileProblem`.
+- The password row is `Row{ TextInput.Grow(1).Shrink(1), Checkbox }` capped at
+  `fieldWidth`; the placeholder is the second-factor hint, so the row needs no
+  caption of its own.
+
 ## Mockup caveats
 
 - The mockup uses a 900×740 window; the real mygo window draws its own 34 DIP

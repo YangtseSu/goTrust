@@ -599,6 +599,8 @@ func TestATOTPSecretNeedsThePasswordToggle(t *testing.T) {
 
 	testApp := promptTestApp()
 	testApp.cfg = config.Default()
+	// A profile written before the default changed keeps the toggle off.
+	testApp.cfg.Profiles[0].Auth.StorePass = false
 	testApp.configPath = filepath.Join(t.TempDir(), "config.toml")
 
 	testApp.storeTOTPSecret(secret)

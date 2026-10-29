@@ -278,6 +278,33 @@ func TestDuplicateProfileIsIndependent(t *testing.T) {
 	}
 }
 
+// A new account stores its password (the settings file is 0600 and a stored
+// password is what lets auto-connect work); a profile loaded from a file keeps
+// the toggle the file holds, so an upgrade does not start writing credentials
+// for an account that never asked.
+func TestNewProfileStoresThePasswordByDefault(t *testing.T) {
+	if !NewProfile("a").Auth.StorePass {
+		t.Fatal("a new profile does not store its password")
+	}
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := `version = 3
+
+[[profiles]]
+name = "a"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Active().Auth.StorePass {
+		t.Fatal("a profile without store_password was rewritten to store it")
+	}
+}
+
 func TestNewProfileHasAUniqueID(t *testing.T) {
 	first := NewProfile("a")
 	second := NewProfile("b")

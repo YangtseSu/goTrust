@@ -316,6 +316,16 @@ func (msgs Messages) ProblemUsername() string {
 	return Catalog.Format(msgs.locale, "problemUsername", nil)
 }
 
+// ProblemGatewayScheme says "只支持 https 网关地址"
+// in the language the app shows.
+func ProblemGatewayScheme() string { return In(i18n.Locale()).ProblemGatewayScheme() }
+
+// ProblemGatewayScheme says "只支持 https 网关地址"
+// in the language of msgs.
+func (msgs Messages) ProblemGatewayScheme() string {
+	return Catalog.Format(msgs.locale, "problemGatewayScheme", nil)
+}
+
 // ReconnectProgress says "重连中 ({attempt, number}/{max, number})"
 // in the language the app shows.
 func ReconnectProgress(attempt int, max int) string {
@@ -910,86 +920,6 @@ func (msgs Messages) TrayTooltipKeepAlive(status string, summary string) string 
 	return Catalog.Format(msgs.locale, "trayTooltipKeepAlive", map[string]any{"status": status, "summary": summary})
 }
 
-// SetupTitle says "连接网关"
-// in the language the app shows.
-func SetupTitle() string { return In(i18n.Locale()).SetupTitle() }
-
-// SetupTitle says "连接网关"
-// in the language of msgs.
-func (msgs Messages) SetupTitle() string {
-	return Catalog.Format(msgs.locale, "setupTitle", nil)
-}
-
-// SetupHint says "填写管理员提供的网关地址和账号；这些内容会写入设置文件（权限 0600）。"
-// in the language the app shows.
-func SetupHint() string { return In(i18n.Locale()).SetupHint() }
-
-// SetupHint says "填写管理员提供的网关地址和账号；这些内容会写入设置文件（权限 0600）。"
-// in the language of msgs.
-func (msgs Messages) SetupHint() string {
-	return Catalog.Format(msgs.locale, "setupHint", nil)
-}
-
-// SetupPasswordPlaceholder says "可留空"
-// in the language the app shows.
-func SetupPasswordPlaceholder() string { return In(i18n.Locale()).SetupPasswordPlaceholder() }
-
-// SetupPasswordPlaceholder says "可留空"
-// in the language of msgs.
-func (msgs Messages) SetupPasswordPlaceholder() string {
-	return Catalog.Format(msgs.locale, "setupPasswordPlaceholder", nil)
-}
-
-// SetupPasswordHint says "可以留空：网关使用二次验证或统一认证时，登录过程中会提示。"
-// in the language the app shows.
-func SetupPasswordHint() string { return In(i18n.Locale()).SetupPasswordHint() }
-
-// SetupPasswordHint says "可以留空：网关使用二次验证或统一认证时，登录过程中会提示。"
-// in the language of msgs.
-func (msgs Messages) SetupPasswordHint() string {
-	return Catalog.Format(msgs.locale, "setupPasswordHint", nil)
-}
-
-// SetupStorePassword says "保存密码（文件权限 0600）"
-// in the language the app shows.
-func SetupStorePassword() string { return In(i18n.Locale()).SetupStorePassword() }
-
-// SetupStorePassword says "保存密码（文件权限 0600）"
-// in the language of msgs.
-func (msgs Messages) SetupStorePassword() string {
-	return Catalog.Format(msgs.locale, "setupStorePassword", nil)
-}
-
-// SetupConnect says "保存并连接"
-// in the language the app shows.
-func SetupConnect() string { return In(i18n.Locale()).SetupConnect() }
-
-// SetupConnect says "保存并连接"
-// in the language of msgs.
-func (msgs Messages) SetupConnect() string {
-	return Catalog.Format(msgs.locale, "setupConnect", nil)
-}
-
-// SetupSaveOnly says "仅保存"
-// in the language the app shows.
-func SetupSaveOnly() string { return In(i18n.Locale()).SetupSaveOnly() }
-
-// SetupSaveOnly says "仅保存"
-// in the language of msgs.
-func (msgs Messages) SetupSaveOnly() string {
-	return Catalog.Format(msgs.locale, "setupSaveOnly", nil)
-}
-
-// SetupMore says "更多设置…"
-// in the language the app shows.
-func SetupMore() string { return In(i18n.Locale()).SetupMore() }
-
-// SetupMore says "更多设置…"
-// in the language of msgs.
-func (msgs Messages) SetupMore() string {
-	return Catalog.Format(msgs.locale, "setupMore", nil)
-}
-
 // FieldGateway says "网关地址"
 // in the language the app shows.
 func FieldGateway() string { return In(i18n.Locale()).FieldGateway() }
@@ -998,16 +928,6 @@ func FieldGateway() string { return In(i18n.Locale()).FieldGateway() }
 // in the language of msgs.
 func (msgs Messages) FieldGateway() string {
 	return Catalog.Format(msgs.locale, "fieldGateway", nil)
-}
-
-// FieldPort says "端口"
-// in the language the app shows.
-func FieldPort() string { return In(i18n.Locale()).FieldPort() }
-
-// FieldPort says "端口"
-// in the language of msgs.
-func (msgs Messages) FieldPort() string {
-	return Catalog.Format(msgs.locale, "fieldPort", nil)
 }
 
 // FieldUsername says "用户名"
@@ -1028,6 +948,16 @@ func FieldPassword() string { return In(i18n.Locale()).FieldPassword() }
 // in the language of msgs.
 func (msgs Messages) FieldPassword() string {
 	return Catalog.Format(msgs.locale, "fieldPassword", nil)
+}
+
+// PasswordPlaceholder says "留空：二次验证在登录时询问"
+// in the language the app shows.
+func PasswordPlaceholder() string { return In(i18n.Locale()).PasswordPlaceholder() }
+
+// PasswordPlaceholder says "留空：二次验证在登录时询问"
+// in the language of msgs.
+func (msgs Messages) PasswordPlaceholder() string {
+	return Catalog.Format(msgs.locale, "passwordPlaceholder", nil)
 }
 
 // CodeTitleSMS says "短信验证码"
@@ -2010,26 +1940,6 @@ func (msgs Messages) ErrProfileNameExists(name string) string {
 	return Catalog.Format(msgs.locale, "errProfileNameExists", map[string]any{"name": name})
 }
 
-// ErrPort says "端口必须是 1-65535 之间的数字"
-// in the language the app shows.
-func ErrPort() string { return In(i18n.Locale()).ErrPort() }
-
-// ErrPort says "端口必须是 1-65535 之间的数字"
-// in the language of msgs.
-func (msgs Messages) ErrPort() string {
-	return Catalog.Format(msgs.locale, "errPort", nil)
-}
-
-// ErrAddress says "请先填写网关地址"
-// in the language the app shows.
-func ErrAddress() string { return In(i18n.Locale()).ErrAddress() }
-
-// ErrAddress says "请先填写网关地址"
-// in the language of msgs.
-func (msgs Messages) ErrAddress() string {
-	return Catalog.Format(msgs.locale, "errAddress", nil)
-}
-
 // ErrKeepAliveInvalid says "保活间隔不是有效时长，例如 90s"
 // in the language the app shows.
 func ErrKeepAliveInvalid() string { return In(i18n.Locale()).ErrKeepAliveInvalid() }
@@ -2150,11 +2060,11 @@ func (msgs Messages) ResetOnlyActive() string {
 	return Catalog.Format(msgs.locale, "resetOnlyActive", nil)
 }
 
-// StorePassword says "保存密码和 TOTP 密钥（文件权限 0600）"
+// StorePassword says "保存密码"
 // in the language the app shows.
 func StorePassword() string { return In(i18n.Locale()).StorePassword() }
 
-// StorePassword says "保存密码和 TOTP 密钥（文件权限 0600）"
+// StorePassword says "保存密码"
 // in the language of msgs.
 func (msgs Messages) StorePassword() string {
 	return Catalog.Format(msgs.locale, "storePassword", nil)

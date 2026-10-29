@@ -13,13 +13,13 @@ separate chip.
 
 ## Next Step
 
-Phase 2: the account page, the gateway field and the password row. The shell
-is in place; the first-run panel, the 名称 field and the two-field gateway are
-next.
+Phase 3: demote profiles. The account page is the login form now; the 多账户
+page, the bottom sidebar entry, the tray's 切换账户 submenu and the 账户 wording
+are next.
 
 ## Current Phase
 
-Phase 1 complete; Phase 2 pending.
+Phase 2 complete; Phase 3 pending.
 
 ## Decisions already made
 
@@ -111,35 +111,56 @@ Notes:
 
 ### Phase 2: Account page, gateway field and password row
 
-- [ ] Delete the first-run panel: `State.Setup`, `SetupDraft`,
+- [x] Delete the first-run panel: `State.Setup`, `SetupDraft`,
       `NewSetupDraft`, `setupPanel`, `Actions.SaveSetup`, `saveSetup`,
       `setSetupError`, `refreshSetup`, and `ui/setup_test.go`. The 账户 page is
       the first-run form; `ProfileProblem` stays as the shared validation
       sentence.
-- [ ] Replace `SettingsState.Ports` with `Gateways []string`: one text field
+- [x] Replace `SettingsState.Ports` with `Gateways []string`: one text field
       per profile holding `host:port`. A parser accepts
       `https://host:port`, `host:port`, `host` (port 443), a trailing `/`, and
       bracketed IPv6; it rejects other schemes, an empty host and a port outside
       1–65535 in the window's words.
-- [ ] Update `refresh`, `Apply`, `folded`, `Target`, `targetKey`,
+- [x] Update `refresh`, `Apply`, `folded`, `Target`, `targetKey`,
       `DuplicateProfile` and `DeleteProfile` to the gateway buffer. `Apply`
       writes the parsed address and port into the profile exactly as the file
       stores them; the configuration schema does not change.
-- [ ] Order the 账户 form: 网关, 用户名, 密码 + 保存密码, 认证方式 (+ 获取认证
+- [x] Order the 账户 form: 网关, 用户名, 密码 + 保存密码, 认证方式 (+ 获取认证
       方式), 登录域名, 修改密码, TOTP when stored. Remove the 名称 field.
-- [ ] Password row: the input grows, 保存密码 sits on the same line; the label
+- [x] Password row: the input grows, 保存密码 sits on the same line; the label
       is just 密码 and the hint about a second factor moves into the password
       placeholder.
-- [ ] `config.NewProfile` defaults `Auth.StorePass` to true; existing profiles
+- [x] `config.NewProfile` defaults `Auth.StorePass` to true; existing profiles
       keep their stored value. The form shows the profile's value.
-- [ ] Login from the dashboard saves a dirty draft first; a validation failure
+- [x] Login from the dashboard saves a dirty draft first; a validation failure
       selects the 账户 page, keeps the draft and reports the reason as a toast.
       A login from the tray keeps using the saved configuration.
-- [ ] Keep the `ActiveAtOpen` warning on the 账户 page when the selected draft
+- [x] Keep the `ActiveAtOpen` warning on the 账户 page when the selected draft
       profile differs from the live account.
-- [ ] Tests: gateway parsing table (scheme, bare host, IPv6, bad port, empty);
+- [x] Tests: gateway parsing table (scheme, bare host, IPv6, bad port, empty);
       field order; the store-password default; save-then-login.
-- **Status:** pending.
+- **Status:** complete.
+
+Notes:
+
+- The parser lives in `ui/account.go` with `ProfileProblem` and `gatewayText`,
+  the field text. `fieldWidth` still caps the controls; the gateways of every
+  profile are folded on apply, so switching between two edits cannot lose the
+  first one.
+- A gateway that does not parse marks the draft as changed even though nothing
+  can be folded: the save bar has to offer 保存 so the reason is reachable. An
+  empty field stays an account without a gateway, so proxy and startup settings
+  can be saved before the gateway is known.
+- The window's 连接 saves the draft first (`saveDraftForLogin`); the tray has
+  its own `TrayLogin`, which uses the saved configuration. `writeDraft` is the
+  one save path for 保存 and for the login's first step.
+- A fresh install still opens on the dashboard; 连接 on an incomplete profile
+  selects 账户 and shows the window's sentence. The 用户-facing name editor
+  waits for phase 3.
+- The render set replaced the three `main-setup` images with `account-fresh`
+  and `account-fresh-small`. The old `errPort`, `errAddress`, `fieldPort` and
+  `setup*` catalog entries are gone; `passwordPlaceholder` and
+  `problemGatewayScheme` are new.
 
 ### Phase 3: Demote profiles
 

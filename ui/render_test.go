@@ -152,14 +152,6 @@ func renderStates(t *testing.T, dir, lang string) {
 			},
 		},
 		{
-			name: "main-setup",
-			state: State{
-				Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
-				Config:  fresh,
-				Setup:   NewSetupDraft(fresh.Active()),
-			},
-		},
-		{
 			name: "main-captcha",
 			state: State{
 				Session: session.State{Phase: session.PhaseConnecting, Detail: "需要点击验证码"},
@@ -292,7 +284,7 @@ func renderStates(t *testing.T, dir, lang string) {
 	})
 	t.Run("settings-unsaved", func(t *testing.T) {
 		pageView("settings-unsaved", PageAccount, func(state *SettingsState) {
-			state.Ports[0] = "8443"
+			state.Gateways[0] = "vpn.example.com:8443"
 		})
 	})
 	// The minimum width the window declares, tall enough for the whole page:
@@ -362,22 +354,16 @@ func renderStates(t *testing.T, dir, lang string) {
 		save("main-password-small", ui.NewTester(View(&state, Actions{}), 720, 560))
 	})
 
-	t.Run("main-setup-small", func(t *testing.T) {
-		state := State{
-			Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
-			Config:  fresh,
-			Setup:   NewSetupDraft(fresh.Active()),
-		}
-		save("main-setup-small", ui.NewTester(View(&state, Actions{}), 720, 560))
+	t.Run("account-fresh", func(t *testing.T) {
+		state := NewSettingsState(fresh, "/home/user/.local/state/gotrust")
+		view := &State{Settings: state, Config: fresh, Page: PageAccount}
+		save("account-fresh", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 900, 740))
 	})
 
-	t.Run("main-setup-wide", func(t *testing.T) {
-		state := State{
-			Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
-			Config:  fresh,
-			Setup:   NewSetupDraft(fresh.Active()),
-		}
-		save("main-setup-wide", ui.NewTester(View(&state, Actions{}), 900, 740))
+	t.Run("account-fresh-small", func(t *testing.T) {
+		state := NewSettingsState(fresh, "/home/user/.local/state/gotrust")
+		view := &State{Settings: state, Config: fresh, Page: PageAccount}
+		save("account-fresh-small", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 720, 560))
 	})
 
 	t.Run("settings-password", func(t *testing.T) {

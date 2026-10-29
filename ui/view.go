@@ -78,10 +78,6 @@ type State struct {
 	DeviceBind *DeviceBindPrompt
 	// Password is the gateway's forced password change, shown in the same slot.
 	Password *PasswordPrompt
-	// Setup is the first-run form. It is set while the active profile has no
-	// gateway or account yet, and replaces the connection controls and the
-	// resource list until it does.
-	Setup *SetupDraft
 }
 
 // ClashFormat selects one of the three Clash/Mihomo renderings. It mirrors the
@@ -96,8 +92,13 @@ const (
 
 // Actions are what the window and the tray can ask the application to do.
 type Actions struct {
-	Login  func()
-	Logout func()
+	// Login starts a login from the window: a draft that differs from the
+	// settings file is saved first, so a gateway just typed is the one used.
+	Login func()
+	// TrayLogin starts the saved configuration instead, because a tray click
+	// must not save edits the window is still making.
+	TrayLogin func()
+	Logout    func()
 	// ShowPage selects the page the window shows, then shows and focuses the
 	// window. ShowWindow shows the window without changing the page.
 	ShowPage   func(Page)
@@ -105,9 +106,6 @@ type Actions struct {
 	Quit       func()
 	// Settings are the callbacks the settings pages use on the draft.
 	Settings SettingsActions
-	// SaveSetup writes the first-run form and, when connect is set, logs in
-	// with it right away.
-	SaveSetup func(draft SetupDraft, connect bool)
 	// SelectProfile switches the active account. The application disconnects
 	// first and reconnects when auto-connect is on.
 	SelectProfile func(string)
@@ -313,8 +311,6 @@ func panelBody(c *ui.Context, state *State, actions Actions) {
 			panelSlot(c, state, func() { deviceBindPanel(c, state, actions) })
 		case state.Password != nil:
 			panelSlot(c, state, func() { passwordPanel(c, state, actions) })
-		case state.Setup != nil:
-			panelSlot(c, state, func() { setupPanel(c, state, actions) })
 		}
 	})
 }
@@ -381,13 +377,11 @@ func windowShortcuts(c *ui.Context, state *State, actions Actions, searchFocus *
 // panelOpen reports whether a pre-login panel owns the window body.
 func panelOpen(state *State) bool {
 	return state.Choice != nil || state.Captcha != nil || state.Code != nil ||
-		state.External != nil || state.DeviceBind != nil || state.Password != nil ||
-		state.Setup != nil
+		state.External != nil || state.DeviceBind != nil || state.Password != nil
 }
 
 // panelCancel is the way out of the panel on screen, in the order View shows
-// them. nil means no login question is up, so Esc has nothing to cancel; the
-// first-run form is not a question and keeps its fields.
+// them. nil means no login question is up, so Esc has nothing to cancel.
 func panelCancel(state *State, actions Actions) func() {
 	switch {
 	case state.Choice != nil:
@@ -511,11 +505,7 @@ func header(c *ui.Context, state *State, actions Actions) {
 			statusChip(c, state)
 			controls(c, state, actions)
 		})
-		if state.Setup == nil {
-			// The first-run panel says what is missing itself; repeating it
-			// above the form would spend the height the form needs.
-			subline(c, state)
-		}
+		subline(c, state)
 	})
 }
 
@@ -695,10 +685,6 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 func controls(c *ui.Context, state *State, actions Actions) {
 	ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 		switch {
-		case state.Setup != nil:
-			// The first-run panel owns 连接 while it is up: its own primary
-			// saves the form and signs in, so a second copy here would be a
-			// second way to do the same thing with different failures.
 		case phaseActive(state.Session.Phase):
 			// 断开 stays available while a login runs: it is how a login
 			// waiting on the network or on a prompt is cancelled.
@@ -1109,8 +1095,10 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		// it; the window disables the same button.
 		toggle.Disabled = state.Busy
 		toggle.Click = func(*mygo.MenuItem, *mygo.Window) {
-			if actions.Login != nil {
-				actions.Login()
+			// The tray logs in with the saved configuration: a click here must
+			// not save the draft the window is still editing.
+			if actions.TrayLogin != nil {
+				actions.TrayLogin()
 			}
 		}
 	}

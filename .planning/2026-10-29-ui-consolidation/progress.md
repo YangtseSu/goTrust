@@ -61,7 +61,40 @@ The review settled these points:
 
 ### Phase 2: Account page, gateway field and password row
 
-- **Status:** pending
+- **Status:** complete
+- The first-run panel is gone: `ui/setup.go` and `ui/setup_test.go` are
+  deleted, and `State.Setup`, `Actions.SaveSetup`, `refreshSetup`, `saveSetup`
+  and `setSetupError` with them. `ProfileProblem` moved to `ui/account.go`.
+- The account page is the first-run form: 网关 (`host:port`, one field), 用户名,
+  密码 with 保存密码 on the same row, 认证方式 + 获取认证方式, 登录域, 密码安全
+  and the stored TOTP. 名称 and 端口 are no longer on the page;
+  `SettingsState.NameText` stays for the phase 3 profile editor.
+- `SettingsState.Ports` became `Gateways []string`; `ParseGateway` accepts
+  `host:port`, `https://host:port`, a bare host (443), a trailing path and
+  IPv6 in brackets, and refuses other schemes, an empty host and ports outside
+  1–65535. `Apply` folds every profile's gateway, `folded` ignores text that
+  does not parse, and `Changed` marks such text as an edit so 保存 can explain
+  it. The file schema is unchanged.
+- `config.NewProfile` now defaults `store_password` to true; a loaded profile
+  keeps its own value, so an upgrade does not start writing credentials for an
+  account that never opted in. The box is 保存密码 (the file is 0600); the
+  second-factor hint is the password placeholder.
+- 连接 from the window saves a dirty draft through `writeDraft` first and, on a
+  validation failure, selects 账户 and keeps the edits. The tray uses
+  `TrayLogin`, which logs in with the saved configuration. An incomplete saved
+  profile from either entry point selects 账户 with the window's sentence.
+- Catalog: `passwordPlaceholder` and `problemGatewayScheme` added;
+  `setup*`, `errPort`, `errAddress` and `fieldPort` removed;
+  `storePassword` is now 保存密码. `go tool mygo generate` rewrote the
+  accessors.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint` pass. `GOTRUST_RENDER_DIR` rendered
+  `account-fresh`, `account-fresh-small` and the English/dark pages; the
+  password row and the truncated placeholder were checked at both widths. The
+  real binary ran under headless mutter from a fresh config: the new file
+  carries `store_password = true`, the log says
+  `goTrust ready; profile 默认`, and SIGTERM exits 0. Interactive clicks in the
+  real window remain phase 6.
 
 ### Phase 3: Demote profiles
 

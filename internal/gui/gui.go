@@ -54,9 +54,6 @@ func Run(configPath string) error {
 		configPath: path,
 		view:       gotrustui.State{Config: cfg},
 	}
-	// A fresh installation has neither a gateway nor an account, so the main
-	// window opens on the first-run form instead of failing on 连接.
-	application.refreshSetup()
 
 	fileLog, logErr := logging.New(logging.Options{
 		Verbose: cfg.Logging.Verbose,
@@ -140,8 +137,8 @@ type app struct {
 	view gotrustui.State
 	// settings is the window's settings draft. It is created at startup and
 	// kept for the life of the process, so hiding the window or switching a
-	// page keeps the edits; only 保存, 放弃, a profile switch and a setup save
-	// reload it.
+	// page keeps the edits; only 保存, 放弃, a profile switch and a login that
+	// saves the draft reload it.
 	settings *gotrustui.SettingsState
 
 	proxy *gotrustproxy.Server
@@ -354,12 +351,12 @@ func (a *app) openTray() bool {
 func (a *app) actions() gotrustui.Actions {
 	return gotrustui.Actions{
 		Login:         a.startLogin,
+		TrayLogin:     a.startSavedLogin,
 		Logout:        a.disconnect,
 		ShowPage:      a.showPage,
 		ShowWindow:    a.showWindow,
 		SelectProfile: a.selectProfile,
 		Quit:          func() { mygo.App.Quit() },
-		SaveSetup:     a.saveSetup,
 		Settings:      a.settingsActions(),
 
 		AddCaptchaPoint: a.addCaptchaPoint,
@@ -838,82 +835,57 @@ func (a *app) async(fn func(context.Context) error) {
 	}()
 }
 
-// startLogin is 连接. An incomplete profile cannot produce a login, and the
-// library's validation message names a field the window does not offer, so the
-// first-run form takes the place of the connection controls instead.
+// startLogin is 连接 in the window. The account page edits a draft, so a draft
+// that differs from the file is saved first: the gateway the user just typed is
+// the one the login uses. A draft that cannot be saved keeps its edits and
+// moves the window to 账户, where the reason names a field.
 func (a *app) startLogin() {
+	if !a.saveDraftForLogin() {
+		return
+	}
+	a.startSavedLogin()
+}
+
+// saveDraftForLogin writes the settings draft when it differs from the file and
+// reports whether a login can go on. The window selects 账户 on a rejection:
+// the reason is a sentence about one field, and the form has to be on screen.
+func (a *app) saveDraftForLogin() bool {
+	a.mu.RLock()
+	state := a.settings
+	a.mu.RUnlock()
+	if state == nil || !state.Changed() {
+		return true
+	}
+
+	previous := a.currentConfig()
+	cfg, ok := a.writeDraft(state)
+	if !ok {
+		a.showPage(gotrustui.PageAccount)
+		return false
+	}
+	// A saved draft may point at another account. The login ends the old
+	// session, and connect waits for that join before it starts.
+	a.mu.RLock()
+	online := sessionActive(a.view.Session.Phase)
+	a.mu.RUnlock()
+	if online && previous.ActiveProfile != cfg.ActiveProfile {
+		a.disconnect()
+	}
+	return true
+}
+
+// startSavedLogin is 连接 with the configuration already on disk. The tray uses
+// it: a tray click must not save the draft the window is still editing. An
+// incomplete profile cannot produce a login, and the library's validation
+// message names a field the window does not offer, so the window opens on the
+// account form with the window's own sentence instead.
+func (a *app) startSavedLogin() {
 	if problem := gotrustui.ProfileProblem(a.currentConfig().Active()); problem != "" {
-		a.refreshSetup()
-		a.showWindow()
+		a.setStatusError(problem)
+		a.showPage(gotrustui.PageAccount)
 		return
 	}
 	a.async(a.connect)
-}
-
-// refreshSetup keeps the first-run form in step with the active profile: it
-// appears while a login cannot be built, keeps what the user typed for the same
-// profile, and goes away once the profile is complete.
-func (a *app) refreshSetup() {
-	profile := a.currentConfig().Active()
-	problem := gotrustui.ProfileProblem(profile)
-
-	a.mu.Lock()
-	switch {
-	case problem == "" || sessionActive(a.view.Session.Phase):
-		a.view.Setup = nil
-	case a.view.Setup == nil || a.view.Setup.Profile != setupName(profile):
-		a.view.Setup = gotrustui.NewSetupDraft(profile)
-	}
-	a.mu.Unlock()
-
-	a.invalidate()
-}
-
-// setupName is the key a draft belongs to: the profile's name, or the default
-// when a hand-edited file leaves it empty.
-func setupName(profile config.Profile) string {
-	if profile.Name != "" {
-		return profile.Name
-	}
-	return config.DefaultProfileName
-}
-
-// saveSetup writes the first-run form. The settings file goes first, so a failed
-// write leaves the running app as it was; the live configuration follows.
-func (a *app) saveSetup(draft gotrustui.SetupDraft, connect bool) {
-	cfg := a.mutableConfig()
-	if err := draft.Apply(&cfg); err != nil {
-		a.setSetupError(err.Error())
-		return
-	}
-	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
-		a.setSetupError(locales.SaveFailed(err.Error()))
-		a.logf("save setup: %v", err)
-		return
-	}
-
-	a.setSetupError("")
-	a.applyConfig(cfg)
-	// The setup form wrote the profile under the draft; reload the pages'
-	// draft so the account page shows what reached the file.
-	a.mu.Lock()
-	if a.settings != nil {
-		a.settings.Reload(cfg)
-	}
-	a.mu.Unlock()
-	if connect {
-		a.async(a.connect)
-	}
-}
-
-// setSetupError puts the reason under the first-run form's buttons.
-func (a *app) setSetupError(message string) {
-	a.mu.Lock()
-	if a.view.Setup != nil {
-		a.view.Setup.Error = message
-	}
-	a.mu.Unlock()
-	a.invalidate()
 }
 
 func (a *app) connect(ctx context.Context) error {
@@ -922,9 +894,9 @@ func (a *app) connect(ctx context.Context) error {
 	if err := a.waitForLogout(ctx); err != nil {
 		return err
 	}
-	// The window hides the connection controls while the profile is incomplete,
-	// so this only fires for an auto-connect or a caller racing a settings
-	// change. It answers in the window's words, not the library's.
+	// Auto-connect and a caller that raced a settings change can reach here
+	// with an incomplete profile; answer in the window's words, not the
+	// library's.
 	if problem := gotrustui.ProfileProblem(a.currentConfig().Active()); problem != "" {
 		return errors.New(problem)
 	}
@@ -1245,26 +1217,37 @@ func (a *app) saveSettings() {
 	if state == nil {
 		return
 	}
+	previous := a.currentConfig()
+	cfg, ok := a.writeDraft(state)
+	if !ok {
+		return
+	}
+	a.reconcileProfileSwitch(previous, cfg)
+	a.invalidate()
+}
 
+// writeDraft stores the settings draft and makes it the settings in effect. It
+// reports the saved configuration and whether the write happened; a rejected
+// draft keeps its edits and says why, so 保存 and a login that saves first
+// report the same reason.
+func (a *app) writeDraft(state *gotrustui.SettingsState) (config.Config, bool) {
 	cfg, err := state.Apply()
 	if err != nil {
 		state.SetStatus(err.Error(), true)
 		a.invalidate()
-		return
+		return config.Config{}, false
 	}
 	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
 		state.SetStatus(locales.SaveFailed(err.Error()), true)
 		a.invalidate()
 		a.logf("save settings: %v", err)
-		return
+		return config.Config{}, false
 	}
 
 	// The file now names the profiles the draft describes, so the stored account
 	// material may follow a rename or a delete. Doing this before the save would
 	// move files under a configuration that still names the old profile.
 	a.applyClientDataChanges(cfg, state.ClientDataChanges())
-
-	previous := a.currentConfig()
 	a.applyConfig(cfg)
 
 	// Reflect the normalised values back into the form.
@@ -1275,9 +1258,7 @@ func (a *app) saveSettings() {
 		settings.Reload(cfg)
 		settings.SetStatus(locales.SettingsSaved(), false)
 	}
-
-	a.reconcileProfileSwitch(previous, cfg)
-	a.invalidate()
+	return cfg, true
 }
 
 // selectProfile switches accounts from the tray or the 多账户 page. One
@@ -1523,7 +1504,6 @@ func (a *app) applyConfig(cfg config.Config) {
 	a.view.Config = cfg
 	a.mu.Unlock()
 
-	a.refreshSetup()
 	a.refreshTray()
 	a.invalidate()
 }

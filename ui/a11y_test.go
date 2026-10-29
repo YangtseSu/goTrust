@@ -123,7 +123,7 @@ func TestMainWindowTabOrder(t *testing.T) {
 // matches the file, so the draft is edited first.
 func TestSettingsTabOrderReachesTheSaveBar(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
-	state.Ports[0] = "8443"
+	state.Gateways[0] = "vpn.example.com:8443"
 	_, tester := newShell(t, state, SettingsActions{}, PageAccount)
 
 	found := false

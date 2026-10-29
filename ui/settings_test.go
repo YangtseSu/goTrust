@@ -19,13 +19,12 @@ func TestSettingsApplyBuildsAProfile(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	id := state.Draft.Profiles[0].ID
 	state.NameText = " 工作 "
-	state.Draft.Profiles[0].Server.Address = " vpn.example.com "
+	state.Gateways[0] = " https://vpn.example.com:8443/ "
 	state.Draft.Profiles[0].Auth.Username = " alice "
 	state.Draft.Profiles[0].Auth.Domain = " Radius "
 	state.Draft.Profiles[0].Auth.StorePass = true
 	state.Draft.Profiles[0].Auth.Password = "secret"
 	state.Draft.Profiles[0].Keep.SetEnabled(false)
-	state.Ports[0] = "8443"
 	state.Targets[0] = "http://192.0.2.5/\n\nhttp://192.0.2.6/, http://192.0.2.5/"
 	state.Draft.Proxy.HTTPBind = ""
 
@@ -77,8 +76,9 @@ func TestSettingsApplyRejectsBadValues(t *testing.T) {
 		mutate func(*SettingsState)
 	}{
 		{"empty name", func(state *SettingsState) { state.NameText = "  " }},
-		{"bad port", func(state *SettingsState) { state.Ports[0] = "70000" }},
-		{"text port", func(state *SettingsState) { state.Ports[0] = "https" }},
+		{"bad port", func(state *SettingsState) { state.Gateways[0] = "vpn.example.com:70000" }},
+		{"text port", func(state *SettingsState) { state.Gateways[0] = "vpn.example.com:https" }},
+		{"other scheme", func(state *SettingsState) { state.Gateways[0] = "http://vpn.example.com" }},
 		{"bad interval", func(state *SettingsState) { state.Draft.Profiles[0].Keep.Interval = "soon" }},
 		{"interval below the floor", func(state *SettingsState) { state.Draft.Profiles[0].Keep.Interval = "5s" }},
 		{"no listener", func(state *SettingsState) {
@@ -146,8 +146,8 @@ func TestSettingsProfileActions(t *testing.T) {
 	if len(state.Draft.Profiles) != 2 || state.Selected != 1 {
 		t.Fatalf("profiles = %v selected = %d", state.Draft.ProfileNames(), state.Selected)
 	}
-	if len(state.Ports) != 2 || len(state.Targets) != 2 {
-		t.Fatalf("buffers: ports=%d targets=%d", len(state.Ports), len(state.Targets))
+	if len(state.Gateways) != 2 || len(state.Targets) != 2 {
+		t.Fatalf("buffers: gateways=%d targets=%d", len(state.Gateways), len(state.Targets))
 	}
 
 	state.DuplicateProfile()
@@ -167,8 +167,8 @@ func TestSettingsProfileActions(t *testing.T) {
 	if len(state.Draft.Profiles) != 2 {
 		t.Fatalf("profiles after delete = %v", state.Draft.ProfileNames())
 	}
-	if len(state.Ports) != 2 || len(state.Targets) != 2 {
-		t.Fatalf("buffers did not shrink: ports=%d targets=%d", len(state.Ports), len(state.Targets))
+	if len(state.Gateways) != 2 || len(state.Targets) != 2 {
+		t.Fatalf("buffers did not shrink: gateways=%d targets=%d", len(state.Gateways), len(state.Targets))
 	}
 }
 
@@ -259,7 +259,7 @@ func TestEditingTheGatewayDropsTheDiscoveredMethods(t *testing.T) {
 	}
 
 	// Another port is another gateway.
-	state.Ports[0] = "8443"
+	state.Gateways[0] = "old.example.com:8443"
 	tester.Frame()
 	if len(state.Methods) != 0 || state.MethodsFrom != "" {
 		t.Fatalf("methods = %v from %q, want them dropped", state.Methods, state.MethodsFrom)
@@ -268,7 +268,7 @@ func TestEditingTheGatewayDropsTheDiscoveredMethods(t *testing.T) {
 	// The picker itself refuses a stale entry, even when a frame has not run
 	// since the edit: the chosen method must belong to the current gateway.
 	state.SetMethods(methods, state.targetKey(), "已获取 2 种认证方式", false)
-	state.Ports[0] = "9443"
+	state.Gateways[0] = "old.example.com:9443"
 	state.SelectAuth(1)
 	if got := state.Draft.Profiles[0].Auth.AuthType; got != "" {
 		t.Fatalf("auth type = %q, want the stale choice refused", got)
@@ -371,12 +371,13 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 // itself) is not an unsaved edit.
 func TestSettingsChangedFollowsTheSavedFile(t *testing.T) {
 	cfg := config.Default()
+	cfg.Profiles[0].Server.Address = "vpn.example.com"
 	state := NewSettingsState(cfg, "/tmp/logs")
 	if state.Changed() {
 		t.Fatal("a fresh draft is marked unsaved")
 	}
 
-	state.Ports[0] = " 443 "
+	state.Gateways[0] = " vpn.example.com "
 	state.NameText = " " + config.DefaultProfileName + " "
 	if state.Changed() {
 		t.Fatal("values the file already holds are marked unsaved")
@@ -386,9 +387,9 @@ func TestSettingsChangedFollowsTheSavedFile(t *testing.T) {
 		t.Fatal("the language choice is marked as a settings edit")
 	}
 
-	state.Ports[0] = "8443"
+	state.Gateways[0] = "vpn.example.com:8443"
 	if !state.Changed() {
-		t.Fatal("an edited port is not marked")
+		t.Fatal("an edited gateway is not marked")
 	}
 	state.Reload(cfg)
 	if state.Changed() {
@@ -427,7 +428,7 @@ func TestSidebarSwitchesPages(t *testing.T) {
 		want  string
 		gone  string
 	}{
-		{"代理", PageProxy, "SOCKS5 监听", "名称"},
+		{"代理", PageProxy, "SOCKS5 监听", "网关地址"},
 		{"保活", PageKeepAlive, "启用保活", "SOCKS5 监听"},
 		{"启动", PageStartup, "登录系统时启动", "启用保活"},
 		{"终端管理", PageTerminals, "连接后可读取终端列表", "登录系统时启动"},
@@ -473,10 +474,10 @@ func TestSettingsSaveAndDiscardFollowTheDraft(t *testing.T) {
 		t.Fatal("放弃修改 is on screen with nothing to discard")
 	}
 
-	state.Ports[0] = "8443"
+	state.Gateways[0] = "vpn.example.com:8443"
 	tester.Frame()
 	if !tester.HasText("未保存的修改") {
-		t.Fatalf("an edited port does not show the save bar; texts: %v", tester.Texts())
+		t.Fatalf("an edited gateway does not show the save bar; texts: %v", tester.Texts())
 	}
 	if err := tester.Click("放弃修改"); err != nil {
 		t.Fatalf("click discard: %v", err)
@@ -484,8 +485,8 @@ func TestSettingsSaveAndDiscardFollowTheDraft(t *testing.T) {
 	if discarded != 1 {
 		t.Fatalf("discard calls = %d", discarded)
 	}
-	if state.Changed() || state.Ports[0] != "443" {
-		t.Fatalf("the draft survived the discard: %q", state.Ports[0])
+	if state.Changed() || state.Gateways[0] != "" {
+		t.Fatalf("the draft survived the discard: %q", state.Gateways[0])
 	}
 	tester.Frame()
 	if tester.HasText("未保存的修改") {
@@ -519,11 +520,11 @@ func TestAccountPageHintsAtTheProfileSwitch(t *testing.T) {
 func TestSettingsReloadDiscardsEdits(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	state.NameText = "unsaved"
-	state.Ports[0] = "9999"
+	state.Gateways[0] = "vpn.example.com:9999"
 
 	state.Reload(config.Default())
-	if state.NameText != config.DefaultProfileName || state.Ports[0] != "443" {
-		t.Fatalf("reload kept edits: %q %q", state.NameText, state.Ports[0])
+	if state.NameText != config.DefaultProfileName || state.Gateways[0] != "" {
+		t.Fatalf("reload kept edits: %q %q", state.NameText, state.Gateways[0])
 	}
 }
 
@@ -531,7 +532,7 @@ func TestSettingsReloadDiscardsEdits(t *testing.T) {
 // choosing 自动 clears it again.
 func TestSettingsSelectAuthStoresThePair(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
-	state.Draft.Profiles[0].Server.Address = "vpn.example.com"
+	state.Gateways[0] = "vpn.example.com:443"
 	methods := []session.AuthMethod{
 		{Name: "密码登录", Type: "auth/psw", Domain: "local"},
 		{Name: "统一认证", Type: "auth/cas", Domain: "Radius"},
@@ -583,7 +584,7 @@ func TestSettingsMethodOptionsKeepAStalePair(t *testing.T) {
 	}
 }
 
-// Discovery queries the gateway in the draft, so the port text field has to be
+// Discovery queries the gateway in the draft, so the gateway field has to be
 // usable before a save.
 func TestSettingsTargetReadsTheDraft(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
@@ -591,8 +592,7 @@ func TestSettingsTargetReadsTheDraft(t *testing.T) {
 		t.Fatal("an empty gateway address produced a target")
 	}
 
-	state.Draft.Profiles[0].Server.Address = " vpn.example.com "
-	state.Ports[0] = "8443"
+	state.Gateways[0] = " https://vpn.example.com:8443/ "
 	profile, err := state.Target()
 	if err != nil {
 		t.Fatalf("target: %v", err)
@@ -601,7 +601,7 @@ func TestSettingsTargetReadsTheDraft(t *testing.T) {
 		t.Fatalf("target = %+v", profile.Server)
 	}
 
-	state.Ports[0] = "0"
+	state.Gateways[0] = "vpn.example.com:0"
 	if _, err := state.Target(); err == nil {
 		t.Fatal("an out-of-range port produced a target")
 	}
@@ -610,7 +610,7 @@ func TestSettingsTargetReadsTheDraft(t *testing.T) {
 // The settings window shows the picker, the discover button and the hint.
 func TestAccountPageShowsTheAuthPicker(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
-	state.Draft.Profiles[0].Server.Address = "vpn.example.com"
+	state.Gateways[0] = "vpn.example.com:443"
 	methods := []session.AuthMethod{
 		{Name: "密码登录", Type: "auth/psw", Domain: "local"},
 		{Name: "统一认证", Type: "auth/cas", Domain: "local"},
@@ -675,7 +675,7 @@ func settingsActionsFor(state *SettingsState) SettingsActions {
 
 // Deleting the selected profile shrinks the draft from inside the frame. The
 // rest of that frame must not index the profile that disappeared: the old
-// code read Ports[1] after 新建 → 删除 and panicked on the GTK main thread.
+// code read Gateways[1] after 新建 → 删除 and panicked on the GTK main thread.
 func TestProfilesPageDeletesWithoutAPanic(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	_, tester := newShell(t, state, settingsActionsFor(state), PageProfiles)
@@ -697,8 +697,8 @@ func TestProfilesPageDeletesWithoutAPanic(t *testing.T) {
 	if state.Selected != 0 {
 		t.Fatalf("selected = %d", state.Selected)
 	}
-	if len(state.Ports) != 1 || len(state.Targets) != 1 {
-		t.Fatalf("buffers after delete: ports=%d targets=%d", len(state.Ports), len(state.Targets))
+	if len(state.Gateways) != 1 || len(state.Targets) != 1 {
+		t.Fatalf("buffers after delete: gateways=%d targets=%d", len(state.Gateways), len(state.Targets))
 	}
 
 	tester.Frame()
@@ -707,13 +707,14 @@ func TestProfilesPageDeletesWithoutAPanic(t *testing.T) {
 	}
 }
 
-// Ports and keep-alive targets live in buffers indexed like Draft.Profiles.
+// Gateways and keep-alive targets live in buffers indexed like Draft.Profiles.
 // Deleting a middle profile has to drop that profile's buffers, not merely
-// truncate the end: 默认/B(8443)/C(9443) minus B must leave C holding 9443.
-func TestSettingsDeleteKeepsPortsAndTargetsOnTheirProfile(t *testing.T) {
+// truncate the end: 默认/B(b:8443)/C(c:9443) minus B must leave C holding its
+// own gateway.
+func TestSettingsDeleteKeepsGatewayAndTargetsOnTheirProfile(t *testing.T) {
 	state := threeProfileState(t)
 	state.Select(state.Draft.ProfileIndex("B"))
-	state.Ports[state.Selected] = "8443"
+	state.Gateways[state.Selected] = "b.example.com:8450"
 	state.Targets[state.Selected] = "http://192.0.2.20/"
 
 	tester := ui.NewTester(View(&State{Settings: state, Config: state.Draft, Page: PageProfiles},
@@ -728,8 +729,8 @@ func TestSettingsDeleteKeepsPortsAndTargetsOnTheirProfile(t *testing.T) {
 	if state.Selected != 1 {
 		t.Fatalf("selected = %d", state.Selected)
 	}
-	if state.Ports[1] != "9443" {
-		t.Fatalf("C's port buffer = %q, want 9443", state.Ports[1])
+	if state.Gateways[1] != "c.example.com:9443" {
+		t.Fatalf("C's gateway buffer = %q, want c.example.com:9443", state.Gateways[1])
 	}
 	if state.Targets[1] != "http://192.0.2.31/" {
 		t.Fatalf("C's targets buffer = %q", state.Targets[1])
@@ -740,20 +741,20 @@ func TestSettingsDeleteKeepsPortsAndTargetsOnTheirProfile(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 	profile := cfg.Active()
-	if profile.Name != "C" || profile.Server.Port != 9443 {
-		t.Fatalf("active = %q port = %d", profile.Name, profile.Server.Port)
+	if profile.Name != "C" || profile.ServerAddress() != "c.example.com" || profile.Server.Port != 9443 {
+		t.Fatalf("active = %q server = %+v", profile.Name, profile.Server)
 	}
 	if len(profile.Keep.Targets) != 1 || profile.Keep.Targets[0] != "http://192.0.2.31/" {
 		t.Fatalf("active targets = %v", profile.Keep.Targets)
 	}
 }
 
-// 复制 copies what the editor shows, including the unsaved port and targets,
+// 复制 copies what the editor shows, including the unsaved gateway and targets,
 // and leaves the other profiles' buffers where they were.
 func TestSettingsDuplicateCopiesTheEditedBuffers(t *testing.T) {
 	state := threeProfileState(t)
 	state.Select(state.Draft.ProfileIndex("B"))
-	state.Ports[state.Selected] = "8450"
+	state.Gateways[state.Selected] = "b.example.com:8450"
 	state.Targets[state.Selected] = "http://192.0.2.20/"
 
 	state.DuplicateProfile()
@@ -765,15 +766,16 @@ func TestSettingsDuplicateCopiesTheEditedBuffers(t *testing.T) {
 	if state.Selected != copied {
 		t.Fatalf("selected = %d, copy = %d", state.Selected, copied)
 	}
-	if state.Ports[copied] != "8450" || state.Targets[copied] != "http://192.0.2.20/" {
-		t.Fatalf("copy buffers = %q %q", state.Ports[copied], state.Targets[copied])
+	if state.Gateways[copied] != "b.example.com:8450" || state.Targets[copied] != "http://192.0.2.20/" {
+		t.Fatalf("copy buffers = %q %q", state.Gateways[copied], state.Targets[copied])
 	}
-	if state.Ports[2] != "9443" || state.Targets[2] != "http://192.0.2.31/" {
-		t.Fatalf("C was disturbed: %q %q", state.Ports[2], state.Targets[2])
+	if state.Gateways[2] != "c.example.com:9443" || state.Targets[2] != "http://192.0.2.31/" {
+		t.Fatalf("C was disturbed: %q %q", state.Gateways[2], state.Targets[2])
 	}
 }
 
-// threeProfileState is 默认/B(8443)/C(9443) with distinct keep-alive targets.
+// threeProfileState is 默认/B(b:8443)/C(c:9443) with distinct keep-alive
+// targets.
 func threeProfileState(t *testing.T) *SettingsState {
 	t.Helper()
 	cfg := config.Default()
@@ -784,20 +786,14 @@ func threeProfileState(t *testing.T) *SettingsState {
 		t.Fatalf("add C: %v", err)
 	}
 	b := cfg.ProfileIndex("B")
+	cfg.Profiles[b].Server.Address = "b.example.com"
 	cfg.Profiles[b].Server.Port = 8443
 	cfg.Profiles[b].Keep.Targets = []string{"http://192.0.2.21/"}
 	c := cfg.ProfileIndex("C")
+	cfg.Profiles[c].Server.Address = "c.example.com"
 	cfg.Profiles[c].Server.Port = 9443
 	cfg.Profiles[c].Keep.Targets = []string{"http://192.0.2.31/"}
 	return NewSettingsState(cfg, "/tmp/logs")
-}
-
-// The frame checks and the discovery record have to agree on what "the same
-// gateway" means, or a padded port drops a list that belongs to it.
-func TestTargetKeyNormalisesThePort(t *testing.T) {
-	if got, want := targetKey(" vpn.example.com ", " 0443 "), targetKey("vpn.example.com", "443"); got != want {
-		t.Fatalf("key = %q, want %q", got, want)
-	}
 }
 
 // A stored TOTP secret is a credential the form cannot show, so the connection

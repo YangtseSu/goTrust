@@ -376,14 +376,17 @@ type DebugConfig struct {
 	ClientData string `toml:"client_data_path"`
 }
 
-// NewProfile returns the settings one profile starts from.
+// NewProfile returns the settings one profile starts from. A new account
+// stores its password unless the user unticks 保存密码: the settings file is
+// mode 0600, and a stored password is what lets auto-connect work. An existing
+// profile keeps whatever its file says.
 func NewProfile(name string) Profile {
 	enabled := true
 	return Profile{
 		ID:     newProfileID(),
 		Name:   name,
 		Server: ServerConfig{Port: defaultServerPort},
-		Auth:   AuthConfig{Domain: defaultLoginDomain},
+		Auth:   AuthConfig{Domain: defaultLoginDomain, StorePass: true},
 		Keep:   KeepConfig{Enabled: &enabled, Interval: defaultKeepAlivePeriod.String()},
 	}
 }

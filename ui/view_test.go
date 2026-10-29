@@ -461,7 +461,7 @@ func TestTrayMenuStatusProfilesAndToggle(t *testing.T) {
 		Config:  cfg,
 	}
 	menu := TrayMenu(&state, Actions{
-		Login:         func() { login++ },
+		TrayLogin:     func() { login++ },
 		Logout:        func() { logout++ },
 		SelectProfile: func(name string) { selected = name },
 	})
@@ -522,7 +522,7 @@ func TestTrayMenuOffersConnectWhenIdle(t *testing.T) {
 		Session: session.State{Phase: session.PhaseIdle},
 		Config:  config.Default(),
 	}
-	menu := TrayMenu(&state, Actions{Login: func() { login++ }})
+	menu := TrayMenu(&state, Actions{TrayLogin: func() { login++ }})
 	var toggle *mygo.MenuItem
 	for _, item := range menu.Items() {
 		if item.Label == "连接" {
