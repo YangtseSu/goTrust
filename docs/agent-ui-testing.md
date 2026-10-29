@@ -41,8 +41,8 @@ dbus-run-session -- bash -c '
   and credentials out of the test.
 - `--config` is the same file the app reads. A profile with
   `auto_connect = true`, `store_password = true`, a password and a listener
-  that accepts but never answers puts the window in `连接中`, which is how
-  断开 during a login is exercised in a real window.
+  that accepts but never answers puts the window in `Connecting`, which is how
+  Disconnect during a login is exercised in a real window.
 - Stop the app and the compositor when the check is done; nothing may outlive
   it.
 - Tray and panel behaviour (icon, menu, double-click) still needs a real
@@ -114,6 +114,10 @@ Only inspect the cropped app area. Delete every screenshot after use.
 
 ## Driving the window without a pointer
 
+The accessible names below are the English UI. Run the app in English before
+using them: choose English in Settings → Language, or start it under an English
+locale.
+
 GTK4 exports the window over AT-SPI2 (`pyatspi` is installed here), which is
 how the one-window checks ran while screenshots were unavailable. A page tab,
 button or menu entry is an accessible node with a `click` action; an entry
@@ -121,15 +125,16 @@ takes `setTextContents`. The application is named after the binary, so a test
 build renamed away from `gotrust` gets its own single-instance lock and its
 own tray item, and the installed app stays untouched.
 
-- A page switch is `doAction` on the `page tab` named 仪表盘, 账户, 代理, ….
-  The page heading, the 状态 chip (`notification`, `状态：未连接`) and the
-  power control (连接, 取消, 断开, 重试) are what to assert afterwards.
+- A page switch is `doAction` on the `page tab` named Dashboard, Account,
+  Proxy, …. The page heading, the Status chip (`notification`, `Status:
+  Disconnected`) and the power control (Connect, Cancel, Disconnect, Retry) are
+  what to assert afterwards.
 - The tray menu is the app's own `com.canonical.dbusmenu` on its unique bus
   name, at `/org/ayatana/NotificationItem/<name>_<pid>_1/Menu`:
   `GetLayout` lists the items, `Event(id, "clicked", …)` activates one.
-  打开仪表盘 shows and focuses the window; 连接 starts the tray login. The
-  shell's own icon exposes no Action, so the icon click and the panel stay the
-  operator's check.
+  Open Dashboard shows and focuses the window; Connect starts the tray login.
+  The shell's own icon exposes no Action, so the icon click and the panel stay
+  the operator's check.
 - Wayland refuses focus stealing: a background launch cannot focus itself
   even through `window.Focus()`. `Alt+Tab` with a synthetic keyboard focuses
   it, after which the window shortcuts (Ctrl+Enter) arrive. A synthetic

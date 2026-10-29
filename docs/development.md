@@ -144,9 +144,9 @@ go generate ./...   # needs rsvg-convert
 ## Session and keep-alive behaviour
 
 A session belongs to its connection and cannot be reused. A stored sid ticket
-is device material, not a login: after 断开, or after the portal ends the
+is device material, not a login: after Disconnect, or after the portal ends the
 session, the next connection logs in again. The gateway rejects a ticket
-exchange while logged out, so 启动后自动连接 requires a saved password.
+exchange while logged out, so Connect at startup requires a saved password.
 
 The keep-alive sends a real HTTP request: a `https://` target is tunnelled with
 CONNECT and does not count as application traffic, so it does not renew the

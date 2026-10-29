@@ -16,7 +16,7 @@ The file mode is 0600, because it may hold a password. The window's save bar wri
 
 ```toml
 version = 3
-active_profile = "默认"
+active_profile = "work"
 
 [app]
 autostart = false
@@ -39,7 +39,7 @@ device_id = "…"
 
 [[profiles]]
 id = "…"
-name = "默认"
+name = "work"
 
 [profiles.server]
 address = "vpn.example.com"
@@ -68,13 +68,13 @@ client_data_path = ""
 | Field | Description |
 |---|---|
 | `version` | Configuration format version, currently 3. A version newer than the program is refused rather than rewritten in the old format |
-| `active_profile` | Name of the configuration in use, matching the `name` of some `[[profiles]]` entry |
+| `active_profile` | Name of the account in use, matching the `name` of some `[[profiles]]` entry |
 
 ### `[app]`
 
 | Field | Default | Description |
 |---|---|---|
-| `autostart` | `false` | Start when logging in to the system. Changing it on the 启动 page immediately updates the system autostart entry |
+| `autostart` | `false` | Start when logging in to the system. Changing it on the Startup page immediately updates the system autostart entry |
 | `start_hidden` | `true` | On startup show only the tray icon, without opening a window |
 | `auto_connect` | `false` | Log in automatically after startup. Requires a saved password |
 | `auto_reconnect` | `false` | Reconnect automatically after the session drops: 1/2/4/8/16 seconds, up to 5 attempts |
@@ -100,11 +100,11 @@ The endpoint accepts only `GET` and `HEAD`, and regenerates the PAC for the curr
 
 | Field | Default | Description |
 |---|---|---|
-| `verbose` | `false` | Emit protocol-level debug logs. The 详细日志 switch on the 日志 page takes effect immediately and writes here |
+| `verbose` | `false` | Emit protocol-level debug logs. The Verbose log switch on the Logs page takes effect immediately and writes here |
 
 ### `[identity]`
 
-Usually there is no need to edit this by hand; 设置 → 本机数据 shows the device identifier read-only.
+Usually there is no need to edit this by hand; Settings → Local data shows the device identifier read-only.
 
 | Field | Description |
 |---|---|
@@ -117,13 +117,13 @@ Usually there is no need to edit this by hand; 设置 → 本机数据 shows the
 
 ### `[[profiles]]`
 
-Each configuration corresponds to one account.
+Each `[[profiles]]` entry is one account.
 
 | Field | Description |
 |---|---|
-| `id` | Stable identifier of the configuration. Generated on first read and unchanged by renaming; it is used only locally and not sent to the gateway. Copying it into another configuration replaces it with a new value |
-| `name` | Configuration name, also the name shown on the 多账户 page |
-| `server.address` / `server.port` | Gateway address and port. The window has one 网关 field taking `host:port`; a bare host uses 443 |
+| `id` | Stable identifier of the account. Generated on first read and unchanged by renaming; it is used only locally and not sent to the gateway. Copying it into another account replaces it with a new value |
+| `name` | Account name, also the name shown on the Accounts page |
+| `server.address` / `server.port` | Gateway address and port. The window has one Gateway field taking `host:port`; a bare host uses 443 |
 | `auth.username` | Username |
 | `auth.auth_type` / `auth.domain` | Authentication method and login domain. Empty means automatic: use the only method the gateway offers, and when several are offered, ask and remember the answer |
 | `auth.store_password` | Whether to write the password into the configuration file |
@@ -132,11 +132,11 @@ Each configuration corresponds to one account.
 | `keepalive.enabled` | Whether to send keepalive requests |
 | `keepalive.interval` | Keepalive interval, `90s` by default, minimum 10 s |
 | `keepalive.targets` | Manual keepalive targets, one per line, taking precedence over automatically derived targets |
-| `debug.client_data_path` | Custom login data file path. When empty, `client_data-<配置名>.json` in the configuration directory is used |
+| `debug.client_data_path` | Custom login data file path. When empty, `client_data-<name>.json` in the configuration directory is used |
 
-The window's 网关 field accepts `host:port`, `https://host:port`, a bare host (443), a pasted path or trailing slash, and a bracketed IPv6 address with or without a port. Other schemes, an empty host and ports outside 1–65535 are rejected. On save the field is split back into `server.address` and `server.port`; the file format does not change.
+The window's Gateway field accepts `host:port`, `https://host:port`, a bare host (443), a pasted path or trailing slash, and a bracketed IPv6 address with or without a port. Other schemes, an empty host and ports outside 1–65535 are rejected. On save the field is split back into `server.address` and `server.port`; the file format does not change.
 
-`client_data*.json` holds cookies and session tickets, also with mode 0600. Renaming a configuration moves it and deleting a configuration removes it, both only after settings are saved.
+`client_data*.json` holds cookies and session tickets, also with mode 0600. Renaming an account moves it and deleting an account removes it, both only after settings are saved.
 
 ## Compatibility
 

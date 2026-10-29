@@ -17,7 +17,7 @@ You only need the PAC and rule snippets in this document when you want "only the
 
 While running, the PAC is served by default at `http://127.0.0.1:1082/proxy.pac`:
 
-- GUI: tray or main window "Copy PAC URL".
+- GUI: the Proxy page's PAC address and its Copy button.
 - CLI: `gotrust-cli --pac-url` prints the URL; `gotrust-cli --print-pac` prints the script from the last login cache.
 - In the settings file, `[handoff] listen = ""` disables the endpoint; a changed port takes effect on the next start.
 
@@ -52,7 +52,7 @@ Three outputs, pick one per client; no key renaming needed:
 | `gotrust-cli --print-clash-script` | Global extension script (Script) for Clash Verge Rev |
 | `gotrust-cli --print-clash-config` | Full local Mihomo configuration: importable as a local profile in any client (contains only goTrust) |
 
-The GUI tray "Copy Clash fragment" submenu and the main window's `Clash fragment` / `Verge script` / `Full Clash config` buttons are equivalent to the three items above and use the live authorization, not the cache.
+The Proxy page's Clash format picker (`Clash`, `Clash Script`, `Clash config`) and its Copy button cover the same three outputs and use the live authorization, not the cache.
 
 All three outputs share one set of rules, in this order:
 

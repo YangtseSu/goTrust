@@ -22,18 +22,18 @@ an entry in its decisions table. The layout they describe is
   the rounded corners and the resize edges. A close hides the window to the
   tray; quitting stays in the tray menu.
 * A card is the grouped face of one thing (the session, the resources, a
-  settings group, the account's 连接 or 安全 section, the account list): the
-  mockup's surface colour, a 12 DIP radius and a 1 DIP border.
+  settings group, the account's Connection or Security section, the account
+  list): the mockup's surface colour, a 12 DIP radius and a 1 DIP border.
 * The appearance switch forces the whole application, mygo's own widgets
   included, to the light or the dark theme (`mygo.Theme.SetSource`); the
   choice lasts for the run.
-* The sidebar is the only navigation: 仪表盘, a separator, 账户, 代理, 保活,
-  启动, 终端管理, 日志, 设置, 关于, then a spacer, a separator and 多账户 at
-  the bottom. The active page is tinted with the accent; the rows are tabs for
-  assistive technology. The tab column is one Tab stop: Tab enters at the page
-  on screen, the Up/Down arrows move among the rows, and Enter or Space
-  activates the focused one.
-* 多账户 is quieter than the pages above it: a subdued row whose tag is the
+* The sidebar is the only navigation: Dashboard, a separator, Account, Proxy,
+  Keep-alive, Startup, Terminals, Logs, Settings, About, then a spacer, a
+  separator and Accounts at the bottom. The active page is tinted with the
+  accent; the rows are tabs for assistive technology. The tab column is one Tab
+  stop: Tab enters at the page on screen, the Up/Down arrows move among the
+  rows, and Enter or Space activates the focused one.
+* Accounts is quieter than the pages above it: a subdued row whose tag is the
   live account, so the account list does not read as one more step of the
   settings pages.
 * One page is mounted at a time. A page scrolls when its content is taller
@@ -50,30 +50,31 @@ an entry in its decisions table. The layout they describe is
   repeats the colour, so colour is never the only channel; the label names
   the phase and the control carries the action.
 * The control is the one primary action on the page: a play triangle and
-  连接 when idle or failed (重试), a spinner and 取消 while connecting or
-  reconnecting, a stop square and 断开 online. Its fill is the mockup's
+  Connect when idle or failed (Retry), a spinner and Cancel while connecting or
+  reconnecting, a stop square and Disconnect online. Its fill is the mockup's
   (#16a34a online, #d97706 waiting, #dc2626 failed, the accent when idle);
   the hover fill is red for an ending action and a darker accent for a
   starting one.
-* One meta line under the chip: `网关地址 host:port`, the time held when
+* One meta line under the chip: `Gateway host:port`, the time held when
   online, the failure detail in the danger tone, or the reconnect ladder
   (attempt and countdown) while it waits. A port is an identifier: it is
   printed as typed, never with a thousands separator.
-* A four-cell metrics row follows (已分配地址, SOCKS5, HTTP, 保活). A value the
-  session does not have is `—`. The keep-alive cell carries the last probe's
-  summary in its description, so the row stays one line.
-* The traffic card sits between the session and the resources: 流量, the
-  newest rates as two legends, 下行 in the accent and 上行 in the success
-  colour, 最近 60 秒 at the right, and a 80 DIP sparkline of the last minute
+* A four-cell metrics row follows (Assigned address, SOCKS5, HTTP,
+  Keep-alive). A value the session does not have is `—`. The keep-alive cell
+  carries the last probe's summary in its description, so the row stays one
+  line.
+* The traffic card sits between the session and the resources: Traffic, the
+  newest rates as two legends, Down in the accent and Up in the success
+  colour, Last 60 seconds at the right, and a 80 DIP sparkline of the last minute
   under them. The download is the accent area fading to nothing under its
   stroke, the upload the success line above it; both share one scale, so the
   taller line is the faster direction. The application samples the proxy's
   byte counters once a second into a 60-point ring; a new session starts a
   new minute, and a minute with no traffic draws a muted baseline instead.
-* The resources card is the third card: its title, the count,
-  打开默认应用 and the search field in the header, then the granted list as
-  part of the scrolling page. 打开默认应用 is disabled while the grant has no
-  launch address; the filter appears as soon as there is a row, and / focuses
+* The resources card is the third card: its title, the count, Open default
+  app and the search field in the header, then the granted list as part of the
+  scrolling page. Open default app is disabled while the grant has no launch
+  address; the filter appears as soon as there is a row, and / focuses
   it.
 * The session line is shared with the pre-login panels, so a question never
   hides the phase it belongs to.
@@ -81,29 +82,29 @@ an entry in its decisions table. The layout they describe is
 ## One primary action per screen
 
 * Exactly one filled button per screen: the play/stop control on the
-  dashboard, 保存 in the save bar, 提交 in a panel's foot. Every other action
+  dashboard, Save in the save bar, Submit in a panel's foot. Every other action
   is a plain button, a text button or a menu entry.
-* One owner per action. 代理 owns the PAC address and the three Clash/Mihomo
-  renderings with their 复制 buttons; 日志 owns 打开目录 and 复制; the dashboard
-  owns 打开默认应用 and nothing else. The tray repeats none of them.
+* One owner per action. Proxy owns the PAC address and the three Clash/Mihomo
+  renderings with their Copy buttons; Logs owns Open folder and Copy; the
+  dashboard owns Open default app and nothing else. The tray repeats none of them.
 * A destructive or abandoning action is not a variant of the primary one.
-  取消登录 sits on the left of a panel's foot (`panelActions`), 提交 on the
-  right, and the corrections 撤销 and 清空 are face-less text buttons between
+  Cancel login sits on the left of a panel's foot (`panelActions`), Submit on the
+  right, and the corrections Undo and Clear are face-less text buttons between
   them.
 * A resource row's actions go behind one menu (`Element.Menu` on the dots
   glyph), not two visible buttons per row.
 
 ## The tray
 
-* The menu is the tray's one interface: the status line, 打开仪表盘,
-  打开默认应用, 连接/断开, 切换账户 when there is more than one account, and
-  退出. 设置 is not there.
+* The menu is the tray's one interface: the status line, Open Dashboard,
+  Open default app, Connect/Disconnect, Switch account when there is more than
+  one account, and Quit. Settings is not there.
 * On Linux the icon is an AppIndicator. With a menu set, a click opens it
   (GNOME's extension waits out the double-click time and then opens it on a
   single click). Activation shows the window and keeps its page: GNOME's
   extension sends it on a double click, and only when
   libayatana-appindicator3 has the `activate` signal; older releases have
-  none. 打开仪表盘 is therefore the item that always brings the window
+  none. Open Dashboard is therefore the item that always brings the window
   forward, and it selects the dashboard.
 
 ## A login never needs a second window
@@ -112,14 +113,14 @@ an entry in its decisions table. The layout they describe is
   forced password change are panels inside the window (`panelBody`), never
   dialogs and never windows of their own.
 * A panel is a card with the page's fields: the heading, the controls with
-  their labels above, and the foot inside the card (取消登录 on the left, the
+  their labels above, and the foot inside the card (Cancel login on the left, the
   answer on the right). The captcha image is capped at 400 DIPs and centered
   in the card, so it still fits the 720 DIP window.
 * A panel owns the content wherever the sidebar points, and the sidebar dims
   and disables while it is up. Esc is its cancel; the selected page returns
   when the panel closes.
-* 账户 is the first-run form and the only editor of the account. A fresh
-  install opens on the dashboard; 连接 selects 账户 with the reason when the
+* Account is the first-run form and the only editor of the account. A fresh
+  install opens on the dashboard; Connect selects Account with the reason when the
   saved account is incomplete.
 * A panel is at most `panelMaxWidth` (560) wide: a maximized window must not
   stretch three fields across the screen.
@@ -164,26 +165,27 @@ an entry in its decisions table. The layout they describe is
 * A field stacks its label above the control (`formColumn`, `formField`), as
   the mockup draws every form; the label is muted and caption-sized.
 * A row whose label can outgrow the line wraps instead of clipping; a long
-  account name ellipsizes in the sidebar tag instead of squeezing 多账户.
+  account name ellipsizes in the sidebar tag instead of squeezing Accounts.
 * A switch row is one target: the whole label toggles, as the mockup's label
   wraps its switch. The track is the mockup's 34×20 pill, accent when on and
-  `switchOff` when off; the startup, keep-alive and 详细日志 settings use it.
-* 设置's rows fill their card: 数据文件, 设备标识 and the language segment.
+  `switchOff` when off; the Startup, Keep-alive and Verbose log switches use
+  it.
+* Settings' rows fill their card: Data file, Device ID and the language segment.
   The language segment is content-sized, not stretched, and carries no hint
-  line. 关于 is its own page below 设置: centered shield and
-  `goTrust <version>`, then 项目主页 and 许可证 as rows, not rows with a
+  line. About is its own page below Settings: centered shield and
+  `goTrust <version>`, then Project home and License as rows, not rows with a
   button: the row itself opens the page, with the arrow at its right. The
   page has no heading of its own.
-* 保活's fields carry no hint lines. A malformed interval, or one shorter
+* Keep-alive's fields carry no hint lines. A malformed interval, or one shorter
   than the minimum, is refused with the minimum (10s), never with the 90s
   default: `errKeepAliveInvalid`/`errKeepAliveShort` name the shortest
-  accepted cadence. 代理 carries no caption: the listener fields say
+  accepted cadence. Proxy carries no caption: the listener fields say
   nothing until both are empty, when the rule appears as an error line.
-* 日志's block (toolbar, pane and footer) is one card, so its border closes
-  on every side; its header has the 详细日志 switch, 清除 and 打开目录, and
-  清除 truncates the file and drops its rotations. 代理's PAC and
-  Clash/Mihomo rows carry their 复制 at the card's right edge. 终端管理 keeps
-  its summary line, its 刷新 in the page heading and its two cards before a
+* Logs' block (toolbar, pane and footer) is one card, so its border closes
+  on every side; its header has the Verbose log switch, Clear and Open
+  folder, and Clear truncates the file and drops its rotations. Proxy's PAC and
+  Clash/Mihomo rows carry their Copy at the card's right edge. Terminals keeps
+  its summary line, its Refresh in the page heading and its two cards before a
   session exists, with 0 counts and the offline placeholder; it has no
   caption of its own. An endpoint row carries the current-device and
   online/offline chips and a four-column fact grid (two at the minimum
@@ -193,10 +195,10 @@ an entry in its decisions table. The layout they describe is
 
 * The settings draft is created at startup and kept for the life of the
   process. Hiding the window, switching pages and opening the tray keep the
-  edits; a profile switch, 保存, 放弃 and a login that saves the draft
+  edits; a profile switch, Save, Discard and a login that saves the draft
   are what reload it.
 * The save bar appears at the bottom of the content only while the draft
-  differs from the file: 有未保存修改, 放弃, 保存. Applying it writes the
+  differs from the file: Unsaved changes, Discard, Save. Applying it writes the
   file, moves or removes the stored client data the draft renamed or deleted,
   and reloads the draft from the result.
 * A result is a toast once, not a line that stays: `statusToast` reports
@@ -213,18 +215,21 @@ an entry in its decisions table. The layout they describe is
 * / is registered only while the filter is on screen and unfocused. Once the
   field has the focus the key belongs to the text, and the focus request is
   dropped when the list leaves.
-* 设置 is a sidebar page, not a shortcut. Ctrl+, and the window's `⋯` menu
+* Settings is a sidebar page, not a shortcut. Ctrl+, and the window's `⋯` menu
   were removed with the second window; quit lives in the tray.
 
 ## One language at a time, from one catalog
 
 * Every visible string comes from `locales.Catalog`, keyed by surface. No CJK
   literal lives in a production view; `internal/guards` fails the build if one
-  appears.
+  appears. The guard also refuses an empty message, an English message that
+  still carries Chinese, and placeholders that name different arguments.
 * Counts and durations are ICU messages with placeholders, so a translation can
   move the number. `zh` is the source language and the fallback.
-* `core/*` stays English: library errors are read in terminals and logs, and the
-  UI boundary translates them.
+* The window is bilingual. The headless front-end and the login pages it
+  serves are English only, like its output; `core/*` stays English too, so
+  library errors and the session detail are read as written in terminals and
+  logs.
 
 ## mygo owns the toolkit behaviour
 

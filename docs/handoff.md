@@ -21,7 +21,7 @@ goTrust、其余直连”，不需要规则。
 
 运行期间默认在 `http://127.0.0.1:1082/proxy.pac` 提供 PAC：
 
-- GUI：托盘或主窗口“复制 PAC 地址”。
+- GUI：代理页的 PAC 地址，点“复制”。
 - CLI：`gotrust-cli --pac-url` 打印地址；`gotrust-cli --print-pac` 从上次登录的缓存
   打印脚本。
 - 设置文件里 `[handoff] listen = ""` 关闭端点；改端口后下次启动生效。
@@ -59,8 +59,8 @@ ZeroOmega：
 | `gotrust-cli --print-clash-script` | Clash Verge Rev 的全局扩展脚本（Script） |
 | `gotrust-cli --print-clash-config` | 完整的本地 Mihomo 配置：任何客户端都可作为本地配置导入（只含 goTrust） |
 
-GUI 的托盘“复制 Clash 片段”子菜单和主窗口的 `Clash` / `Clash Script` /
-`Clash 配置` 按钮等同于上面三项，用的是实时授权，不是缓存。
+代理页的 Clash 格式选择（`Clash`、`Clash Script`、`Clash 配置`）旁提供“复制”，
+选中的格式对应上面三条命令，用的是实时授权，不是缓存。
 
 三种输出共用一套规则，顺序是：
 

@@ -14,6 +14,7 @@ path = [
     "mygo.json",
     "go.sum",
     "README.md",
+    "README.en.md",
     "LICENSE",
 ]
 SPDX-FileCopyrightText = "2026 Yangtse Su <yangtsesu@gmail.com>"
