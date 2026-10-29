@@ -40,7 +40,7 @@ func TestViewRendersEveryPhase(t *testing.T) {
 				Config: config.Default(),
 			}
 
-			tester := ui.NewTester(View(&state, Actions{}), 520, 560)
+			tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 			tester.Frame()
 
 			if texts := tester.Texts(); len(texts) == 0 {
@@ -71,7 +71,7 @@ func TestProfileSummaryShowsTheActiveAccount(t *testing.T) {
 		Config:  cfg,
 	}
 
-	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
+	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 
 	if !tester.HasText("goTrust · 配置 默认") {
@@ -114,7 +114,7 @@ func TestButtonsCallTheRightAction(t *testing.T) {
 				Logout: func() { logout++ },
 			}
 
-			tester := ui.NewTester(View(&state, actions), 520, 560)
+			tester := ui.NewTester(View(&state, actions), 720, 560)
 			if err := tester.Click(testCase.button); err != nil {
 				t.Fatalf("click %q: %v", testCase.button, err)
 			}
@@ -129,22 +129,47 @@ func TestButtonsCallTheRightAction(t *testing.T) {
 	}
 }
 
-func TestSettingsButtonOpensTheWindow(t *testing.T) {
-	opened := 0
+// Quit and the settings pages belong to the tray and the sidebar; the window
+// has no second overflow menu duplicating them, and Ctrl+, is gone.
+func TestWindowHasNoOverflowMenuOrSettingsShortcut(t *testing.T) {
 	state := State{
 		Session: session.State{Phase: session.PhaseIdle, Detail: "x"},
 		Config:  config.Default(),
 	}
-	tester := ui.NewTester(View(&state, Actions{Settings: func() { opened++ }}), 520, 560)
+	page := PageDashboard
+	tester := ui.NewTester(View(&state, Actions{ShowPage: func(chosen Page) { page = chosen }}), 720, 560)
 	tester.Frame()
-	if err := tester.Click("⋯"); err != nil {
-		t.Fatalf("open the overflow: %v", err)
+	if tester.HasText("⋯") {
+		t.Fatal("the window still has an overflow menu")
 	}
-	if err := tester.ChooseMenuItem("设置"); err != nil {
-		t.Fatalf("choose settings: %v", err)
+	tester.Key(ui.Cmd, ui.KeyComma)
+	if page != PageDashboard {
+		t.Fatal("Ctrl+, still selects a page")
 	}
-	if opened != 1 {
-		t.Fatalf("settings calls = %d, want 1", opened)
+}
+
+// The window is one surface: one title strip, the navigation, and the page.
+func TestShellIsOneSurface(t *testing.T) {
+	state := State{
+		Session: session.State{Phase: session.PhaseIdle},
+		Config:  config.Default(),
+	}
+	tester := ui.NewTester(View(&state, Actions{}), 900, 740)
+	tester.Frame()
+
+	titles := 0
+	for _, text := range tester.Texts() {
+		if strings.HasPrefix(text, "goTrust") {
+			titles++
+		}
+	}
+	if titles != 1 {
+		t.Fatalf("title strips = %d, want 1; texts: %v", titles, tester.Texts())
+	}
+	for _, label := range []string{"仪表盘", "账户", "代理", "保活", "启动", "终端管理", "日志", "设置", "多账户"} {
+		if !tester.HasText(label) {
+			t.Fatalf("the navigation is missing %q", label)
+		}
 	}
 }
 
@@ -170,7 +195,7 @@ func TestListenersAndKeepAliveAreListed(t *testing.T) {
 		},
 	}
 
-	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
+	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 
 	line := "SOCKS5 127.0.0.1:1080 · HTTP 127.0.0.1:1081 · 保活 0 秒前"
@@ -211,7 +236,7 @@ func TestResourceListRendersAndActs(t *testing.T) {
 		Config: config.Default(),
 	}
 
-	rendered := ui.NewTester(View(&state, Actions{}), 520, 560)
+	rendered := ui.NewTester(View(&state, Actions{}), 720, 560)
 	rendered.Frame()
 	for _, want := range []string{"已获授权的资源", "2 项", "应用 · 1 项", "IP 地址 · 1 项", "Wiki", "Portal · web", "192.0.2.10", "tcp 443"} {
 		if !rendered.HasText(want) {
@@ -220,7 +245,7 @@ func TestResourceListRendersAndActs(t *testing.T) {
 	}
 
 	var opened string
-	openTester := ui.NewTester(View(&state, Actions{OpenResource: func(url string) { opened = url }}), 520, 560)
+	openTester := ui.NewTester(View(&state, Actions{OpenResource: func(url string) { opened = url }}), 720, 560)
 	if err := openTester.Click("Wiki 的操作"); err != nil {
 		t.Fatalf("open the row menu: %v", err)
 	}
@@ -232,7 +257,7 @@ func TestResourceListRendersAndActs(t *testing.T) {
 	}
 
 	var copied string
-	copyTester := ui.NewTester(View(&state, Actions{CopyResource: func(value string) { copied = value }}), 520, 560)
+	copyTester := ui.NewTester(View(&state, Actions{CopyResource: func(value string) { copied = value }}), 720, 560)
 	// The address rule has no suggested URL, so 打开 is disabled there; the copy
 	// value is the row's own text.
 	if err := copyTester.Click("192.0.2.10 的操作"); err != nil {
@@ -264,7 +289,7 @@ func TestResourceListGroupsUnknownKinds(t *testing.T) {
 		Config: config.Default(),
 	}
 
-	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
+	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 	for _, want := range []string{"其他 · 1 项", "DNS · 1 项", "db-tunnel", "db.example.com"} {
 		if !tester.HasText(want) {
@@ -295,7 +320,7 @@ func TestResourceSearchFiltersLongGroups(t *testing.T) {
 		Config: config.Default(),
 	}
 
-	tester := ui.NewTester(View(&state, Actions{}), 520, 640)
+	tester := ui.NewTester(View(&state, Actions{}), 900, 640)
 	tester.Frame()
 	if !tester.HasText("应用 · 9 项") {
 		t.Fatalf("the app heading is missing; texts: %v", tester.Texts())
@@ -335,14 +360,14 @@ func TestResourceSearchAppearsOnlyForLongGroups(t *testing.T) {
 		Config:  config.Default(),
 	}
 
-	short := ui.NewTester(View(&state, Actions{}), 520, 640)
+	short := ui.NewTester(View(&state, Actions{}), 900, 640)
 	short.Frame()
 	if short.HasText("搜索资源") {
 		t.Fatal("eight rows in one group got a filter")
 	}
 
 	state.Session.Resources.Entries = append(entries, session.ResourceEntry{Kind: session.ResourceApp, Title: "App 9", Copy: "App 9"})
-	long := ui.NewTester(View(&state, Actions{}), 520, 640)
+	long := ui.NewTester(View(&state, Actions{}), 900, 640)
 	long.Frame()
 	if !long.HasText("搜索资源") {
 		t.Fatalf("nine rows in one group got no filter; texts: %v", long.Texts())
@@ -362,7 +387,7 @@ func TestResourceListKeepsThreeRowsAtTheMinimumSize(t *testing.T) {
 		Config:  config.Default(),
 	}
 
-	tester := ui.NewTester(View(&state, Actions{}), 440, 480)
+	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 	if !tester.HasText("代理端口尚未开启") {
 		t.Fatalf("the footer left the window; texts: %v", tester.Texts())
@@ -381,14 +406,14 @@ func TestResourceListKeepsThreeRowsAtTheMinimumSize(t *testing.T) {
 
 func TestResourceListExplainsAnEmptyGrant(t *testing.T) {
 	online := State{Session: session.State{Phase: session.PhaseOnline, Detail: "vpn.example.com:443"}, Config: config.Default()}
-	rendered := ui.NewTester(View(&online, Actions{}), 520, 560)
+	rendered := ui.NewTester(View(&online, Actions{}), 720, 560)
 	rendered.Frame()
 	if !rendered.HasText("0 项") || !rendered.HasText("网关没有为该账号授予资源") {
 		t.Fatalf("empty grant is not explained; texts: %v", rendered.Texts())
 	}
 
 	idle := State{Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"}, Config: config.Default()}
-	rendered = ui.NewTester(View(&idle, Actions{}), 520, 560)
+	rendered = ui.NewTester(View(&idle, Actions{}), 720, 560)
 	rendered.Frame()
 	if !rendered.HasText("连接后显示网关授予的资源") {
 		t.Fatalf("idle hint is missing; texts: %v", rendered.Texts())
@@ -595,7 +620,7 @@ func TestReconnectCountdownIsRendered(t *testing.T) {
 		Config: cfg,
 	}
 
-	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
+	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 
 	if !tester.HasText("重连中") {
@@ -683,7 +708,7 @@ func TestClashButtonsCopyEachFormat(t *testing.T) {
 			actions := Actions{CopyClash: func(format ClashFormat) {
 				copied = append(copied, format)
 			}}
-			tester := ui.NewTester(View(&state, actions), 520, 620)
+			tester := ui.NewTester(View(&state, actions), 720, 620)
 			tester.Frame()
 			if err := tester.Click("复制配置"); err != nil {
 				t.Fatalf("open the copy menu: %v", err)
@@ -698,31 +723,26 @@ func TestClashButtonsCopyEachFormat(t *testing.T) {
 	}
 }
 
-// The window answers its own keys: Ctrl+Enter is the state's action, Ctrl+,
-// opens the settings window, and Esc is the 取消登录 of the panel on screen.
+// The window answers its own keys: Ctrl+Enter is the state's action, and Esc
+// is the 取消登录 of the panel on screen.
 func TestWindowShortcuts(t *testing.T) {
-	var login, logout, settings int
+	var login, logout int
 	actions := Actions{
-		Login:    func() { login++ },
-		Logout:   func() { logout++ },
-		Settings: func() { settings++ },
+		Login:  func() { login++ },
+		Logout: func() { logout++ },
 	}
 
 	idle := State{Session: session.State{Phase: session.PhaseIdle}, Config: config.Default()}
-	tester := ui.NewTester(View(&idle, actions), 540, 640)
+	tester := ui.NewTester(View(&idle, actions), 720, 640)
 	tester.Frame()
 	tester.Key(ui.Cmd, ui.KeyEnter)
 	if login != 1 {
 		t.Fatalf("Ctrl+Enter on an idle window called login %d times, want 1", login)
 	}
-	tester.Key(ui.Cmd, ui.KeyComma)
-	if settings != 1 {
-		t.Fatalf("Ctrl+, called settings %d times, want 1", settings)
-	}
 
 	online := idle
 	online.Session.Phase = session.PhaseOnline
-	tester = ui.NewTester(View(&online, actions), 540, 640)
+	tester = ui.NewTester(View(&online, actions), 720, 640)
 	tester.Frame()
 	tester.Key(ui.Cmd, ui.KeyEnter)
 	if logout != 1 {
@@ -736,7 +756,7 @@ func TestWindowShortcuts(t *testing.T) {
 	tester = ui.NewTester(View(&panel, Actions{
 		Logout:     func() { logout++ },
 		CancelCode: func() { cancelled++ },
-	}), 540, 640)
+	}), 720, 640)
 	tester.Frame()
 	tester.Key(ui.Cmd, ui.KeyEnter)
 	if logout != 1 {
@@ -756,7 +776,7 @@ func TestSlashFocusesTheResourceSearch(t *testing.T) {
 		Config:    config.Default(),
 		Listeners: renderListeners(),
 	}
-	tester := ui.NewTester(View(&state, Actions{}), 540, 640)
+	tester := ui.NewTester(View(&state, Actions{}), 720, 640)
 	tester.Frame()
 	if active, _ := tester.TextInputActive(); active {
 		t.Fatal("a text input has the focus before /")

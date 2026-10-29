@@ -18,8 +18,10 @@ import (
 	"github.com/YangtseSu/goTrust/locales"
 )
 
-// SettingsState is the settings window's draft. It is a clone of the live
-// configuration: closing the window without saving discards the edits.
+// SettingsState is the window's settings draft. It is a clone of the live
+// configuration, edited by the pages for the life of the window: a page
+// switch or hiding the window keeps the edits, and 保存, 放弃, a profile
+// switch and a setup save reload it from the file.
 //
 // The text fields edit the draft directly. Port and keep-alive targets need
 // string buffers because the file stores an integer and a list, so those live
@@ -27,9 +29,6 @@ import (
 type SettingsState struct {
 	Draft    config.Config
 	Selected int
-	// Tab is the page the window shows; the pages are the tabs in
-	// settingsTabs order.
-	Tab int
 	// SelectText is the profile dropdown's value. Select writes it, then the
 	// view maps it back to Selected.
 	SelectText string
@@ -119,10 +118,9 @@ func (s *SettingsState) ClientDataChanges() []ClientDataChange {
 	return changes
 }
 
-// SettingsActions are the settings window's callbacks.
+// SettingsActions are the draft's callbacks.
 type SettingsActions struct {
-	Save  func()
-	Close func()
+	Save func()
 	// Discard throws the draft away and shows the saved settings again.
 	Discard          func()
 	NewProfile       func()
@@ -558,107 +556,6 @@ func splitTargets(text string) []string {
 	return targets
 }
 
-// SettingsView renders the settings window. The state is edited in place, so
-// the caller keeps one SettingsState for the window's lifetime.
-func SettingsView(state *SettingsState, actions SettingsActions) func(c *ui.Context) {
-	return func(c *ui.Context) {
-		state.refresh()
-		root := ui.Column(c).Fill()
-		// A save, a profile change or a failed file write is a result, not a
-		// line that stays under the form: the window reports it once, as the
-		// main window reports a copy.
-		statusToast(c, root, state.Status, state.StatusSeq, state.StatusError)
-		root.Children(func() {
-			titleBar(c, "")
-			ui.Column(c).Grow(1).Shrink(1).Padding(windowPadding).Gap(sectionGap).Children(func() {
-				settingsBody(c, state, actions)
-			})
-		})
-	}
-}
-
-// settingsBody is the window under the title bar: the profile bar, the tabs and
-// the page they choose, or the gateway's password change, which takes the whole
-// body until it is answered.
-func settingsBody(c *ui.Context, state *SettingsState, actions SettingsActions) {
-	if state.Password != nil {
-		ui.Scroll(c).Grow(1).Shrink(1).Children(func() {
-			settingsPasswordPanel(c, state, actions)
-		})
-		ui.Divider(c)
-		ui.Row(c).AlignItems(ui.Center).Justify(ui.End).Gap(rowGap).Children(func() {
-			if ui.Button(c, locales.CommonClose()).Disabled(state.PasswordBusy).Clicked() && actions.Close != nil {
-				actions.Close()
-			}
-		})
-		return
-	}
-	// A discovered list belongs to the gateway it was read from, and the
-	// gateway is edited in this window. Drop it as soon as the address or
-	// the port names something else, before the picker can store another
-	// gateway's method.
-	state.dropStaleMethods()
-	_, profile := state.selection()
-	if profile == nil {
-		ui.Text(c, locales.ErrNoProfiles())
-		return
-	}
-
-	ui.Column(c).Grow(1).Shrink(1).Gap(sectionGap).Children(func() {
-		profileBar(c, state, actions)
-
-		// 新建/复制/删除 change the list and the selection from inside this
-		// frame. Re-read them before the page that indexes the profile
-		// buffers, or the rest of the frame works on a profile that is gone.
-		index, profile := state.selection()
-		if profile == nil {
-			return
-		}
-		dirty := state.Changed()
-
-		ui.Column(c).Gap(6).Children(func() {
-			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-				windowHeading(c, locales.SettingsTitle())
-				if dirty {
-					captionTone(c, locales.SettingsUnsaved(), toneWarning)
-				}
-			})
-			if active := state.ActiveAtOpen; active != "" && active != profile.Name {
-				captionTone(c, locales.SettingsSwitchHint(profile.Name), toneWarning)
-			}
-		})
-
-		settingsTabBar(c, state)
-
-		ui.Scroll(c).Grow(1).Shrink(1).Children(func() {
-			settingsPage(c, state, actions, index, profile)
-		})
-
-		ui.Divider(c)
-		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-			if ui.PrimaryButton(c, locales.CommonSave()).Disabled(!dirty).Clicked() && actions.Save != nil {
-				actions.Save()
-			}
-			if ui.Button(c, locales.SettingsDiscard()).Disabled(!dirty).Clicked() && actions.Discard != nil {
-				actions.Discard()
-			}
-			if state.Busy {
-				busyLine(c)
-			}
-		})
-	})
-}
-
-// The settings window's pages, in the order of the tabs.
-const (
-	settingsTabConnection = iota
-	settingsTabProxy
-	settingsTabKeepAlive
-	settingsTabStartup
-	settingsTabAdvanced
-	settingsTabTerminals
-)
-
 // fieldWidth caps a form control: a value does not need the window's whole
 // width, and an input stretched across it reads as a text area. The label
 // column keeps the controls aligned, so the cap is one width for every field.
@@ -672,107 +569,8 @@ const profilePickerWidth = 220
 // picker instead of sitting under the field.
 const methodPickerWidth = 240
 
-// settingsTabs are the page labels, in the order of the tab constants.
-func settingsTabs() []string {
-	return []string{
-		locales.ConnectionSection(),
-		locales.ProxySection(),
-		locales.KeepAliveSection(),
-		locales.StartupSection(),
-		locales.AdvancedSection(),
-		locales.TerminalsTab(),
-	}
-}
-
-// settingsTabBar draws the page tabs. It is ui.Tabs with the same look, except
-// that the row wraps: six English labels are wider than the window's minimum,
-// and larger text widens them further, so a single row would push the last
-// pages out of reach. The choice, the keys and the roles are TabsBase's.
-func settingsTabBar(c *ui.Context, state *SettingsState) {
-	theme := c.Theme()
-	labels := settingsTabs()
-	tabs := ui.TabsBase(c, &state.Tab, len(labels))
-	tabs.List.Wrap().Gap(theme.Space(1)).Children(func() {
-		for index, label := range labels {
-			chosen := index == state.Tab
-			tab := tabs.Tab(index).Padding(theme.Space(2), theme.Space(3)).FocusRing(false)
-			tab.TextColor(theme.TextMuted)
-			if chosen {
-				tab.TextColor(theme.Text).FontWeight(600)
-			}
-			tab.DrawOver(func(p *ui.Painter, r ui.Rect) {
-				if chosen {
-					inset, height := theme.Space(1.5), theme.Space(0.5)
-					p.Fill(ui.Rect{
-						X: r.X + inset, Y: r.Y + r.H - height,
-						W: r.W - 2*inset, H: height,
-					}, theme.Accent, height/2)
-				}
-				if tab.FocusVisible() {
-					p.FocusRing(r, [4]float32{theme.Radius, theme.Radius, theme.Radius, theme.Radius})
-				}
-			})
-			tab.Children(func() { ui.Text(c, label).SingleLine() })
-		}
-	})
-}
-
-// settingsPage draws the chosen page. The tab names the page, so the page says
-// only when its edits take effect.
-func settingsPage(c *ui.Context, state *SettingsState, actions SettingsActions, index int, profile *config.Profile) {
-	ui.Column(c).Gap(sectionGap).Children(func() {
-		switch state.Tab {
-		case settingsTabProxy:
-			proxySection(c, state)
-		case settingsTabKeepAlive:
-			enabled := profile.Keep.IsEnabled()
-			keepAliveSection(c, state, profile, &enabled, index)
-		case settingsTabStartup:
-			startupSection(c, state, actions)
-		case settingsTabAdvanced:
-			advancedSection(c, state, profile, actions)
-		case settingsTabTerminals:
-			terminalSection(c, state, actions)
-		default:
-			connectionSection(c, state, actions, profile, index)
-		}
-	})
-}
-
-// pageEffect is the line at the top of a settings page: when the fields under
-// it take effect. It replaces the one caption that had to describe the whole
-// window.
-func pageEffect(c *ui.Context, effect string) {
-	caption(c, effect)
-}
-
-// profileBar is the strip above the tabs: the account the window edits and the
-// three actions that add, copy or remove one. It stays put while the pages
-// change, because every page edits the same profile.
-func profileBar(c *ui.Context, state *SettingsState, actions SettingsActions) {
-	names := state.Draft.ProfileNames()
-	ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-		caption(c, locales.CurrentProfile())
-		if ui.Select(c, &state.SelectText, names).Label(locales.CurrentProfile()).
-			MaxWidth(profilePickerWidth).Changed() {
-			if chosen := indexOf(names, state.SelectText); chosen >= 0 && actions.SelectProfile != nil {
-				actions.SelectProfile(chosen)
-			}
-		}
-		if ui.Button(c, locales.ProfileNew()).Clicked() && actions.NewProfile != nil {
-			actions.NewProfile()
-		}
-		if ui.Button(c, locales.ProfileDuplicate()).Clicked() && actions.DuplicateProfile != nil {
-			actions.DuplicateProfile()
-		}
-		if ui.Button(c, locales.ProfileDelete()).Disabled(len(names) == 1).Clicked() && actions.DeleteProfile != nil {
-			actions.DeleteProfile()
-		}
-	})
-}
-
 func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActions, profile *config.Profile, index int) {
-	pageEffect(c, locales.SettingsEffectLogin())
+	caption(c, locales.SettingsEffectLogin())
 	ui.Form(c, func() {
 		ui.Field(c, locales.NameField(), func() {
 			ui.TextInput(c, &state.NameText).MaxWidth(fieldWidth)
@@ -837,7 +635,7 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 }
 
 func proxySection(c *ui.Context, state *SettingsState) {
-	pageEffect(c, locales.SettingsEffectConnect())
+	caption(c, locales.SettingsEffectConnect())
 	ui.Form(c, func() {
 		ui.Field(c, locales.Socks5Listen(), func() {
 			ui.TextInput(c, &state.Draft.Proxy.SOCKS5Bind).Placeholder("127.0.0.1:1080").MaxWidth(fieldWidth)
@@ -850,7 +648,7 @@ func proxySection(c *ui.Context, state *SettingsState) {
 }
 
 func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profile, enabled *bool, index int) {
-	pageEffect(c, locales.SettingsEffectConnect())
+	caption(c, locales.SettingsEffectConnect())
 	ui.Form(c, func() {
 		ui.Field(c, "", func() {
 			if ui.Checkbox(c, enabled, locales.KeepAliveEnable()).Changed() {
@@ -869,7 +667,7 @@ func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profi
 }
 
 func startupSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
-	pageEffect(c, locales.SettingsEffectStartup())
+	caption(c, locales.SettingsEffectStartup())
 	ui.Form(c, func() {
 		ui.Field(c, "", func() {
 			if ui.Checkbox(c, &state.Draft.App.Autostart, locales.Autostart()).Changed() && actions.SetAutostart != nil {
@@ -890,20 +688,12 @@ func startupSection(c *ui.Context, state *SettingsState, actions SettingsActions
 }
 
 func advancedSection(c *ui.Context, state *SettingsState, profile *config.Profile, actions SettingsActions) {
-	pageEffect(c, locales.SettingsEffectAdvanced())
+	caption(c, locales.SettingsEffectAdvanced())
 	ui.Form(c, func() {
 		ui.Field(c, "", func() {
 			if ui.Checkbox(c, &state.Draft.Logging.Verbose, locales.VerboseLog()).Changed() && actions.SetVerbose != nil {
 				actions.SetVerbose(state.Draft.Logging.Verbose)
 			}
-		})
-		ui.Field(c, locales.LogDir(), func() {
-			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(8).Children(func() {
-				ui.Text(c, state.LogDir).FontSize(c.Theme().FontSize)
-				if ui.Button(c, locales.CommonOpen()).Description(locales.OpenLogsDesc()).Clicked() && actions.OpenLogs != nil {
-					actions.OpenLogs()
-				}
-			})
 		})
 		ui.Field(c, locales.ClientData(), func() {
 			ui.TextInput(c, &profile.Debug.ClientData).Placeholder(locales.ClientDataPlaceholder()).MaxWidth(fieldWidth)
@@ -1048,7 +838,7 @@ func authMethodHint(state *SettingsState) string {
 // endpoints separately from the temporary login history. The current device is
 // marked by selfId, exactly as the portal does.
 func terminalSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
-	pageEffect(c, locales.SettingsEffectLive())
+	caption(c, locales.SettingsEffectLive())
 	ui.Column(c).Gap(6).Children(func() {
 		if !state.Online {
 			caption(c, locales.TerminalsOffline())

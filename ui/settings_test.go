@@ -246,7 +246,7 @@ func TestEditingTheGatewayDropsTheDiscoveredMethods(t *testing.T) {
 	}
 	state.SetMethods(methods, state.targetKey(), "已获取 2 种认证方式", false)
 
-	tester := ui.NewTester(SettingsView(state, SettingsActions{}), 560, 1600)
+	tester := ui.NewTester(View(&State{Settings: state, Config: state.Draft, Page: PageAccount}, Actions{Settings: SettingsActions{}}), 900, 1200)
 	tester.Frame()
 	if len(state.Methods) != 2 {
 		t.Fatalf("methods = %v, want the discovered list", state.Methods)
@@ -275,17 +275,7 @@ func TestEditingTheGatewayDropsTheDiscoveredMethods(t *testing.T) {
 	}
 }
 
-// openSettingsPage shows another page of the settings window: the tab is
-// clicked, then a frame draws what the choice changed.
-func openSettingsPage(t *testing.T, tester *ui.Tester, tab string) {
-	t.Helper()
-	if err := tester.Click(tab); err != nil {
-		t.Fatalf("click the %s tab: %v", tab, err)
-	}
-	tester.Frame()
-}
-
-func TestSettingsViewRendersAndCallsActions(t *testing.T) {
+func TestShellRendersPagesAndCallsActions(t *testing.T) {
 	var saved, created, discarded, autostart, verbose int
 	state := NewSettingsState(config.Default(), "/var/log/gotrust")
 	state.Draft.Profiles[0].Auth.Password = "hunter2"
@@ -306,12 +296,11 @@ func TestSettingsViewRendersAndCallsActions(t *testing.T) {
 		},
 	}
 
-	tester := ui.NewTester(SettingsView(state, actions), 560, 1600)
-	tester.Frame()
+	_, tester := newShell(t, state, actions, PageAccount)
 
-	for _, wanted := range []string{"设置", "当前配置", "连接", "代理", "保活", "启动", "高级", "终端", "下次登录生效"} {
+	for _, wanted := range []string{"仪表盘", "账户", "代理", "保活", "启动", "终端管理", "日志", "设置", "多账户", "下次登录生效"} {
 		if !tester.HasText(wanted) {
-			t.Fatalf("%q is missing from the settings window; texts: %v", wanted, tester.Texts())
+			t.Fatalf("%q is missing from the window; texts: %v", wanted, tester.Texts())
 		}
 	}
 	if tester.HasText("hunter2") {
@@ -323,7 +312,8 @@ func TestSettingsViewRendersAndCallsActions(t *testing.T) {
 		t.Fatal("a page that is not shown is drawn")
 	}
 
-	// 新建 makes the draft differ from the file, which is what enables 保存.
+	openPage(t, tester, "多账户")
+	// 新建 makes the draft differ from the file, which is what shows 保存.
 	if err := tester.Click("新建"); err != nil {
 		t.Fatalf("click new: %v", err)
 	}
@@ -332,16 +322,14 @@ func TestSettingsViewRendersAndCallsActions(t *testing.T) {
 	}
 	tester.Frame()
 	if !tester.HasText("未保存的修改") {
-		t.Fatalf("the unsaved marker is missing; texts: %v", tester.Texts())
+		t.Fatalf("the save bar is missing; texts: %v", tester.Texts())
 	}
-
 	if err := tester.Click("保存"); err != nil {
 		t.Fatalf("click save: %v", err)
 	}
 	if saved != 1 {
 		t.Fatalf("save calls = %d", saved)
 	}
-
 	if err := tester.Click("放弃修改"); err != nil {
 		t.Fatalf("click discard: %v", err)
 	}
@@ -349,7 +337,7 @@ func TestSettingsViewRendersAndCallsActions(t *testing.T) {
 		t.Fatalf("discard calls = %d", discarded)
 	}
 
-	openSettingsPage(t, tester, "启动")
+	openPage(t, tester, "启动")
 	if err := tester.Click("登录系统时启动"); err != nil {
 		t.Fatalf("click autostart: %v", err)
 	}
@@ -357,21 +345,24 @@ func TestSettingsViewRendersAndCallsActions(t *testing.T) {
 		t.Fatalf("autostart = %v calls = %d", state.Draft.App.Autostart, autostart)
 	}
 
-	openSettingsPage(t, tester, "高级")
+	openPage(t, tester, "设置")
 	if err := tester.Click("详细日志"); err != nil {
 		t.Fatalf("click verbose: %v", err)
 	}
 	if !state.Draft.Logging.Verbose || verbose != 1 {
 		t.Fatalf("verbose = %v calls = %d", state.Draft.Logging.Verbose, verbose)
 	}
+	// The log directory belongs to 日志 now, not to 设置.
+	if tester.HasText("/var/log/gotrust") {
+		t.Fatal("the log directory is still on 设置")
+	}
+	openPage(t, tester, "日志")
 	if !tester.HasText("/var/log/gotrust") {
-		t.Fatal("the log directory is missing")
+		t.Fatal("the log directory is missing from 日志")
 	}
 
-	// The window's own close control hides it; 关闭 stays on the pages that
-	// ask a question of their own, such as the password change.
 	if tester.HasText("关闭") {
-		t.Fatal("the bottom bar still offers 关闭")
+		t.Fatal("the window still offers 关闭")
 	}
 }
 
@@ -424,44 +415,68 @@ func TestSettingsChangedFollowsTheSavedFile(t *testing.T) {
 	}
 }
 
-// A page with no saved setting of its own still carries the profile bar, so
-// 新建 and 删除 work from every tab.
-func TestSettingsProfileBarStaysOnEveryPage(t *testing.T) {
+// The sidebar is the window's navigation: every page replaces the one before
+// it, and the page a test asks for is the one the shell draws.
+func TestSidebarSwitchesPages(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
-	tester := ui.NewTester(SettingsView(state, settingsActionsFor(state)), 560, 760)
+	view, tester := newShell(t, state, settingsActionsFor(state), PageAccount)
 
-	for _, tab := range []string{"连接", "代理", "保活", "启动", "高级", "终端"} {
-		openSettingsPage(t, tester, tab)
-		if !tester.HasText("当前配置") {
-			t.Fatalf("%s lost the profile bar", tab)
+	pages := []struct {
+		label string
+		page  Page
+		want  string
+		gone  string
+	}{
+		{"代理", PageProxy, "SOCKS5 监听", "名称"},
+		{"保活", PageKeepAlive, "启用保活", "SOCKS5 监听"},
+		{"启动", PageStartup, "登录系统时启动", "启用保活"},
+		{"终端管理", PageTerminals, "连接后可读取终端列表", "登录系统时启动"},
+		{"日志", PageLogs, "/tmp/logs", "连接后可读取终端列表"},
+		{"设置", PageSettings, "详细日志", "/tmp/logs"},
+		{"多账户", PageProfiles, "当前配置", "详细日志"},
+	}
+	for _, testCase := range pages {
+		openPage(t, tester, testCase.label)
+		if view.Page != testCase.page {
+			t.Fatalf("%s selected page %d, want %d", testCase.label, view.Page, testCase.page)
 		}
+		if !tester.HasText(testCase.want) {
+			t.Fatalf("%q is missing from %s; texts: %v", testCase.want, testCase.label, tester.Texts())
+		}
+		if tester.HasText(testCase.gone) {
+			t.Fatalf("%s kept %q from the page before", testCase.label, testCase.gone)
+		}
+	}
+
+	openPage(t, tester, "仪表盘")
+	if view.Page != PageDashboard {
+		t.Fatalf("dashboard selected page %d", view.Page)
+	}
+	if !tester.HasText("连接后显示网关授予的资源") {
+		t.Fatalf("the dashboard is missing; texts: %v", tester.Texts())
 	}
 }
 
-// The bottom bar offers the two actions that move the draft: save it, or
-// throw it away. Neither means anything while the draft matches the file.
+// The save bar offers the two actions that move the draft: save it, or throw
+// it away. It appears only while the draft differs from the file.
 func TestSettingsSaveAndDiscardFollowTheDraft(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	discarded := 0
-	tester := ui.NewTester(SettingsView(state, SettingsActions{
+	_, tester := newShell(t, state, SettingsActions{
 		Discard: func() { state.Reload(config.Default()); discarded++ },
-	}), 560, 760)
-	tester.Frame()
+	}, PageAccount)
 
-	if err := tester.Click("放弃修改"); err != nil {
-		t.Fatalf("click discard: %v", err)
-	}
-	if discarded != 0 {
-		t.Fatal("放弃修改 ran with no changes to discard")
-	}
 	if tester.HasText("未保存的修改") {
-		t.Fatalf("a clean draft is marked unsaved; texts: %v", tester.Texts())
+		t.Fatalf("a clean draft shows the save bar; texts: %v", tester.Texts())
+	}
+	if err := tester.Click("放弃修改"); err == nil {
+		t.Fatal("放弃修改 is on screen with nothing to discard")
 	}
 
 	state.Ports[0] = "8443"
 	tester.Frame()
 	if !tester.HasText("未保存的修改") {
-		t.Fatalf("an edited port is not marked; texts: %v", tester.Texts())
+		t.Fatalf("an edited port does not show the save bar; texts: %v", tester.Texts())
 	}
 	if err := tester.Click("放弃修改"); err != nil {
 		t.Fatalf("click discard: %v", err)
@@ -472,8 +487,9 @@ func TestSettingsSaveAndDiscardFollowTheDraft(t *testing.T) {
 	if state.Changed() || state.Ports[0] != "443" {
 		t.Fatalf("the draft survived the discard: %q", state.Ports[0])
 	}
+	tester.Frame()
 	if tester.HasText("未保存的修改") {
-		t.Fatal("the unsaved marker outlived the discard")
+		t.Fatal("the save bar outlived the discard")
 	}
 }
 
@@ -481,9 +497,7 @@ func TestSettingsKeepAliveCheckboxUpdatesTheProfile(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	state.Draft.Profiles[0].Keep.SetEnabled(true)
 
-	tester := ui.NewTester(SettingsView(state, SettingsActions{}), 560, 1600)
-	tester.Frame()
-	openSettingsPage(t, tester, "保活")
+	_, tester := newShell(t, state, SettingsActions{}, PageKeepAlive)
 	if err := tester.Click("启用保活"); err != nil {
 		t.Fatalf("click keep-alive: %v", err)
 	}
@@ -492,12 +506,11 @@ func TestSettingsKeepAliveCheckboxUpdatesTheProfile(t *testing.T) {
 	}
 }
 
-func TestSettingsViewHintsAtTheProfileSwitch(t *testing.T) {
+func TestAccountPageHintsAtTheProfileSwitch(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	state.AddProfile()
 
-	tester := ui.NewTester(SettingsView(state, SettingsActions{}), 560, 720)
-	tester.Frame()
+	_, tester := newShell(t, state, SettingsActions{}, PageAccount)
 	if !tester.HasText("保存后将切换到配置") {
 		t.Fatalf("no switch hint; texts: %v", tester.Texts())
 	}
@@ -595,7 +608,7 @@ func TestSettingsTargetReadsTheDraft(t *testing.T) {
 }
 
 // The settings window shows the picker, the discover button and the hint.
-func TestSettingsViewShowsTheAuthPicker(t *testing.T) {
+func TestAccountPageShowsTheAuthPicker(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	state.Draft.Profiles[0].Server.Address = "vpn.example.com"
 	methods := []session.AuthMethod{
@@ -610,7 +623,7 @@ func TestSettingsViewShowsTheAuthPicker(t *testing.T) {
 		DiscoverAuth: func() { discovered++ },
 	}
 
-	tester := ui.NewTester(SettingsView(state, actions), 560, 1600)
+	_, tester := newShell(t, state, actions, PageAccount)
 	tester.Frame()
 
 	for _, wanted := range []string{"认证方式", "获取认证方式", "网关提供 2 种认证方式", MethodLabel(methods[1])} {
@@ -663,9 +676,9 @@ func settingsActionsFor(state *SettingsState) SettingsActions {
 // Deleting the selected profile shrinks the draft from inside the frame. The
 // rest of that frame must not index the profile that disappeared: the old
 // code read Ports[1] after 新建 → 删除 and panicked on the GTK main thread.
-func TestSettingsViewDeletesTheSelectedProfileWithoutAPanic(t *testing.T) {
+func TestProfilesPageDeletesWithoutAPanic(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
-	tester := ui.NewTester(SettingsView(state, settingsActionsFor(state)), 560, 1600)
+	_, tester := newShell(t, state, settingsActionsFor(state), PageProfiles)
 
 	if err := tester.Click("新建"); err != nil {
 		t.Fatalf("click new: %v", err)
@@ -673,6 +686,7 @@ func TestSettingsViewDeletesTheSelectedProfileWithoutAPanic(t *testing.T) {
 	if len(state.Draft.Profiles) != 2 || state.Selected != 1 {
 		t.Fatalf("profiles = %v selected = %d", state.Draft.ProfileNames(), state.Selected)
 	}
+	tester.Frame()
 
 	if err := tester.Click("删除"); err != nil {
 		t.Fatalf("click delete: %v", err)
@@ -702,7 +716,8 @@ func TestSettingsDeleteKeepsPortsAndTargetsOnTheirProfile(t *testing.T) {
 	state.Ports[state.Selected] = "8443"
 	state.Targets[state.Selected] = "http://192.0.2.20/"
 
-	tester := ui.NewTester(SettingsView(state, settingsActionsFor(state)), 560, 1600)
+	tester := ui.NewTester(View(&State{Settings: state, Config: state.Draft, Page: PageProfiles},
+		Actions{Settings: settingsActionsFor(state)}), 900, 1200)
 	if err := tester.Click("删除"); err != nil {
 		t.Fatalf("click delete: %v", err)
 	}
@@ -793,7 +808,7 @@ func TestSettingsRemoveTheStoredTOTPSecret(t *testing.T) {
 	cfg.Profiles[0].Auth.TOTPSecret = "JBSWY3DPEHPK3PXP"
 	state := NewSettingsState(cfg, "/tmp/logs")
 
-	tester := ui.NewTester(SettingsView(state, SettingsActions{}), 560, 1600)
+	_, tester := newShell(t, state, SettingsActions{}, PageAccount)
 	if err := tester.Click("移除"); err != nil {
 		t.Fatalf("click 移除: %v", err)
 	}
@@ -813,7 +828,8 @@ func TestSettingsRemoveTheStoredTOTPSecret(t *testing.T) {
 	}
 
 	// With the secret gone the row is gone too, so there is nothing to click.
-	if err := ui.NewTester(SettingsView(state, SettingsActions{}), 560, 1600).Click("移除"); err == nil {
+	_, again := newShell(t, state, SettingsActions{}, PageAccount)
+	if err := again.Click("移除"); err == nil {
 		t.Fatal("the removal action survived its own click")
 	}
 }
@@ -852,9 +868,7 @@ func TestSettingsShowsAndChangesTrust(t *testing.T) {
 		RefreshTerminals: func() { refreshed++ },
 	}
 
-	tester := ui.NewTester(SettingsView(state, actions), 560, 1800)
-	tester.Frame()
-	openSettingsPage(t, tester, "终端")
+	_, tester := newShell(t, state, actions, PageTerminals)
 	for _, wanted := range []string{"授信终端 1 · 临时终端 1", "desk-01", "desk-02", "当前设备"} {
 		if !tester.HasText(wanted) {
 			t.Fatalf("%q is missing from 终端管理", wanted)
@@ -868,9 +882,7 @@ func TestSettingsShowsAndChangesTrust(t *testing.T) {
 	}
 
 	state.Online = false
-	tester = ui.NewTester(SettingsView(state, actions), 560, 1800)
-	tester.Frame()
-	openSettingsPage(t, tester, "终端")
+	_, tester = newShell(t, state, actions, PageTerminals)
 	if !tester.HasText("连接后可读取终端列表") {
 		t.Fatal("the offline hint is missing")
 	}
@@ -906,8 +918,7 @@ func TestSettingsStatusShowsAsAToast(t *testing.T) {
 		t.Fatal("repeating the same result did not advance the sequence")
 	}
 
-	tester := ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760)
-	tester.Frame()
+	_, tester := newShell(t, state, SettingsActions{}, PageAccount)
 	tester.Advance(250 * time.Millisecond)
 	tester.Frame()
 	if !tester.HasText(locales.SettingsSaved()) {

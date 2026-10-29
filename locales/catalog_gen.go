@@ -1670,6 +1670,106 @@ func (msgs Messages) SettingsTitle() string {
 	return Catalog.Format(msgs.locale, "settingsTitle", nil)
 }
 
+// PageDashboard says "仪表盘"
+// in the language the app shows.
+func PageDashboard() string { return In(i18n.Locale()).PageDashboard() }
+
+// PageDashboard says "仪表盘"
+// in the language of msgs.
+func (msgs Messages) PageDashboard() string {
+	return Catalog.Format(msgs.locale, "pageDashboard", nil)
+}
+
+// PageAccount says "账户"
+// in the language the app shows.
+func PageAccount() string { return In(i18n.Locale()).PageAccount() }
+
+// PageAccount says "账户"
+// in the language of msgs.
+func (msgs Messages) PageAccount() string {
+	return Catalog.Format(msgs.locale, "pageAccount", nil)
+}
+
+// PageProxy says "代理"
+// in the language the app shows.
+func PageProxy() string { return In(i18n.Locale()).PageProxy() }
+
+// PageProxy says "代理"
+// in the language of msgs.
+func (msgs Messages) PageProxy() string {
+	return Catalog.Format(msgs.locale, "pageProxy", nil)
+}
+
+// PageKeepAlive says "保活"
+// in the language the app shows.
+func PageKeepAlive() string { return In(i18n.Locale()).PageKeepAlive() }
+
+// PageKeepAlive says "保活"
+// in the language of msgs.
+func (msgs Messages) PageKeepAlive() string {
+	return Catalog.Format(msgs.locale, "pageKeepAlive", nil)
+}
+
+// PageStartup says "启动"
+// in the language the app shows.
+func PageStartup() string { return In(i18n.Locale()).PageStartup() }
+
+// PageStartup says "启动"
+// in the language of msgs.
+func (msgs Messages) PageStartup() string {
+	return Catalog.Format(msgs.locale, "pageStartup", nil)
+}
+
+// PageTerminals says "终端管理"
+// in the language the app shows.
+func PageTerminals() string { return In(i18n.Locale()).PageTerminals() }
+
+// PageTerminals says "终端管理"
+// in the language of msgs.
+func (msgs Messages) PageTerminals() string {
+	return Catalog.Format(msgs.locale, "pageTerminals", nil)
+}
+
+// PageLogs says "日志"
+// in the language the app shows.
+func PageLogs() string { return In(i18n.Locale()).PageLogs() }
+
+// PageLogs says "日志"
+// in the language of msgs.
+func (msgs Messages) PageLogs() string {
+	return Catalog.Format(msgs.locale, "pageLogs", nil)
+}
+
+// PageSettings says "设置"
+// in the language the app shows.
+func PageSettings() string { return In(i18n.Locale()).PageSettings() }
+
+// PageSettings says "设置"
+// in the language of msgs.
+func (msgs Messages) PageSettings() string {
+	return Catalog.Format(msgs.locale, "pageSettings", nil)
+}
+
+// PageProfiles says "多账户"
+// in the language the app shows.
+func PageProfiles() string { return In(i18n.Locale()).PageProfiles() }
+
+// PageProfiles says "多账户"
+// in the language of msgs.
+func (msgs Messages) PageProfiles() string {
+	return Catalog.Format(msgs.locale, "pageProfiles", nil)
+}
+
+// ProfilesHint says "新建、复制、删除和切换在保存后生效。"
+// in the language the app shows.
+func ProfilesHint() string { return In(i18n.Locale()).ProfilesHint() }
+
+// ProfilesHint says "新建、复制、删除和切换在保存后生效。"
+// in the language of msgs.
+func (msgs Messages) ProfilesHint() string {
+	return Catalog.Format(msgs.locale, "profilesHint", nil)
+}
+
 // SettingsUnsaved says "未保存的修改"
 // in the language the app shows.
 func SettingsUnsaved() string { return In(i18n.Locale()).SettingsUnsaved() }

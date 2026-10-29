@@ -182,8 +182,7 @@ func TestSettingsPasswordPanel(t *testing.T) {
 
 	state := NewSettingsState(cfg, "/tmp/logs")
 	state.Online = false
-	tester := ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760)
-	tester.Frame()
+	_, tester := newShell(t, state, SettingsActions{}, PageAccount)
 	if !tester.HasText("重置密码") {
 		t.Fatalf("the password button is missing; texts: %v", tester.Texts())
 	}
@@ -193,8 +192,7 @@ func TestSettingsPasswordPanel(t *testing.T) {
 
 	opened := 0
 	state.Online = true
-	tester = ui.NewTester(SettingsView(state, SettingsActions{OpenPassword: func() { opened++ }}), 600, 760)
-	tester.Frame()
+	_, tester = newShell(t, state, SettingsActions{OpenPassword: func() { opened++ }}, PageAccount)
 	if err := tester.Click("重置密码"); err != nil {
 		t.Fatalf("click the password button: %v", err)
 	}
@@ -206,8 +204,7 @@ func TestSettingsPasswordPanel(t *testing.T) {
 	state.PasswordStatus = "读取密码规则失败: offline"
 	state.PasswordError = true
 	cancelled := 0
-	tester = ui.NewTester(SettingsView(state, SettingsActions{CancelPassword: func() { cancelled++ }}), 600, 760)
-	tester.Frame()
+	_, tester = newShell(t, state, SettingsActions{CancelPassword: func() { cancelled++ }}, PageAccount)
 	for _, wanted := range []string{"重置密码", "旧密码", "新密码", "确认密码", "读取密码规则失败: offline", "取消"} {
 		if !tester.HasText(wanted) {
 			t.Fatalf("%q is missing from the settings password panel; texts: %v", wanted, tester.Texts())

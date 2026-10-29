@@ -24,12 +24,34 @@ import (
 	"github.com/YangtseSu/goTrust/locales"
 )
 
-// State is what the main window and the tray show.
+// Page is the page the window shows. It is the window's whole navigation
+// state: the pages share the title bar, the sidebar and the save bar.
+type Page uint8
+
+const (
+	PageDashboard Page = iota
+	PageAccount
+	PageProxy
+	PageKeepAlive
+	PageStartup
+	PageTerminals
+	PageLogs
+	PageSettings
+	PageProfiles
+)
+
+// State is what the window and the tray show.
 type State struct {
 	Session session.State
-	// Config is the settings in effect. The main window shows the active
-	// profile; editing happens in the settings window.
+	// Page is the page the window shows. The zero value is the dashboard.
+	Page Page
+	// Config is the settings in effect, as the active profile and the tray
+	// see them.
 	Config config.Config
+	// Settings is the draft the settings pages edit. The application creates
+	// one at startup and keeps it for the life of the window, so a page
+	// switch or hiding the window does not discard the edits.
+	Settings *SettingsState
 	// Listeners are the bound proxy endpoints.
 	Listeners []proxy.Listener
 	// PACURL is the loopback PAC a browser or extension can use, empty while
@@ -74,11 +96,15 @@ const (
 
 // Actions are what the window and the tray can ask the application to do.
 type Actions struct {
-	Login      func()
-	Logout     func()
-	Settings   func()
+	Login  func()
+	Logout func()
+	// ShowPage selects the page the window shows, then shows and focuses the
+	// window. ShowWindow shows the window without changing the page.
+	ShowPage   func(Page)
 	ShowWindow func()
 	Quit       func()
+	// Settings are the callbacks the settings pages use on the draft.
+	Settings SettingsActions
 	// SaveSetup writes the first-run form and, when connect is set, logs in
 	// with it right away.
 	SaveSetup func(draft SetupDraft, connect bool)
@@ -118,59 +144,211 @@ type Actions struct {
 	CopyResource func(string)
 	CopyPAC      func()
 	CopyClash    func(ClashFormat)
-	// OpenLogs opens the log directory in the desktop's file manager.
-	OpenLogs func()
 }
 
-// View renders one frame of the main window.
+// View renders one frame of the window: the title bar, the sidebar, the
+// selected page, and the status and save bars, which belong to the window
+// rather than to any page.
 func View(state *State, actions Actions) func(c *ui.Context) {
 	return func(c *ui.Context) {
+		if state.Settings != nil {
+			// The profile buffers follow the draft, whichever page changed the
+			// list inside the last frame.
+			state.Settings.refresh()
+		}
 		root := ui.Column(c).Fill()
-		statusToast(c, root, state.Status, state.StatusSeq, state.StatusError)
+		statusToast(c, root, "status", state.Status, state.StatusSeq, state.StatusError)
+		if state.Settings != nil {
+			statusToast(c, root, "settings-status", state.Settings.Status, state.Settings.StatusSeq, state.Settings.StatusError)
+		}
 		searchFocus := ui.Local(root, "search-focus", func() uint64 { return 0 })
 		windowShortcuts(c, state, actions, searchFocus)
 		root.Children(func() {
 			titleBar(c, activeProfileName(state.Config))
-			ui.Column(c).Grow(1).Shrink(1).Padding(windowPadding).Gap(sectionGap).Children(func() {
-				header(c, state, actions)
-				switch {
-				case state.Choice != nil:
-					panelSlot(c, state, func() { choicePanel(c, state, actions) })
-				case state.Captcha != nil:
-					panelSlot(c, state, func() { captchaPanel(c, state, actions) })
-				case state.Code != nil:
-					panelSlot(c, state, func() { codePanel(c, state, actions) })
-				case state.External != nil:
-					panelSlot(c, state, func() { externalPanel(c, state, actions) })
-				case state.DeviceBind != nil:
-					panelSlot(c, state, func() { deviceBindPanel(c, state, actions) })
-				case state.Password != nil:
-					panelSlot(c, state, func() { passwordPanel(c, state, actions) })
-				case state.Setup != nil:
-					panelSlot(c, state, func() { setupPanel(c, state, actions) })
-				default:
-					resources(c, state, actions, searchFocus)
-				}
-				footer(c, state)
+			// A Row centers its children vertically by default; the sidebar and
+			// the content have to fill the window instead.
+			ui.Row(c).Grow(1).Shrink(1).AlignItems(ui.Stretch).Children(func() {
+				sidebar(c, state, actions)
+				content(c, state, actions, searchFocus)
 			})
 		})
 	}
 }
 
+// The shell's fixed sizes. The window is 900 DIPs wide by default, so the
+// sidebar leaves one comfortable column; the page cap keeps a maximized
+// window from stretching a two-field form across the display.
+const (
+	sidebarWidth  float32 = 208
+	navItemHeight float32 = 36
+	navIconSize   float32 = 18
+	pageMaxWidth  float32 = 680
+)
+
+// sidebar is the window's navigation: the dashboard first, the pages that
+// edit the account and the app under it, and the account manager at the
+// bottom, where it does not read as one step in that list. The items are tabs
+// for assistive technology, and a panel that owns the flow disables them.
+func sidebar(c *ui.Context, state *State, actions Actions) {
+	theme := c.Theme()
+	disabled := panelOpen(state)
+	// The row centers its children vertically by default; the column and the
+	// divider beside it have to fill the window's height.
+	ui.Row(c).Shrink(0).AlignItems(ui.Stretch).Children(func() {
+		ui.Column(c).Width(sidebarWidth).Shrink(0).
+			Padding(theme.Space(3), theme.Space(2.5), theme.Space(2.5), theme.Space(2.5)).
+			Gap(theme.Space(0.5)).Background(theme.Surface).Role(ui.RoleTabList).
+			Children(func() {
+				navItem(c, state, actions, PageDashboard, disabled)
+				navSeparator(c)
+				navItem(c, state, actions, PageAccount, disabled)
+				navItem(c, state, actions, PageProxy, disabled)
+				navItem(c, state, actions, PageKeepAlive, disabled)
+				navItem(c, state, actions, PageStartup, disabled)
+				navItem(c, state, actions, PageTerminals, disabled)
+				navItem(c, state, actions, PageLogs, disabled)
+				navItem(c, state, actions, PageSettings, disabled)
+				ui.Box(c).Grow(1)
+				navSeparator(c)
+				navItemTagged(c, state, actions, PageProfiles, disabled, activeAccountName(state.Config))
+			})
+		ui.Divider(c)
+	})
+}
+
+// navItem is one page's row: its glyph and its name, tinted with the accent
+// while the page is on screen.
+func navItem(c *ui.Context, state *State, actions Actions, page Page, disabled bool) {
+	navItemTagged(c, state, actions, page, disabled, "")
+}
+
+// navItemTagged is navItem with a short tag at its end, which the account
+// manager uses for the live account.
+func navItemTagged(c *ui.Context, state *State, actions Actions, page Page, disabled bool, tag string) {
+	theme := c.Theme()
+	label := pageLabel(page)
+	item := ui.ButtonBase(c).Height(navItemHeight).AlignItems(ui.Center).
+		Padding(0, theme.Space(2.5)).Radius(theme.Radius).Gap(theme.Space(2.5)).
+		Role(ui.RoleTab).Label(label).Disabled(disabled)
+
+	chosen := page == state.Page
+	ink := theme.TextMuted
+	if chosen {
+		ink = theme.Accent
+		item.Background(theme.Accent.Alpha(0.12).Over(theme.Surface))
+	} else if item.Hovered() {
+		item.Background(theme.SurfaceHover)
+	}
+	if disabled {
+		// A disabled button is still drawn; the panel owns the flow, so the
+		// navigation says so instead of looking one click away.
+		ink = theme.TextMuted.Alpha(0.5)
+	}
+	item.Checked(chosen)
+
+	item.Children(func() {
+		ui.Icon(c, pageIcon(page)).Size(navIconSize, navIconSize).Shrink(0).TextColor(ink)
+		text := ui.Text(c, label).FontSize(theme.FontSize - 1).TextColor(ink).SingleLine().Grow(1)
+		if chosen {
+			text.FontWeight(600)
+		}
+		if tag != "" {
+			ui.Box(c).Padding(0, theme.Space(1.5)).Radius(999).Border(1, theme.Border).Shrink(0).Children(func() {
+				ui.Text(c, tag).FontSize(textSize(c, captionScale)).TextColor(theme.TextMuted).SingleLine()
+			})
+		}
+	})
+
+	show := func() {
+		if actions.ShowPage != nil {
+			actions.ShowPage(page)
+		}
+	}
+	if item.Clicked() {
+		show()
+	}
+	item.OnShortcut(0, ui.KeyEnter, show).OnShortcut(0, ui.KeySpace, show)
+}
+
+// navSeparator divides the navigation's groups without a heading.
+func navSeparator(c *ui.Context) {
+	margin := c.Theme().Space(2)
+	ui.Divider(c).Margin(margin, margin, margin, margin)
+}
+
+// content is the room right of the sidebar: the page, the panel that owns the
+// flow, and the save bar while the draft differs from the file.
+func content(c *ui.Context, state *State, actions Actions, searchFocus *uint64) {
+	ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Padding(windowPadding).Gap(sectionGap).Children(func() {
+		if panelOpen(state) {
+			panelBody(c, state, actions)
+			return
+		}
+		ui.Column(c).Grow(1).Shrink(1).MaxWidth(pageMaxWidth).Children(func() {
+			pageBody(c, state, actions, searchFocus)
+		})
+		if settings := state.Settings; settings != nil && settings.Changed() {
+			saveBar(c, settings, actions.Settings)
+		}
+	})
+}
+
+// panelBody is the pre-login question that owns the flow, wherever the
+// sidebar points. The session's own line stays above it, so a question never
+// hides the phase it belongs to; the selected page returns when the panel
+// closes.
+func panelBody(c *ui.Context, state *State, actions Actions) {
+	ui.Column(c).Grow(1).Shrink(1).Gap(sectionGap).Children(func() {
+		header(c, state, actions)
+		switch {
+		case state.Choice != nil:
+			panelSlot(c, state, func() { choicePanel(c, state, actions) })
+		case state.Captcha != nil:
+			panelSlot(c, state, func() { captchaPanel(c, state, actions) })
+		case state.Code != nil:
+			panelSlot(c, state, func() { codePanel(c, state, actions) })
+		case state.External != nil:
+			panelSlot(c, state, func() { externalPanel(c, state, actions) })
+		case state.DeviceBind != nil:
+			panelSlot(c, state, func() { deviceBindPanel(c, state, actions) })
+		case state.Password != nil:
+			panelSlot(c, state, func() { passwordPanel(c, state, actions) })
+		case state.Setup != nil:
+			panelSlot(c, state, func() { setupPanel(c, state, actions) })
+		}
+	})
+}
+
+// saveBar is the window's bottom bar: it appears while the draft differs from
+// the settings file, so 保存 and 放弃 are reachable from every page.
+func saveBar(c *ui.Context, settings *SettingsState, actions SettingsActions) {
+	ui.Divider(c)
+	ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+		captionTone(c, locales.SettingsUnsaved(), toneWarning)
+		ui.Box(c).Grow(1)
+		if ui.Button(c, locales.SettingsDiscard()).Clicked() && actions.Discard != nil {
+			actions.Discard()
+		}
+		if ui.PrimaryButton(c, locales.CommonSave()).Clicked() && actions.Save != nil {
+			actions.Save()
+		}
+		if settings.Busy {
+			busyLine(c)
+		}
+	})
+}
+
 // TitleBarHeight is the strip a window with a hidden frame draws: the room its
-// desktop window controls sit in. Both windows declare it, so a view drawn in a
+// desktop window controls sit in. The window declares it, so a view drawn in a
 // tester, where no frame reports one, still leaves the same room.
 const TitleBarHeight = 34
 
 // windowShortcuts are the keys the window answers wherever the focus is: the
-// state's own action (Ctrl+Enter, or Cmd on a platform that has one), the
-// settings window (Ctrl+,), the way out of a login question (Esc) and the
-// resource filter (/). A panel owns the flow while it is up, so Ctrl+Enter
-// waits instead of ending a login the user is answering; Esc is what cancels.
+// state's own action (Ctrl+Enter, or Cmd on a platform that has one), the way
+// out of a login question (Esc) and the resource filter (/). A panel owns the
+// flow while it is up, so Ctrl+Enter waits instead of ending a login the user
+// is answering; Esc is what cancels.
 func windowShortcuts(c *ui.Context, state *State, actions Actions, searchFocus *uint64) {
-	if actions.Settings != nil {
-		c.OnShortcut(ui.Cmd, ui.KeyComma, actions.Settings)
-	}
 	switch {
 	case panelOpen(state):
 		// The panel's own foot has 取消登录; Esc does the same.
@@ -230,9 +408,11 @@ func panelCancel(state *State, actions Actions) func() {
 }
 
 // resourceSearchShown reports whether the body is the resource list and that
-// list has a filter. A panel replaces the list, and a short list needs none.
+// list has a filter. A panel replaces the list, a short list needs none, and
+// the list only exists on the dashboard.
 func resourceSearchShown(state *State) bool {
-	return !panelOpen(state) && resourceSearchNeeded(state.Session.Resources.Entries)
+	return state.Page == PageDashboard && !panelOpen(state) &&
+		resourceSearchNeeded(state.Session.Resources.Entries)
 }
 
 // panelMaxWidth bounds a pre-login form. At the window's own width it changes
@@ -288,26 +468,33 @@ func titleBar(c *ui.Context, profile string) {
 // activeProfileName is the account the window is showing, as the title bar
 // names it: the strip is the one place that stays true across every panel.
 func activeProfileName(cfg config.Config) string {
+	return locales.ProfileName(activeAccountName(cfg))
+}
+
+// activeAccountName is the live account's own name, as the sidebar's tag and
+// the tray use it: the name is user data and is not translated.
+func activeAccountName(cfg config.Config) string {
 	name := cfg.ActiveProfile
 	if name == "" {
 		name = config.DefaultProfileName
 	}
-	return locales.ProfileName(name)
+	return name
 }
 
 // statusToast reports the last action's result once. The window never keeps it
-// on screen: a result is something that happened, not a permanent line. Both
-// windows share it, each with its own sequence.
-func statusToast(c *ui.Context, root ui.Element, text string, seq uint64, failed bool) {
+// on screen: a result is something that happened, not a permanent line. id
+// separates the results of the window from those of the settings draft, each
+// with its own sequence.
+func statusToast(c *ui.Context, root ui.Element, id, text string, seq uint64, failed bool) {
 	if text == "" {
 		return
 	}
-	shown := ui.Local[uint64](root, "status-seq", func() uint64 { return 0 })
+	shown := ui.Local[uint64](root, id+"-seq", func() uint64 { return 0 })
 	if shown == nil || *shown == seq {
 		return
 	}
 	*shown = seq
-	toast := ui.Toast{ID: "status", Title: text}
+	toast := ui.Toast{ID: id, Title: text}
 	if failed {
 		toast.Type = "error"
 	}
@@ -502,9 +689,9 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 	})
 }
 
-// controls are the window's actions, next to the state: one primary action,
-// the copy menu, and an overflow for everything that is not part of the
-// session. Every action has exactly one control here.
+// controls are the session's actions, next to the state: one primary action
+// and the copy menu. Quit and the log directory belong to the tray and to the
+// pages; the dashboard is the session surface.
 func controls(c *ui.Context, state *State, actions Actions) {
 	ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 		switch {
@@ -542,18 +729,6 @@ func controls(c *ui.Context, state *State, actions Actions) {
 				}
 			}
 		})
-		ui.MenuButton(c, "⋯", func(menu *ui.Menu) {
-			if menu.Item(locales.SettingsAction()).Chosen() && actions.Settings != nil {
-				actions.Settings()
-			}
-			if menu.Item(locales.OpenLogsMenu()).Disabled(actions.OpenLogs == nil).Chosen() && actions.OpenLogs != nil {
-				actions.OpenLogs()
-			}
-			menu.Separator()
-			if menu.Item(locales.Quit()).Chosen() && actions.Quit != nil {
-				actions.Quit()
-			}
-		}).Description(locales.MoreActions())
 	})
 }
 
@@ -979,11 +1154,6 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		openApp.Disabled = true
 	}
 
-	settingsItem := &mygo.MenuItem{ID: "settings", Label: locales.TraySettings(), Click: func(*mygo.MenuItem, *mygo.Window) {
-		if actions.Settings != nil {
-			actions.Settings()
-		}
-	}}
 	quit := &mygo.MenuItem{ID: "quit", Label: locales.TrayQuit(), Click: func(*mygo.MenuItem, *mygo.Window) {
 		if actions.Quit != nil {
 			actions.Quit()
@@ -998,7 +1168,6 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		mygo.Separator(),
 		show,
 		openApp,
-		settingsItem,
 		mygo.Separator(),
 		quit,
 	})

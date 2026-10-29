@@ -35,3 +35,41 @@ var (
 	// and a list of buttons outshouts the rows.
 	iconRowMenu = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`))
 )
+
+// The sidebar's pages have one glyph each, in the same weight as the rows
+// above: they say what the page is for rather than spelling it out.
+var (
+	iconPageDashboard = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15a8 8 0 0 1 16 0"/><path d="M12 15 15.5 10"/><circle cx="12" cy="15" r="1.6"/></svg>`))
+	iconPageAccount   = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c.8-3.4 3.5-5.2 7-5.2s6.2 1.8 7 5.2"/></svg>`))
+	iconPageProxy     = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.2 2.2 3.4 4.9 3.4 8s-1.2 5.8-3.4 8c-2.2-2.2-3.4-4.9-3.4-8S9.8 6.2 12 4Z"/></svg>`))
+	iconPageKeepAlive = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg>`))
+	iconPageStartup   = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M7 6.5a7 7 0 1 0 10 0"/></svg>`))
+	iconPageTerminals = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="13" height="10" rx="1.6"/><path d="M3 18h13"/><rect x="18" y="10" width="3.5" height="7" rx="1"/></svg>`))
+	iconPageLogs      = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M14 3.5V8h4M8 12h7M8 15h7M8 18h4"/></svg>`))
+	iconPageSettings  = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>`))
+	iconPageProfiles  = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 19c.7-3.1 3-4.8 6-4.8s5.3 1.7 6 4.8"/><path d="M16 5.2a3 3 0 0 1 0 5.6"/><path d="M18 19c-.2-1.4-.6-2.6-1.3-3.6"/></svg>`))
+)
+
+// pageIcon is the sidebar glyph of a page.
+func pageIcon(page Page) *ui.SVG {
+	switch page {
+	case PageAccount:
+		return iconPageAccount
+	case PageProxy:
+		return iconPageProxy
+	case PageKeepAlive:
+		return iconPageKeepAlive
+	case PageStartup:
+		return iconPageStartup
+	case PageTerminals:
+		return iconPageTerminals
+	case PageLogs:
+		return iconPageLogs
+	case PageSettings:
+		return iconPageSettings
+	case PageProfiles:
+		return iconPageProfiles
+	default:
+		return iconPageDashboard
+	}
+}

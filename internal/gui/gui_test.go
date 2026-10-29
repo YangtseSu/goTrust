@@ -209,6 +209,37 @@ func TestSaveSettingsWritesAndApplies(t *testing.T) {
 	}
 }
 
+// The window edits one settings draft for its whole life. A page switch and a
+// save reload it in place, so hiding the window no longer throws away what
+// was typed: the old settings window discarded it on every close.
+func TestTheSettingsDraftIsLongLived(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	cfg := config.Default()
+	application := &app{cfg: cfg, configPath: path}
+	application.view.Config = cfg
+	application.settings = gotrustui.NewSettingsState(cfg, dir)
+	application.view.Settings = application.settings
+	draft := application.settings
+
+	application.showPage(gotrustui.PageAccount)
+	if application.settings != draft || application.view.Settings != draft {
+		t.Fatal("a page switch replaced the draft")
+	}
+
+	draft.Ports[0] = "8443"
+	application.saveSettings()
+	if application.settings != draft {
+		t.Fatal("saving replaced the draft")
+	}
+	if application.view.Settings != draft {
+		t.Fatal("the window stopped showing the draft")
+	}
+	if draft.Changed() {
+		t.Fatal("the save left the draft dirty")
+	}
+}
+
 // A save that fails validation must not touch the file or the live settings.
 func TestSaveSettingsRejectsBadValues(t *testing.T) {
 	dir := t.TempDir()

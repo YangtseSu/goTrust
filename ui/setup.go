@@ -34,10 +34,9 @@ func ProfileProblem(profile config.Profile) string {
 	}
 }
 
-// SetupDraft is the first run: the least a login needs, edited in the main
-// window. A new user is sent to the settings window only for everything else,
-// because the settings window is the editor for a configuration that already
-// exists.
+// SetupDraft is the first run: the least a login needs, edited inside the
+// window. The pages edit the rest of the configuration; a fresh install only
+// has to answer what a login needs.
 type SetupDraft struct {
 	// Profile is the name the draft was built from, so a profile switch
 	// rebuilds the fields instead of writing them onto another account.
@@ -104,7 +103,7 @@ func (d *SetupDraft) Problem() string {
 
 // Apply writes the form into cfg's active profile. A password the user asked to
 // keep is stored and marked; otherwise the file keeps none, exactly like the
-// settings window's 保存密码.
+// account page's 保存密码.
 func (d *SetupDraft) Apply(cfg *config.Config) error {
 	index := cfg.ProfileIndex(cfg.ActiveProfile)
 	if index < 0 {
@@ -184,9 +183,6 @@ func setupPanel(c *ui.Context, state *State, actions Actions) {
 			if ui.Button(c, locales.SetupSaveOnly()).
 				Disabled(busy || !draft.Complete()).Clicked() && actions.SaveSetup != nil {
 				actions.SaveSetup(*draft, false)
-			}
-			if ui.Button(c, locales.SetupMore()).Clicked() && actions.Settings != nil {
-				actions.Settings()
 			}
 			if busy {
 				busyLine(c)

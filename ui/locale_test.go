@@ -22,7 +22,7 @@ func TestViewsFollowTheAppLanguage(t *testing.T) {
 		Session: session.State{Phase: session.PhaseIdle},
 		Config:  config.Default(),
 	}
-	tester := ui.NewTester(View(&state, Actions{}), 520, 560)
+	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 
 	if !tester.HasText(locales.In("en").Connect()) {
@@ -39,11 +39,9 @@ func TestViewsFollowTheAppLanguage(t *testing.T) {
 func TestSettingsLanguagePickerCallsSetLocale(t *testing.T) {
 	var chosen []string
 	state := NewSettingsState(config.Default(), "/tmp/logs")
-	tester := ui.NewTester(SettingsView(state, SettingsActions{
+	_, tester := newShell(t, state, SettingsActions{
 		SetLocale: func(tag string) { chosen = append(chosen, tag) },
-	}), 600, 2200)
-	tester.Frame()
-	openSettingsPage(t, tester, "启动")
+	}, PageStartup)
 
 	if err := tester.Click("English"); err != nil {
 		t.Fatalf("click English: %v; texts: %v", err, tester.Texts())

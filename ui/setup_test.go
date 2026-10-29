@@ -64,10 +64,10 @@ func TestSetupPanelAppearsWhileTheProfileIsIncomplete(t *testing.T) {
 		connect = withLogin
 	}}
 
-	tester := ui.NewTester(View(&state, actions), 540, 640)
+	tester := ui.NewTester(View(&state, actions), 720, 560)
 	tester.Frame()
 
-	for _, wanted := range []string{"连接网关", "网关地址", "端口", "用户名", "保存并连接", "更多设置…"} {
+	for _, wanted := range []string{"连接网关", "网关地址", "端口", "用户名", "保存并连接"} {
 		if !tester.HasText(wanted) {
 			t.Fatalf("%q is missing from the first-run form", wanted)
 		}
@@ -87,7 +87,7 @@ func TestSetupPanelAppearsWhileTheProfileIsIncomplete(t *testing.T) {
 	state.Setup.Address = "vpn.example.com"
 	state.Setup.Port = "8443"
 	state.Setup.Username = "alice"
-	tester = ui.NewTester(View(&state, actions), 540, 640)
+	tester = ui.NewTester(View(&state, actions), 720, 560)
 	tester.Frame()
 	if err := tester.Click("保存并连接"); err != nil {
 		t.Fatalf("click save and connect: %v", err)
@@ -119,7 +119,7 @@ func TestCompleteProfileShowsTheConnectionControls(t *testing.T) {
 	cfg.Profiles[0] = completeProfile()
 
 	state := State{Config: cfg}
-	tester := ui.NewTester(View(&state, Actions{}), 540, 640)
+	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 
 	if tester.HasText("保存并连接") {

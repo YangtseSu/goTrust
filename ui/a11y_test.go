@@ -65,7 +65,7 @@ func TestBusyStateDisablesConnect(t *testing.T) {
 		Config:  config.Default(),
 		Busy:    true,
 	}
-	tester := ui.NewTester(View(&state, Actions{Login: func() { logins++ }}), 540, 640)
+	tester := ui.NewTester(View(&state, Actions{Login: func() { logins++ }}), 720, 560)
 	tester.Frame()
 
 	if !tester.HasText("处理中…") {
@@ -87,7 +87,7 @@ func TestBusyStateKeepsDisconnect(t *testing.T) {
 		Config:  config.Default(),
 		Busy:    true,
 	}
-	tester := ui.NewTester(View(&state, Actions{Logout: func() { logouts++ }}), 540, 640)
+	tester := ui.NewTester(View(&state, Actions{Logout: func() { logouts++ }}), 720, 560)
 	if err := tester.Click("断开"); err != nil {
 		t.Fatalf("click 断开: %v", err)
 	}
@@ -96,16 +96,20 @@ func TestBusyStateKeepsDisconnect(t *testing.T) {
 	}
 }
 
-// Tab reaches every control the main window offers, in the order it reads.
+// Tab reaches the navigation first, then the session controls. The nav items
+// are tabs for assistive technology, so this is also the order they expose.
 func TestMainWindowTabOrder(t *testing.T) {
 	state := State{
 		Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
 		Config:  config.Default(),
 	}
-	tester := ui.NewTester(View(&state, Actions{}), 540, 640)
+	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 
-	for _, want := range []string{"连接", "复制配置", "⋯"} {
+	for _, want := range []string{
+		"仪表盘", "账户", "代理", "保活", "启动", "终端管理", "日志", "设置", "多账户",
+		"连接", "复制配置",
+	} {
 		tester.Key(0, ui.KeyTab)
 		tester.Frame()
 		if !tester.Focused(want) {
@@ -114,33 +118,31 @@ func TestMainWindowTabOrder(t *testing.T) {
 	}
 }
 
-// The settings window is a long form: the actions at the bottom must be
-// reachable with Tab, in Save then Discard order, whatever the page contains.
-// Both are disabled while the draft matches the file, and a disabled control
-// takes no focus, so the draft is edited first.
-func TestSettingsTabOrderReachesTheActions(t *testing.T) {
+// The save bar is the last stop of the window: Tab reaches 放弃修改 and then
+// 保存, whatever the page's form contains. Both are absent while the draft
+// matches the file, so the draft is edited first.
+func TestSettingsTabOrderReachesTheSaveBar(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	state.Ports[0] = "8443"
-	tester := ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760)
-	tester.Frame()
+	_, tester := newShell(t, state, SettingsActions{}, PageAccount)
 
 	found := false
-	for range 60 {
+	for range 80 {
 		tester.Key(0, ui.KeyTab)
 		tester.Frame()
-		if tester.Focused("保存") {
+		if tester.Focused("放弃修改") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatal("Tab never reached 保存")
+		t.Fatal("Tab never reached 放弃修改")
 	}
 
 	tester.Key(0, ui.KeyTab)
 	tester.Frame()
-	if !tester.Focused("放弃修改") {
-		t.Fatal("Tab after 保存 did not reach 放弃修改")
+	if !tester.Focused("保存") {
+		t.Fatal("Tab after 放弃修改 did not reach 保存")
 	}
 }
 
@@ -154,7 +156,7 @@ func TestActionResultsShowAsToasts(t *testing.T) {
 		StatusSeq:   1,
 		StatusError: true,
 	}
-	tester := ui.NewTester(View(&state, Actions{}), 540, 640)
+	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 	tester.Advance(250 * time.Millisecond)
 	tester.Frame()

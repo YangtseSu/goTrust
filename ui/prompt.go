@@ -89,7 +89,7 @@ type DeviceBindPrompt struct {
 	Message  string
 }
 
-// MethodLabel is how a method is named in the chooser and the settings window.
+// MethodLabel is how a method is named in the chooser and on the account page.
 func MethodLabel(method session.AuthMethod) string {
 	return method.String()
 }

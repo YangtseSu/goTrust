@@ -85,7 +85,7 @@ func TestCaptchaPanelShowsPointsAndCallsActions(t *testing.T) {
 		CancelCaptcha:   func() { cancelled++ },
 	}
 
-	tester := ui.NewTester(View(&state, actions), 520, 560)
+	tester := ui.NewTester(View(&state, actions), 720, 560)
 	tester.Frame()
 
 	if !tester.HasText("已点击 2 个位置") {
@@ -119,7 +119,7 @@ func TestCaptchaPanelShowsPointsAndCallsActions(t *testing.T) {
 	empty := state
 	empty.Captcha = &Captcha{Image: testBitmap(t, 100, 50), Width: 100, Height: 50}
 	submitted = 0
-	tester = ui.NewTester(View(&empty, actions), 520, 560)
+	tester = ui.NewTester(View(&empty, actions), 720, 560)
 	tester.Frame()
 	if err := tester.Click("提交"); err != nil {
 		t.Fatalf("click 提交: %v", err)

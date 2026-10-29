@@ -245,34 +245,33 @@ func renderStates(t *testing.T, dir, lang string) {
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			state := testCase.state
-			save(testCase.name, ui.NewTester(View(&state, Actions{}), 540, 640))
+			save(testCase.name, ui.NewTester(View(&state, Actions{}), 900, 740))
 		})
 	}
 
-	// The settings window is six pages now. Each one is rendered, because a
-	// page that does not fit shows its own scroll rather than the next
-	// section's fields.
-	settingsPage := func(name string, tab int, mutate func(*SettingsState)) {
+	// The window's pages, one at a time: each is rendered, because a page that
+	// does not fit shows its own scroll rather than the next page's fields.
+	pageView := func(name string, chosen Page, mutate func(*SettingsState)) {
 		t.Helper()
 		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
-		state.Tab = tab
 		if mutate != nil {
 			mutate(state)
 		}
-		save(name, ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760))
+		view := &State{Settings: state, Config: cfg, Page: chosen}
+		save(name, ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 900, 740))
 	}
 
-	t.Run("settings", func(t *testing.T) { settingsPage("settings", settingsTabConnection, nil) })
-	t.Run("settings-proxy", func(t *testing.T) { settingsPage("settings-proxy", settingsTabProxy, nil) })
+	t.Run("settings", func(t *testing.T) { pageView("settings", PageAccount, nil) })
+	t.Run("settings-proxy", func(t *testing.T) { pageView("settings-proxy", PageProxy, nil) })
 	t.Run("settings-keepalive", func(t *testing.T) {
-		settingsPage("settings-keepalive", settingsTabKeepAlive, nil)
+		pageView("settings-keepalive", PageKeepAlive, nil)
 	})
-	t.Run("settings-startup", func(t *testing.T) { settingsPage("settings-startup", settingsTabStartup, nil) })
+	t.Run("settings-startup", func(t *testing.T) { pageView("settings-startup", PageStartup, nil) })
 	t.Run("settings-advanced", func(t *testing.T) {
-		settingsPage("settings-advanced", settingsTabAdvanced, nil)
+		pageView("settings-advanced", PageSettings, nil)
 	})
 	t.Run("settings-terminal", func(t *testing.T) {
-		settingsPage("settings-terminal", settingsTabTerminals, func(state *SettingsState) {
+		pageView("settings-terminal", PageTerminals, func(state *SettingsState) {
 			state.Online = true
 			state.TrustKnown = true
 			state.Trusted = true
@@ -292,7 +291,7 @@ func renderStates(t *testing.T, dir, lang string) {
 		})
 	})
 	t.Run("settings-unsaved", func(t *testing.T) {
-		settingsPage("settings-unsaved", settingsTabConnection, func(state *SettingsState) {
+		pageView("settings-unsaved", PageAccount, func(state *SettingsState) {
 			state.Ports[0] = "8443"
 		})
 	})
@@ -300,7 +299,8 @@ func renderStates(t *testing.T, dir, lang string) {
 	// the labels that share a row with a button are the ones that overflow.
 	t.Run("settings-narrow", func(t *testing.T) {
 		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
-		save("settings-narrow", ui.NewTester(SettingsView(state, SettingsActions{}), 560, 760))
+		view := &State{Settings: state, Config: cfg, Page: PageAccount}
+		save("settings-narrow", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 720, 560))
 	})
 
 	t.Run("main-online-dark", func(t *testing.T) {
@@ -309,7 +309,7 @@ func renderStates(t *testing.T, dir, lang string) {
 			Config:    cfg,
 			Listeners: renderListeners(),
 		}
-		tester := ui.NewTester(View(&state, Actions{}), 540, 640)
+		tester := ui.NewTester(View(&state, Actions{}), 900, 740)
 		tester.SetDark(true)
 		save("main-online-dark", tester)
 	})
@@ -320,7 +320,7 @@ func renderStates(t *testing.T, dir, lang string) {
 			Config:    cfg,
 			Listeners: renderListeners(),
 		}
-		save("main-small", ui.NewTester(View(&state, Actions{}), 440, 480))
+		save("main-small", ui.NewTester(View(&state, Actions{}), 720, 560))
 	})
 
 	t.Run("main-resources", func(t *testing.T) {
@@ -329,7 +329,7 @@ func renderStates(t *testing.T, dir, lang string) {
 			Config:    cfg,
 			Listeners: renderListeners(),
 		}
-		save("main-resources", ui.NewTester(View(&state, Actions{}), 540, 640))
+		save("main-resources", ui.NewTester(View(&state, Actions{}), 900, 740))
 	})
 
 	t.Run("main-resources-small", func(t *testing.T) {
@@ -338,12 +338,13 @@ func renderStates(t *testing.T, dir, lang string) {
 			Config:    cfg,
 			Listeners: renderListeners(),
 		}
-		save("main-resources-small", ui.NewTester(View(&state, Actions{}), 440, 480))
+		save("main-resources-small", ui.NewTester(View(&state, Actions{}), 720, 560))
 	})
 
 	t.Run("settings-small", func(t *testing.T) {
 		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
-		save("settings-small", ui.NewTester(SettingsView(state, SettingsActions{}), 560, 440))
+		view := &State{Settings: state, Config: cfg, Page: PageAccount}
+		save("settings-small", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 720, 560))
 	})
 
 	t.Run("main-password-small", func(t *testing.T) {
@@ -358,7 +359,7 @@ func renderStates(t *testing.T, dir, lang string) {
 				Strategy: passwordTestStrategy(),
 			},
 		}
-		save("main-password-small", ui.NewTester(View(&state, Actions{}), 440, 480))
+		save("main-password-small", ui.NewTester(View(&state, Actions{}), 720, 560))
 	})
 
 	t.Run("main-setup-small", func(t *testing.T) {
@@ -367,7 +368,7 @@ func renderStates(t *testing.T, dir, lang string) {
 			Config:  fresh,
 			Setup:   NewSetupDraft(fresh.Active()),
 		}
-		save("main-setup-small", ui.NewTester(View(&state, Actions{}), 440, 480))
+		save("main-setup-small", ui.NewTester(View(&state, Actions{}), 720, 560))
 	})
 
 	t.Run("main-setup-wide", func(t *testing.T) {
@@ -376,19 +377,21 @@ func renderStates(t *testing.T, dir, lang string) {
 			Config:  fresh,
 			Setup:   NewSetupDraft(fresh.Active()),
 		}
-		save("main-setup-wide", ui.NewTester(View(&state, Actions{}), 900, 640))
+		save("main-setup-wide", ui.NewTester(View(&state, Actions{}), 900, 740))
 	})
 
 	t.Run("settings-password", func(t *testing.T) {
 		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
 		state.Online = true
 		state.Password = &PasswordPrompt{Username: "alice", Strategy: passwordTestStrategy()}
-		save("settings-password", ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760))
+		view := &State{Settings: state, Config: cfg, Page: PageAccount}
+		save("settings-password", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 900, 740))
 	})
 
 	t.Run("settings-dark", func(t *testing.T) {
 		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
-		tester := ui.NewTester(SettingsView(state, SettingsActions{}), 600, 760)
+		view := &State{Settings: state, Config: cfg, Page: PageAccount}
+		tester := ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 900, 740)
 		tester.SetDark(true)
 		save("settings-dark", tester)
 	})

@@ -33,9 +33,31 @@ The review settled these points:
 
 ### Phase 1: Single-window shell and page state
 
-- **Status:** pending
-- Not started. The shell, page state and single-window lifecycle are the first
-  cut because every later page depends on them.
+- **Status:** complete
+- One window, one draft. `ui.View` is the shell: title strip, a 208 DIP
+  sidebar, a 680-capped page column, the status toasts and a save bar that
+  appears only while `SettingsState.Changed()`. The pages are 仪表盘, 账户,
+  代理, 保活, 启动, 终端管理, 日志, 设置 and 多账户; the nav items are tabs
+  with Enter/Space activation, and they dim and disable while a pre-login
+  panel owns the flow.
+- `SettingsState` is created in `Run` once the log directory is known and is
+  kept for the life of the process; `State.Settings` points at it. 保存,
+  放弃, a tray profile switch and a setup save reload it in place.
+- `internal/gui` has one window at 900×740 (min 720×560). `settingsWindow`,
+  `openSettings`, `hideSettings`, `closeSettings`, `resetSettingsDraft` and
+  the Ctrl+, shortcut are gone; `showWindow` keeps the page and `showPage`
+  selects one. The tray's 设置 item is gone; the rest of the tray waits for
+  phase 4.
+- The settings pages are page functions: account, proxy, keep-alive, startup,
+  terminals, logs (the log directory until the live tail lands), settings (the
+  advanced fields) and the transitional profiles picker. The log directory
+  moved off 设置 to 日志.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint` pass. `GOTRUST_RENDER_DIR` rendered every
+  state; the shell was checked in both languages, in dark mode and at the
+  720×560 minimum. The real binary ran under headless mutter (`goTrust ready`,
+  clean SIGTERM exit; the Gtk-CRITICAL scale-factor warning also appears on the
+  pre-change binary and belongs to mygo/AppIndicator).
 
 ### Phase 2: Account page, gateway field and password row
 

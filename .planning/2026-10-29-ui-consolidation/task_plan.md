@@ -13,13 +13,13 @@ separate chip.
 
 ## Next Step
 
-Phase 1: build the shell — the page state, the left navigation, the single
-window frame, and the global save bar. Keep the existing section builders as
-page content until their phases move them.
+Phase 2: the account page, the gateway field and the password row. The shell
+is in place; the first-run panel, the 名称 field and the two-field gateway are
+next.
 
 ## Current Phase
 
-Phase 1 pending.
+Phase 1 complete; Phase 2 pending.
 
 ## Decisions already made
 
@@ -60,41 +60,54 @@ live in a second window with six tabs, while the main window duplicates a few
 of its actions. This phase turns both into one window with a page state; the
 existing forms keep working inside their pages.
 
-- [ ] Add `ui.Page` and its constants (`PageDashboard`, `PageAccount`,
+- [x] Add `ui.Page` and its constants (`PageDashboard`, `PageAccount`,
       `PageProxy`, `PageKeepAlive`, `PageStartup`, `PageTerminals`, `PageLogs`,
       `PageSettings`, `PageProfiles`), `State.Page` and `State.Settings`;
       default to the dashboard.
-- [ ] Add `Actions.ShowPage func(Page)`; the sidebar and the tray use it, and
+- [x] Add `Actions.ShowPage func(Page)`; the sidebar and the tray use it, and
       the gui stores the page in the view state and invalidates the one window.
-- [ ] Rewrite `ui.View` as the shell: title bar, sidebar, content, global
+- [x] Rewrite `ui.View` as the shell: title bar, sidebar, content, global
       status toast and save bar. `navItem` draws the icon and label; the active
       page uses the accent tint. Icons for the pages go in `ui/icons.go`.
-- [ ] Split `ui/settings.go`: keep `SettingsState` and the section builders;
+- [x] Split `ui/settings.go`: keep `SettingsState` and the section builders;
       delete `SettingsView`, `settingsBody`, `settingsTabs`, `settingsTabBar`,
       `settingsPage`, `profileBar` and `pageEffect`. Render the sections as
       page functions called by the shell.
-- [ ] Remove `SettingsState.Tab` and `SettingsActions.Close`: the page is
+- [x] Remove `SettingsState.Tab` and `SettingsActions.Close`: the page is
       `State.Page`, and closing the window is hiding it. Update every test
       helper that set `Tab` or called `Close`.
-- [ ] Move the save/discard controls out of the settings window footer into a
+- [x] Move the save/discard controls out of the settings window footer into a
       shell-level bar at the bottom of the content; it appears only while
       `SettingsState.Changed()`. 保存 applies, 放弃 reloads.
-- [ ] `SettingsState` becomes a long-lived draft: created at startup, kept
+- [x] `SettingsState` becomes a long-lived draft: created at startup, kept
       while the window is hidden, reloaded by 保存, 放弃, a profile switch and
       an external configuration change. The old "reopening discards" rule is
       gone.
-- [ ] `internal/gui`: delete `settingsWindow`, `openSettings`, `hideSettings`,
+- [x] `internal/gui`: delete `settingsWindow`, `openSettings`, `hideSettings`,
       `closeSettings` and their close handlers; one window at 900×740 (min
       720×560); `showWindow` shows and focuses without changing the page;
       `showPage` selects the page, shows and focuses.
-- [ ] Remove `Actions.Settings` and the Ctrl+, shortcut. The window's `⋯`
+- [x] Remove `Actions.Settings` and the Ctrl+, shortcut. The window's `⋯`
       menu is not added back; quit stays in the tray.
-- [ ] While a pre-login panel owns the flow (`panelOpen`), the content shows
+- [x] While a pre-login panel owns the flow (`panelOpen`), the content shows
       the panel regardless of the selected page, and the sidebar is disabled.
       Esc keeps cancelling the panel.
-- [ ] Tests: page switching through the sidebar; one window; the draft survives
+- [x] Tests: page switching through the sidebar; one window; the draft survives
       a hide; the save bar appears and clears; a11y roles for the nav.
-- **Status:** pending.
+- **Status:** complete.
+
+Notes:
+
+- The first-run panel lost its `更多设置…` button with `Actions.Settings`; a
+  fresh install reaches the other pages after phase 2 makes 账户 the first-run
+  form. The panel still owns the content and disables the sidebar according to
+  the plan.
+- `多账户` exists as a transitional picker (select, 新建, 复制, 删除) so profile
+  management does not disappear between this phase and phase 3, which replaces
+  it with the account rows.
+- The tray's `显示窗口` item still calls `ShowWindow`; phase 4 renames it to
+  `打开仪表盘` and points it at `ShowPage(PageDashboard)`.
+- The dashboard keeps its copy menu until phase 4 moves PAC and Clash to 代理.
 
 ### Phase 2: Account page, gateway field and password row
 

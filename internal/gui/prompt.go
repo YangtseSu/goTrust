@@ -333,7 +333,7 @@ func (a *app) cancelCode(cause error) {
 // storeChangedPassword rewrites a profile's credential after the gateway
 // accepted a change. The next login needs it; a profile that does not store
 // passwords keeps it in memory only, exactly like a password typed into the
-// settings window.
+// account page.
 func (a *app) storeChangedPassword(profileName, newPassword string) {
 	cfg := a.mutableConfig()
 	index := cfg.ProfileIndex(profileName)
@@ -359,7 +359,7 @@ func (a *app) storeChangedPassword(profileName, newPassword string) {
 		}
 	}
 	a.mu.Unlock()
-	a.invalidateSettings()
+	a.invalidate()
 	a.logf("stored the changed password for profile %s", name)
 }
 
@@ -482,7 +482,7 @@ func (a *app) chooseAuth(ctx context.Context, methods []session.AuthMethod) (ses
 			return session.AuthMethod{}, result.err
 		}
 		// Remember the answer: auto mode asks only once per gateway, and the
-		// store method is what the settings window shows next time.
+		// store method is what the account page shows next time.
 		a.storeAuthChoice(result.method)
 		return result.method, nil
 	case <-ctx.Done():

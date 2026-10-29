@@ -81,6 +81,13 @@ func Run(configPath string) error {
 		}
 	}
 
+	// One settings draft lives as long as the window: a page switch or hiding
+	// the window keeps the edits, and the pages render it in place.
+	application.settings = gotrustui.NewSettingsState(cfg, application.logDir)
+	application.mu.Lock()
+	application.view.Settings = application.settings
+	application.mu.Unlock()
+
 	// The prompts belong to the window: a click captcha needs an image, an SSO
 	// login needs a pasted callback URL. The headless front-end lives in
 	// cmd/gotrust-cli, so this binary has exactly one set of answers.
@@ -129,9 +136,12 @@ type app struct {
 	logDir     string
 
 	mu sync.RWMutex
-	// view is the main window and tray snapshot.
+	// view is the window and tray snapshot.
 	view gotrustui.State
-	// settings is the settings window's draft, nil while the window is closed.
+	// settings is the window's settings draft. It is created at startup and
+	// kept for the life of the process, so hiding the window or switching a
+	// page keeps the edits; only 保存, 放弃, a profile switch and a setup save
+	// reload it.
 	settings *gotrustui.SettingsState
 
 	proxy *gotrustproxy.Server
@@ -140,10 +150,7 @@ type app struct {
 	// tunnel identity.
 	profileLock *profilelock.Lock
 	window      atomicWindow
-	// settingsWindow is the separate settings window; the main window stays a
-	// status and connection page.
-	settingsWindow atomicWindow
-	tray           atomicTray
+	tray        atomicTray
 	// proxyCancel ends the listeners of the live session. It is separate from
 	// the login attempt's context, which the async helper cancels on return.
 	proxyCancel context.CancelFunc
@@ -178,7 +185,7 @@ type app struct {
 	// quitting lets the main window's close handler destroy it during Quit
 	// instead of hiding it in the tray.
 	quitting bool
-	// localeChoice is the settings window's language entry: 0 follows the
+	// localeChoice is the language picker's entry: 0 follows the
 	// desktop, 1 is Chinese, 2 is English. mygo remembers the language itself;
 	// this only keeps the picker in step for the rest of the run.
 	localeChoice int
@@ -205,20 +212,19 @@ func (a *app) runUI(ctx context.Context) error {
 		a.mu.Unlock()
 	})
 
-	// The settings title is set once, so a language change has to set it again;
-	// the menus and the windows' views are rebuilt from the catalogs anyway.
+	// The tray and the window are rebuilt from the catalogs; a language change
+	// only has to invalidate them.
 	mygo.App.OnLocaleChanged(func(string) {
-		if window := a.settingsWindow.Load(); window != nil {
-			window.SetTitle(locales.WindowSettingsTitle())
-		}
 		a.refreshTray()
 		a.invalidate()
-		a.invalidateSettings()
 	})
 
 	mygo.App.WhenReady(func() {
 		a.mu.Lock()
 		a.localeChoice = initialLocaleChoice()
+		if a.settings != nil {
+			a.settings.LocaleIndex = a.localeChoice
+		}
 		a.mu.Unlock()
 		a.reconcileAutostart()
 
@@ -255,8 +261,8 @@ func (a *app) runUI(ctx context.Context) error {
 }
 
 // reconcileAutostart makes the desktop's entry match the settings file. The
-// settings window applies a toggle immediately; this repairs a divergence
-// after a crash or a manual edit.
+// startup page applies a toggle immediately; this repairs a divergence after a
+// crash or a manual edit.
 func (a *app) reconcileAutostart() {
 	if err := mygo.App.SetOpenAtLogin(a.cfg.App.Autostart); err != nil {
 		a.logf("autostart: %v", err)
@@ -269,10 +275,10 @@ func (a *app) openWindow(hidden bool) {
 	}
 	window := mygo.NewWindow(mygo.WindowOptions{
 		Title:          "goTrust",
-		Width:          540,
-		Height:         640,
-		MinWidth:       440,
-		MinHeight:      480,
+		Width:          900,
+		Height:         740,
+		MinWidth:       720,
+		MinHeight:      560,
 		TitleBarStyle:  mygo.TitleBarHidden,
 		TitleBarHeight: gotrustui.TitleBarHeight,
 		Hidden:         hidden,
@@ -299,6 +305,8 @@ func (a *app) openWindow(hidden bool) {
 	a.window.Store(window)
 }
 
+// showWindow reveals the window on the page it already shows. The tray icon
+// uses it, so a click never loses the page the user was reading.
 func (a *app) showWindow() {
 	if window := a.window.Load(); window != nil {
 		window.Show()
@@ -306,74 +314,19 @@ func (a *app) showWindow() {
 	}
 }
 
-// openSettings creates the settings window, or reveals the one already open.
-// Each opening starts from the saved settings, so closing without 保存 really
-// discards the edits.
-//
-// It runs in whatever frame asked for it, 设置 in the ⋯ menu included: creating,
-// showing and hiding a window inside a frame are all safe on the pinned mygo
-// (see hideSettings).
-func (a *app) openSettings() {
-	if window := a.settingsWindow.Load(); window != nil {
-		// The window is hidden, not destroyed, so a close cannot tear down a
-		// GTK window while its own view is still running. Each opening starts
-		// from the saved settings again.
-		a.resetSettingsDraft()
-		a.refreshSettingsTerminals()
-		window.Show()
-		window.Focus()
-		return
-	}
-
-	a.resetSettingsDraft()
-	a.refreshSettingsTerminals()
-
-	window := mygo.NewWindow(mygo.WindowOptions{
-		Title:          locales.WindowSettingsTitle(),
-		Width:          600,
-		Height:         760,
-		MinWidth:       560,
-		MinHeight:      440,
-		TitleBarStyle:  mygo.TitleBarHidden,
-		TitleBarHeight: gotrustui.TitleBarHeight,
-		Content: ui.View(func(c *ui.Context) {
-			a.mu.RLock()
-			state := a.settings
-			a.mu.RUnlock()
-			if state != nil {
-				gotrustui.SettingsView(state, a.settingsActions())(c)
-			}
-		}),
-	})
-	a.settingsWindow.Store(window)
-	// A close hides the window, as it does for the main window, so reopening
-	// starts from the saved settings again.
-	window.OnClose(func(event *mygo.CloseEvent) {
-		a.mu.RLock()
-		quitting := a.quitting
-		a.mu.RUnlock()
-		if quitting {
-			return
-		}
-		event.PreventDefault()
-		a.hideSettings(window)
-	})
-	window.OnClosed(func() {
-		a.settingsWindow.Store(nil)
-		a.mu.Lock()
-		a.settings = nil
-		a.mu.Unlock()
-	})
-	window.Show()
-}
-
-func (a *app) resetSettingsDraft() {
-	online := a.manager != nil && a.manager.State().Phase == session.PhaseOnline
+// showPage selects a page, then shows and focuses the window. The sidebar and
+// the tray's 打开仪表盘 use it.
+func (a *app) showPage(page gotrustui.Page) {
 	a.mu.Lock()
-	a.settings = gotrustui.NewSettingsState(a.cfg, a.logDir)
-	a.settings.Online = online
-	a.settings.LocaleIndex = a.localeChoice
+	a.view.Page = page
 	a.mu.Unlock()
+	if page == gotrustui.PageTerminals {
+		// The list is the portal's, not the draft's: read it when the page
+		// opens rather than on every frame of the window.
+		a.refreshSettingsTerminals()
+	}
+	a.invalidate()
+	a.showWindow()
 }
 
 func (a *app) openTray() bool {
@@ -402,11 +355,12 @@ func (a *app) actions() gotrustui.Actions {
 	return gotrustui.Actions{
 		Login:         a.startLogin,
 		Logout:        a.disconnect,
-		Settings:      a.openSettings,
+		ShowPage:      a.showPage,
 		ShowWindow:    a.showWindow,
 		SelectProfile: a.selectProfile,
 		Quit:          func() { mygo.App.Quit() },
 		SaveSetup:     a.saveSetup,
+		Settings:      a.settingsActions(),
 
 		AddCaptchaPoint: a.addCaptchaPoint,
 		UndoCaptcha:     a.undoCaptchaPoint,
@@ -432,7 +386,6 @@ func (a *app) actions() gotrustui.Actions {
 		CopyResource: a.copyResource,
 		CopyPAC:      a.copyPAC,
 		CopyClash:    a.copyClash,
-		OpenLogs:     a.openLogs,
 	}
 }
 
@@ -512,7 +465,7 @@ func (a *app) copyResource(value string) {
 	a.setStatus(locales.Copied(), false)
 }
 
-// settingsActions are the settings window's callbacks.
+// settingsActions are the draft's callbacks.
 func (a *app) settingsActions() gotrustui.SettingsActions {
 	mutate := func(fn func(*gotrustui.SettingsState)) {
 		a.mu.RLock()
@@ -522,11 +475,10 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 			return
 		}
 		fn(state)
-		a.invalidateSettings()
+		a.invalidate()
 	}
 	return gotrustui.SettingsActions{
-		Save:  a.saveSettings,
-		Close: a.closeSettings,
+		Save: a.saveSettings,
 		Discard: func() {
 			cfg := a.currentConfig()
 			mutate(func(state *gotrustui.SettingsState) {
@@ -573,7 +525,7 @@ func (a *app) setLocale(tag string) {
 		a.settings.LocaleIndex = a.localeChoice
 	}
 	a.mu.Unlock()
-	a.invalidateSettings()
+	a.invalidate()
 	// The picker runs inside a frame and a language change redraws every
 	// window, so it is applied on the next turn of the main loop, as windows
 	// are created and hidden there.
@@ -611,14 +563,14 @@ func (a *app) openConfig() {
 	if path == "" {
 		if state != nil {
 			state.SetStatus(locales.ConfigPathUnavailable(), true)
-			a.invalidateSettings()
+			a.invalidate()
 		}
 		return
 	}
 	if err := mygo.Shell.OpenPath(path); err != nil {
 		if state != nil {
 			state.SetStatus(locales.OpenConfigFailed(err.Error()), true)
-			a.invalidateSettings()
+			a.invalidate()
 		}
 		a.logf("open config: %v", err)
 	}
@@ -640,7 +592,7 @@ func (a *app) openSettingsPassword() {
 	state.PasswordStatus = locales.RulesLoading()
 	state.PasswordError = false
 	a.mu.Unlock()
-	a.invalidateSettings()
+	a.invalidate()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -659,7 +611,7 @@ func (a *app) openSettingsPassword() {
 			}
 		}
 		a.mu.Unlock()
-		a.invalidateSettings()
+		a.invalidate()
 	}()
 }
 
@@ -677,7 +629,7 @@ func (a *app) refreshSettingsTerminals() {
 	state.TrustStatus = locales.TerminalsLoading()
 	state.TrustError = false
 	a.mu.Unlock()
-	a.invalidateSettings()
+	a.invalidate()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -700,7 +652,7 @@ func (a *app) refreshSettingsTerminals() {
 			}
 		}
 		a.mu.Unlock()
-		a.invalidateSettings()
+		a.invalidate()
 	}()
 }
 
@@ -717,14 +669,14 @@ func (a *app) setSettingsTrusted(trusted bool) {
 		state.TrustStatus = locales.TrustNeedsConnection()
 		state.TrustError = true
 		a.mu.Unlock()
-		a.invalidateSettings()
+		a.invalidate()
 		return
 	}
 	state.TrustBusy = true
 	state.TrustStatus = locales.Submitting()
 	state.TrustError = false
 	a.mu.Unlock()
-	a.invalidateSettings()
+	a.invalidate()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -749,7 +701,7 @@ func (a *app) setSettingsTrusted(trusted bool) {
 			}
 		}
 		a.mu.Unlock()
-		a.invalidateSettings()
+		a.invalidate()
 		if err == nil {
 			go a.refreshSettingsTerminals()
 		}
@@ -770,7 +722,7 @@ func (a *app) cancelSettingsPassword() {
 	state.PasswordStatus = ""
 	state.PasswordError = false
 	a.mu.Unlock()
-	a.invalidateSettings()
+	a.invalidate()
 }
 
 // submitSettingsPassword sends the voluntary change through the live session.
@@ -788,14 +740,14 @@ func (a *app) submitSettingsPassword() {
 		state.PasswordStatus = err.Error()
 		state.PasswordError = true
 		a.mu.Unlock()
-		a.invalidateSettings()
+		a.invalidate()
 		return
 	}
 	state.PasswordBusy = true
 	state.PasswordStatus = locales.PasswordResetting()
 	state.PasswordError = false
 	a.mu.Unlock()
-	a.invalidateSettings()
+	a.invalidate()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -815,7 +767,7 @@ func (a *app) submitSettingsPassword() {
 			}
 		}
 		a.mu.Unlock()
-		a.invalidateSettings()
+		a.invalidate()
 	}()
 }
 
@@ -849,27 +801,6 @@ func (a *app) changePasswordOnline(ctx context.Context, oldPassword, newPassword
 	}
 	a.storeChangedPassword(profile, newPassword)
 	return nil
-}
-
-func (a *app) closeSettings() {
-	if window := a.settingsWindow.Load(); window != nil {
-		a.hideSettings(window)
-		return
-	}
-	a.mu.Lock()
-	a.settings = nil
-	a.mu.Unlock()
-}
-
-// hideSettings hides the settings window and discards its draft, so reopening
-// loads the saved settings again. Hide is safe from the window's own frame:
-// mygo 0.7.2 defers a hide made while the surface draws to the next idle, as it
-// defers a destroy (PR #674), which is the fix for issue #680.
-func (a *app) hideSettings(window *mygo.Window) {
-	window.Hide()
-	a.mu.Lock()
-	a.settings = nil
-	a.mu.Unlock()
 }
 
 // async runs work off the UI thread and reports the outcome in the status line.
@@ -963,6 +894,13 @@ func (a *app) saveSetup(draft gotrustui.SetupDraft, connect bool) {
 
 	a.setSetupError("")
 	a.applyConfig(cfg)
+	// The setup form wrote the profile under the draft; reload the pages'
+	// draft so the account page shows what reached the file.
+	a.mu.Lock()
+	if a.settings != nil {
+		a.settings.Reload(cfg)
+	}
+	a.mu.Unlock()
 	if connect {
 		a.async(a.connect)
 	}
@@ -1075,7 +1013,7 @@ func (a *app) onSessionState(state session.State) {
 		a.settings.Online = state.Phase == session.PhaseOnline
 	}
 	a.mu.Unlock()
-	a.invalidateSettings()
+	a.invalidate()
 
 	if window := a.window.Load(); window != nil {
 		window.Invalidate()
@@ -1311,12 +1249,12 @@ func (a *app) saveSettings() {
 	cfg, err := state.Apply()
 	if err != nil {
 		state.SetStatus(err.Error(), true)
-		a.invalidateSettings()
+		a.invalidate()
 		return
 	}
 	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
 		state.SetStatus(locales.SaveFailed(err.Error()), true)
-		a.invalidateSettings()
+		a.invalidate()
 		a.logf("save settings: %v", err)
 		return
 	}
@@ -1339,10 +1277,10 @@ func (a *app) saveSettings() {
 	}
 
 	a.reconcileProfileSwitch(previous, cfg)
-	a.invalidateSettings()
+	a.invalidate()
 }
 
-// selectProfile switches accounts from the tray or the settings window. One
+// selectProfile switches accounts from the tray or the 多账户 page. One
 // live session at a time: the old one disconnects first.
 func (a *app) selectProfile(name string) {
 	cfg := a.currentConfig()
@@ -1373,14 +1311,14 @@ func (a *app) selectProfile(name string) {
 		}
 	}
 
-	// Keep an open settings window in step with the switch.
+	// Keep the pages' draft in step with the switch.
 	a.mu.RLock()
 	settings := a.settings
 	a.mu.RUnlock()
 	if settings != nil {
 		settings.Reload(cfg)
 		settings.SetStatus(locales.ProfileSwitched(), false)
-		a.invalidateSettings()
+		a.invalidate()
 	}
 }
 
@@ -1462,7 +1400,7 @@ func (a *app) setAutostart(on bool) {
 	if err := mygo.App.SetOpenAtLogin(on); err != nil {
 		if state != nil {
 			state.SetStatus(locales.AutostartFailed(err.Error()), true)
-			a.invalidateSettings()
+			a.invalidate()
 		}
 		a.logf("autostart: %v", err)
 		return
@@ -1474,7 +1412,7 @@ func (a *app) setAutostart(on bool) {
 			status = locales.AutostartOff()
 		}
 		state.SetStatus(status, false)
-		a.invalidateSettings()
+		a.invalidate()
 	}
 }
 
@@ -1505,14 +1443,14 @@ func (a *app) openLogs() {
 	if a.logDir == "" {
 		if state != nil {
 			state.SetStatus(locales.LogDirUnavailable(), true)
-			a.invalidateSettings()
+			a.invalidate()
 		}
 		return
 	}
 	if err := mygo.Shell.OpenPath(a.logDir); err != nil {
 		if state != nil {
 			state.SetStatus(locales.OpenLogsFailed(err.Error()), true)
-			a.invalidateSettings()
+			a.invalidate()
 		}
 		a.logf("open logs: %v", err)
 	}
@@ -1532,7 +1470,7 @@ func (a *app) discoverAuth() {
 	target, err := state.Target()
 	if err != nil {
 		state.SetStatus(err.Error(), true)
-		a.invalidateSettings()
+		a.invalidate()
 		return
 	}
 
@@ -1540,7 +1478,7 @@ func (a *app) discoverAuth() {
 	state.Discovering = true
 	state.Methods = nil
 	state.MethodsFrom = ""
-	a.invalidateSettings()
+	a.invalidate()
 
 	go func() {
 		// The pre-login request has a 20 s transport timeout of its own; the
@@ -1566,7 +1504,7 @@ func (a *app) discoverAuth() {
 				state.SetMethods(methods, key, locales.MethodsLoaded(len(methods)), false)
 				a.logf("gateway offers %d authentication method(s)", len(methods))
 			}
-			a.invalidateSettings()
+			a.invalidate()
 		})
 	}()
 }
@@ -1671,12 +1609,6 @@ func (a *app) setStatusError(message string) {
 
 func (a *app) invalidate() {
 	if window := a.window.Load(); window != nil {
-		window.Invalidate()
-	}
-}
-
-func (a *app) invalidateSettings() {
-	if window := a.settingsWindow.Load(); window != nil {
 		window.Invalidate()
 	}
 }

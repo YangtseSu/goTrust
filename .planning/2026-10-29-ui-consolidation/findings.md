@@ -141,6 +141,21 @@ status
   打开仪表盘 switches to the dashboard. 打开默认应用 is disabled without a
   launch URL; 连接 is disabled while busy.
 
+## Phase 1 facts
+
+- A mygo Row centers its children vertically; the shell row and the sidebar's
+  own row need `AlignItems(ui.Stretch)` or the sidebar and the page float in the
+  middle of the window.
+- The captcha is drawn at `DisplaySize` (up to 440×200) and maps clicks against
+  that size. The declared 720 minimum leaves a 464 DIP content column, so the
+  cap still fits; a narrower test window clipped the image and skewed the click
+  mapping.
+- The page headings repeat the sidebar labels by design; `tester.Click(label)`
+  reaches the sidebar first because the sidebar is built before the content.
+- The draft is a pointer in `State.Settings`; every page renders it in place,
+  so hiding the window (the close handler only calls `Hide`) no longer runs
+  code that discards it.
+
 ## Mockup caveats
 
 - The mockup uses a 900×740 window; the real mygo window draws its own 34 DIP

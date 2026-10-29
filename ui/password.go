@@ -14,7 +14,7 @@ import (
 )
 
 // PasswordPrompt is a password change: the gateway's forced reset during login,
-// or the voluntary reset the settings window offers while online. Both use the
+// or the voluntary reset the account page offers while online. Both use the
 // same fields and rules; only the gateway's message and the skip offer differ.
 type PasswordPrompt struct {
 	// Forced changes carry the gateway's message, the account, the server-side
@@ -230,7 +230,7 @@ func passwordPanel(c *ui.Context, state *State, actions Actions) {
 	})
 }
 
-// settingsPasswordPanel is the voluntary reset the settings window shows in
+// settingsPasswordPanel is the voluntary reset the account page shows in
 // place of the sections, so the fields and the rules have room.
 func settingsPasswordPanel(c *ui.Context, state *SettingsState, actions SettingsActions) {
 	prompt := state.Password
