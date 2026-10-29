@@ -13,11 +13,11 @@ separate chip.
 
 ## Next Step
 
-Phase 9 is complete. The optional traffic card (Phase 7) has not been started.
+Phase 10 is complete. The optional traffic card (Phase 7) has not been started.
 
 ## Current Phase
 
-Phase 9 complete; Phase 7 optional and not started.
+Phase 10 complete; Phase 7 optional and not started.
 
 ## Decisions already made
 
@@ -555,6 +555,28 @@ Notes:
   project/license rows; the version row is gone.
 - Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` and
   `reuse lint`; renders at 900 and 720 in both appearances.
+
+### Phase 10: Copy and About cleanup
+
+- [x] 保活's interval and target hints are gone; a bad or short interval is
+      refused with the 10s minimum, without the 90s example.
+- [x] 终端管理 loses its 随连接实时读取 caption.
+- [x] 设置's language section loses its hint.
+- [x] 关于 is its own page below 设置, with no 关于 heading inside.
+- **Status:** complete.
+
+Notes:
+
+- `errKeepAliveInvalid` now takes the minimum (`config.MinimumKeepAliveInterval`)
+  and both messages name the 10s floor: a malformed value reads
+  "保活间隔不是有效时长，最短允许 10s". `TestKeepAliveIntervalValidation`
+  covers 3s and a unitless 3.
+- `PageAbout` sits between 设置 and 多账户; `pageLabel` uses the existing
+  关于 string, the sidebar has its own info glyph, and `aboutPage` draws the
+  centered shield and name over the card and the two link rows with no
+  heading. The settings page keeps language and local data only.
+- The render set gained `about` (900) and `page-about-*` (720, dark); the
+  terminal page's 720 render shows the heading refresh and no caption.
 
 ## Out of scope
 

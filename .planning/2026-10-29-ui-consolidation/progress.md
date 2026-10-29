@@ -256,6 +256,20 @@ The review settled these points:
 - Render: `GOTRUST_RENDER_DIR` wrote 98 images after the chip change; the five
   dashboard phases, dark mode, the panel and 720×560 were checked.
 
+### Phase 10: Copy and About cleanup
+
+- **Status:** complete
+- 保活: removed both hint captions; `errKeepAliveInvalid` takes the minimum
+  and the invalid/short messages name 10s, never 90s; a unitless or short
+  value is covered by `TestKeepAliveIntervalValidation`.
+- 终端管理: the 随连接实时读取 caption is gone; the heading refresh and the
+  offline cards remain.
+- 设置: the language hint is gone; the page is language + local data only.
+- About: a separate page below 设置 with its own info glyph; inside, no 关于
+  heading, a centered shield and `goTrust <version>`, then the project and
+  license rows.
+- Verification: full checks, renders including the new 关于 page.
+
 ### Phase 9: Mockup corrections after the trial
 
 - **Status:** complete

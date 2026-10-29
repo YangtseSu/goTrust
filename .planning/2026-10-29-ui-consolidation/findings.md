@@ -294,3 +294,12 @@ status
 - **Offline terminal cards are a state, not a different page.** Drawing the
   summary and both cards with zero counts keeps the page's shape; the refresh
   is disabled until a session exists.
+
+## Phase 10 facts
+
+- **A validation message states the constraint, not the default.** The
+  invalid-interval message now takes `MinimumKeepAliveInterval` and reads
+  "最短允许 10s"; the 90s default is a placeholder, not a rule.
+- **A page below 设置 is a new Page.** `PageAbout` shifts `PageProfiles`'
+  value but no state is persisted by number; `pageLabel` reuses 关于 for the
+  sidebar and `aboutPage` draws no heading, so the page body never repeats it.
