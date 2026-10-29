@@ -371,3 +371,31 @@ The review settled these points:
   and dark), five seconds of the real binary under headless mutter with a
   clean exit. No live gateway was available; live rates rest on the counter
   and sampler tests.
+
+## Session: mygo usage audit (2026-10-29)
+
+Read all 116 pages under the mygo checkout's `docs/` (about 24k lines)
+in five parallel readers, then checked every API the app uses against the
+pinned v0.7.2 source. The checkout is v0.7.3-11; `FocusGroup`,
+`OnSecondInstance`, `Tooltip`, `SwitchBase`, `Menu`, `chart` and `Handle` all
+exist in v0.7.2, so the findings hold for the pin.
+
+Verdict: the architecture follows the documented model (views are functions
+of state, no stored build values, `mygo vet` clean, guarded state plus
+`Invalidate`, the tray hide-on-close pattern, the drawn title bar, i18n and
+drawing). One real data race and five smaller deviations were found; they are
+Phases 14-19.
+
+- The race: `SettingsState` fields are written from session and network
+  goroutines under `a.mu`, while the frame reads them without it. Reproduced
+  with `-race` (read at `ui/pages.go:261`).
+- `themeFor` rebuilds from `ui.LightTheme()`/`DarkTheme()`, dropping the
+  desktop text scale and high contrast that `Theme.follow` applies.
+- The sidebar declares `RoleTabList`/`RoleTab` without `FocusGroup`.
+- Icon-only controls lack a tooltip; the resource row's menu glyph stays
+  `RoleImage`.
+- No `OnSecondInstance`, so a second launch does not show the window.
+- The README says a tray click opens the window; on Linux a click opens the
+  menu and activation (a double click) is `OnClick`.
+- Not planned: reusing chart paths (60 points at 1 Hz), the 64×64 tray icon,
+  and moving the view's idempotent model syncs out of the build.

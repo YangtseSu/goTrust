@@ -13,12 +13,12 @@ separate chip.
 
 ## Next Step
 
-Phase 7 (the traffic card) is complete. No phase is open; the log, metrics and
-startup labels keep their current choices.
+Start Phase 14: move the settings draft's writes to the main thread. It is the
+one real bug of the mygo usage audit; Phases 15-19 follow in the order below.
 
 ## Current Phase
 
-Phase 7 complete; no phase open.
+Phase 14 pending; Phases 15-19 planned after it.
 
 ## Decisions already made
 
@@ -55,6 +55,14 @@ Phase 7 complete; no phase open.
   `github.com/YangtseSu/goTrust`, license AGPL-3.0-or-later, copyright.
 - **No memory display.** The traffic card (Phase 7) is built: the proxy's
   last minute of up/down throughput, between the session and the resources.
+- **mygo usage audit (2026-10-29).** All 116 pages under the mygo docs were
+  read and every used API checked against the pinned v0.7.2. The settings
+  draft is main-thread state: background results are delivered through
+  `RunOnMain`, not written under `a.mu` while the frame reads them. The theme
+  starts from `*c.Theme()`, so the desktop's text scale survives. The sidebar
+  is a real tab list (`FocusGroup`). Icon-only controls carry a tooltip and
+  the row action is a menu button. A second launch restores the window. The
+  tray keeps its menu on click, and the docs say so.
 - **Design reference:** `docs/mockup.html`, the layout the views follow. The
   status/button study that chose the stateful control was
   `/tmp/gotrust-status-variants.html` (variant B); its outcome is recorded in
@@ -707,6 +715,89 @@ Notes:
   keeps its plain-text tail; the toolkit metrics stay; the startup labels
   stay the accurate ones.
 
+### Phase 14: The settings draft lives on the main thread
+
+The audit found a data race. The GUI publishes `SettingsState` fields from
+session and network goroutines under `a.mu`, while the frame reads the same
+fields without it: `openWindow` copies `State` under `RLock`, then the view
+reads the shared `*SettingsState`. `go test -race` reproduces it with a read
+at `ui/pages.go:261` (`settings.Online`); the writers are `onSessionState`
+(`internal/gui/gui.go:1099`) and the completions of `refreshSettingsTerminals`,
+`setSettingsTrusted` and `submitSettingsPassword`.
+
+- [ ] Give `app` a `runOnUI func(func())` seam, defaulting to
+      `mygo.RunOnMain`; tests replace it with an inline call. (The seam is
+      required: the GUI tests call `onSessionState` without `App.Run`, where
+      `RunOnMain` would wait for a loop that never starts.)
+- [ ] Publish `settings.Online` through the seam in `onSessionState`.
+- [ ] Publish the three async completions through the seam, as `discoverAuth`
+      already does; the busy flags they set before the goroutine stay on the
+      main thread.
+- [ ] Sweep for other `SettingsState` writes from goroutines; `setLogLines`
+      and `discoverAuth` are already correct.
+- [ ] Test: `onSessionState` runs its settings write through the injected
+      seam; `go test -race ./internal/gui ./ui` is clean.
+- **Status:** pending.
+
+Notes:
+
+- Once every writer is on the main thread, `a.mu` no longer guards the draft's
+  fields; it stays for `a.view`, `a.cfg` and the two pointers.
+- The seam's default is `mygo.RunOnMain` (fail-safe: a missed injection blocks
+  in a test instead of hiding the race).
+
+### Phase 15: The theme keeps the desktop's preferences
+
+`themeFor` rebuilds from `ui.LightTheme()`/`DarkTheme()`, which bypasses
+`Theme.follow`: the desktop's text scale and high-contrast adjustments are
+lost. The docs' recipe is `t := *c.Theme()` and then override.
+
+- [ ] `themeFor(c)` copies `*c.Theme()`, overrides the palette colours and
+      keeps `FontSize`; under `c.Preferences().HighContrast`, mix
+      `Border`/`TextMuted` toward `Text` as `follow` does.
+- [ ] `View` calls `c.SetTheme(themeFor(c))`; `paletteFor(t.Dark)` still
+      provides the app's own surfaces.
+- [ ] Test: `ui.NewTester` with `SetPreferences(ui.Preferences{TextScale:
+      1.5})` renders larger text; a unit test asserts the copied `FontSize`.
+- **Status:** pending.
+
+### Phase 16: The sidebar is a real tab list
+
+`RoleTabList`/`RoleTab` promise a tab list, but every row is its own Tab stop
+and the arrows do not move; mygo's own `Tabs` wraps the list in `FocusGroup`
+(v0.7.2 `ui/base.go`).
+
+- [ ] Add `.FocusGroup(ui.Vertical)` to the sidebar's tab column.
+- [ ] Update `TestMainWindowTabOrder`: Tab enters the group at the selected
+      tab and the next Tab leaves it; add a test that Down moves to the next
+      tab and Enter activates it.
+- **Status:** pending.
+
+### Phase 17: Icon-only controls speak for themselves
+
+- [ ] `.Tooltip(label)` on the window controls, the appearance switch, the
+      power control and the resource row's menu glyph.
+- [ ] The row glyph takes `.Role(ui.RoleMenuButton)`: `Element.Menu` promotes
+      only `RoleAuto`/`RoleButton`, so it stays an image today.
+- [ ] Test: Tab reaches the row menu and Enter opens it; the renders keep
+      their look.
+- **Status:** pending.
+
+### Phase 18: A second launch brings the window forward
+
+- [ ] Register `mygo.App.OnSecondInstance` before `App.Run`: restore, show and
+      focus the window, keeping the page.
+- [ ] Smoke: two launches under one headless session; the second exits and the
+      first stays.
+- **Status:** pending.
+
+### Phase 19: The tray documentation matches Linux
+
+- [ ] README and `docs/design.md`: a tray with a menu opens it on click;
+      activation shows the window (a double click under AppIndicator), and
+      `打开仪表盘` is the menu item that always works.
+- **Status:** pending.
+
 ## Out of scope
 
 - A memory-usage display or chart.
@@ -715,3 +806,8 @@ Notes:
 - Changing the `core/atrust` protocol layer; only the proxy counters above
   touch `core/` and only in the optional phase.
 - Reworking the resource row's two-click menu; the current row menu stays.
+- Reusing chart paths and slices in the traffic card: 60 points once a second
+  do not justify `MinMax`/`LineInto`/`StrokePolyline`.
+- The 64×64 tray icon: the panel scales it.
+- Moving the view's idempotent model syncs (`refresh`, `dropStaleMethods`,
+  `logSeen`) out of the build; they do no I/O.

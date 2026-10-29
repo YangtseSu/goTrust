@@ -346,3 +346,36 @@ status
   `.view-wrap` is the same page scroll. The resource list's own `Scroll` and
   its three-row minimum only made sense while the dashboard was fixed, so
   they went with the change.
+
+## mygo usage audit facts (2026-10-29)
+
+- **The settings draft is not main-thread-only today.** `openWindow` copies
+  `State` under `a.mu.RLock` and the view then reads the shared
+  `*SettingsState`; meanwhile `onSessionState` (`internal/gui/gui.go:1099`)
+  and the terminal/trust/password completions write its fields under `a.mu`
+  from goroutines. A `-race` probe of the same pattern reports
+  `DATA RACE Read at ui/pages.go:261` (`settings.Online`). The docs' rule is
+  `Window.Update` for state changed off the main thread (`ui/views.md:170-175`);
+  `Invalidate` alone is for state the app guards itself.
+- **`themeFor` drops desktop preferences.** `c.Theme()` is
+  `LightTheme()/DarkTheme()` plus `Theme.follow(preferences)`
+  (`ui/runtime.go:516-521`, `ui/preferences.go:50-77`), which scales
+  `FontSize` and adjusts contrast. Rebuilding from `LightTheme()/DarkTheme()`
+  keeps the default 13/14 pt, so the desktop text scale and high contrast are
+  lost; `ui/styling.md:143-153` says to start from `*c.Theme()`.
+- **A tab list needs `FocusGroup`.** `ui.Tabs` wraps its `RoleTabList` in
+  `FocusGroup(Horizontal)` and marks tabs `Checked` (v0.7.2 `ui/base.go`);
+  our sidebar has the roles but no group, so every row is its own Tab stop.
+  `Element.FocusGroup(ui.Vertical)` exists in v0.7.2.
+- **`Element.Menu` does not make an image a menu button.** It sets
+  clickable/focusable and promotes only `RoleAuto`/`RoleButton` to
+  `RoleMenuButton` (v0.7.2 `ui/menu.go:65-69`); the resource row's icon keeps
+  `RoleImage`, so assistive technology reads an image.
+- **A second launch has no listener.** `RequestSingleInstanceLock` returns
+  false in the second instance and the first is only notified through
+  `OnSecondInstance` (`docs/app.md:96-108`); we register none, so the running
+  window does not come forward.
+- **Tray clicks on Linux.** With a menu set, a click opens the menu; an
+  `OnClick` listener answers activation, which AppIndicator sends on a double
+  click (`docs/menus.md:428-432`). Our pattern matches the documented one;
+  the README wording does not.
