@@ -325,5 +325,6 @@
   "proxyListeners": "Local listeners",
   "windowMinimize": "Minimize window",
   "windowMaximize": "Maximize window",
-  "windowClose": "Close window"
+  "windowClose": "Close window",
+  "aboutTagline": "aTrust desktop client · local SOCKS5/HTTP proxy"
 }

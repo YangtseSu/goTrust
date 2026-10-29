@@ -874,7 +874,7 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 		if captcha.Image == nil || width <= 0 || height <= 0 {
 			captionTone(c, locales.CaptchaMissing(), toneDanger)
 		} else {
-			ui.Box(c).Width(width).Height(height).Children(func() {
+			ui.Box(c).Width(width).Height(height).AlignSelf(ui.Center).Children(func() {
 				image := ui.Image(c, captcha.Image).Width(width).Height(height).Label(locales.CaptchaImage())
 				image.OnClick(func() {
 					x, y, ok := image.PointerPosition()

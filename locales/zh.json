@@ -325,5 +325,6 @@
   "proxyListeners": "本地监听",
   "windowMinimize": "最小化窗口",
   "windowMaximize": "最大化窗口",
-  "windowClose": "关闭窗口"
+  "windowClose": "关闭窗口",
+  "aboutTagline": "aTrust 桌面客户端 · 本地 SOCKS5 / HTTP 代理"
 }

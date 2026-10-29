@@ -1104,7 +1104,7 @@ func TestSettingsPageShowsLocalDataAndAbout(t *testing.T) {
 
 	_, about := newShell(t, state, actions, PageAbout)
 	for _, wanted := range []string{
-		"goTrust " + releaseVersion(), "项目主页", projectHost, "许可证", licenseLine,
+		"goTrust " + releaseVersion(), locales.AboutTagline(), "项目主页", projectHost, "许可证", licenseLine,
 	} {
 		if !about.HasText(wanted) {
 			t.Fatalf("%q is missing from 关于; texts: %v", wanted, about.Texts())

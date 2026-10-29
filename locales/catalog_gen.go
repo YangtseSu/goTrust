@@ -3321,3 +3321,13 @@ func WindowClose() string { return In(i18n.Locale()).WindowClose() }
 func (msgs Messages) WindowClose() string {
 	return Catalog.Format(msgs.locale, "windowClose", nil)
 }
+
+// AboutTagline says "aTrust 桌面客户端 · 本地 SOCKS5 / HTTP 代理"
+// in the language the app shows.
+func AboutTagline() string { return In(i18n.Locale()).AboutTagline() }
+
+// AboutTagline says "aTrust 桌面客户端 · 本地 SOCKS5 / HTTP 代理"
+// in the language of msgs.
+func (msgs Messages) AboutTagline() string {
+	return Catalog.Format(msgs.locale, "aboutTagline", nil)
+}

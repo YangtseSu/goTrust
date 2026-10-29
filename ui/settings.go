@@ -760,11 +760,13 @@ func aboutPage(c *ui.Context, actions SettingsActions) {
 	p := paletteOf(c)
 	pageScroll(c, func() {
 		card(c).Gap(rowGap).Children(func() {
-			ui.Column(c).AlignItems(ui.Center).Gap(theme.Space(1.5)).
-				PaddingY(theme.Space(2)).Children(func() {
-				ui.Icon(c, iconBrand).Size(48, 48).TextColor(p.accent)
-				ui.Text(c, "goTrust "+releaseVersion()).FontSize(theme.FontSize + 1).
+			ui.Column(c).AlignItems(ui.Center).Gap(theme.Space(2.5)).
+				PaddingY(theme.Space(14)).Children(func() {
+				ui.Icon(c, iconBrand).Size(72, 72).TextColor(p.accent)
+				ui.Text(c, "goTrust "+releaseVersion()).FontSize(theme.FontSize + 3).
 					FontWeight(600).TextColor(theme.Text)
+				ui.Text(c, locales.AboutTagline()).FontSize(theme.FontSize).
+					TextColor(p.muted)
 			})
 			ui.Divider(c)
 			linkRow(c, locales.ProjectHome(), projectHost, func() {
