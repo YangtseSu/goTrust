@@ -274,3 +274,23 @@ status
 - **The chip's mix survives the palette change.** `toneInk` still walks the
   fill toward the far end until it clears 4.8:1 on the chip's tint; the new
   accent/success/warning/danger values keep `TestToneInkPassesAA` green.
+
+## Phase 9 facts
+
+- **`HideWindowButtons` keeps the frame, not its buttons.** A window with
+  `TitleBarStyle: TitleBarHidden` and `HideWindowButtons: true` keeps GTK's
+  shadow, rounded corners and resize edges, and reports no title-bar insets;
+  the view draws its own 44 DIP strip and calls `Minimize`,
+  `Maximize`/`Unmaximize` and `Close`. Close still runs `OnClose`, which hides
+  the window.
+- **Labels above need a container, not `ui.Field`.** `ui.Field` is a label
+  column; `formColumn`/`formField` stack a muted caption over the control, as
+  the mockup draws the forms.
+- **The frame reports the content extents.** With the frame buttons hidden the
+  accessible frame is the 900x740 page, not 952x792; maximize took it to the
+  work area and restore brought it back.
+- **A content-sized segment needs `AlignSelf(Start)`.** In a card column a
+  `ui.Segmented` stretches unless it is told to sit at its own width.
+- **Offline terminal cards are a state, not a different page.** Drawing the
+  summary and both cards with zero counts keeps the page's shape; the refresh
+  is disabled until a session exists.

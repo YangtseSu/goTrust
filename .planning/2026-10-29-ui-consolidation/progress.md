@@ -256,6 +256,25 @@ The review settled these points:
 - Render: `GOTRUST_RENDER_DIR` wrote 98 images after the chip change; the five
   dashboard phases, dark mode, the panel and 720×560 were checked.
 
+### Phase 9: Mockup corrections after the trial
+
+- **Status:** complete
+- Forms: `formColumn`/`formField` put every page label above its control.
+- 日志: the toolbar, pane and footer are one card; the head (详细日志, 清除,
+  打开目录) stays above it.
+- 代理: the PAC and Clash/Mihomo rows fill the card with their 复制 at the
+  right; the listeners keep the filled form.
+- 终端管理: 刷新 moved to the page heading; the summary and both cards are
+  drawn before a session with 0 counts and the offline placeholder; the
+  refresh is disabled offline.
+- 设置: the language segment keeps its content width; 关于 centers the shield
+  and `goTrust <version>` above the project/license rows.
+- Titlebar: 44 DIP, `goTrust` only, and its own minimize/maximize/close via
+  `HideWindowButtons`; verified in the real window (maximize/restore,
+  close/reopen via the tray, minimize and return).
+- Verification: full checks, renders at both sizes and appearances, and the
+  offline terminal test.
+
 ### Phase 8: Mockup parity
 
 - **Status:** complete

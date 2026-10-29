@@ -13,11 +13,11 @@ separate chip.
 
 ## Next Step
 
-Phase 8 is complete. The optional traffic card (Phase 7) has not been started.
+Phase 9 is complete. The optional traffic card (Phase 7) has not been started.
 
 ## Current Phase
 
-Phase 8 complete; Phase 7 optional and not started.
+Phase 9 complete; Phase 7 optional and not started.
 
 ## Decisions already made
 
@@ -515,6 +515,46 @@ Notes:
 - Real window: the appearance switch flips its label (切换到浅色主题 →
   切换到深色主题), 清除 left the log at 0 bytes, and the account page reported
   the 连接/安全 headings.
+
+### Phase 9: Mockup corrections after the trial
+
+The packaged build still differed from the mockup in eight places. This phase
+fixes them.
+
+- [x] Every page form puts its labels above the controls.
+- [x] 日志's toolbar, pane and footer are one card, so the right border closes.
+- [x] 代理's PAC and Clash/Mihomo rows fill the card, their 复制 at the right.
+- [x] 终端管理's 刷新 sits in the page heading, above the trust row.
+- [x] 终端管理 shows the 0-count summary and both cards before a session.
+- [x] 设置's language segment keeps its content width.
+- [x] 关于 shows the shield and `goTrust <version>` centered, then the two
+      link rows.
+- [x] The title strip is 44 DIP, names only `goTrust`, and draws the
+      minimize, maximize and close controls itself.
+- **Status:** complete.
+
+Notes:
+
+- The title strip uses `HideWindowButtons`, so GTK hides its buttons while
+  keeping the shadow, the rounded corners and the resize edges. The three
+  controls call `Minimize`, `Maximize`/`Unmaximize` and `Close`; close goes
+  through `OnClose`, which hides the window. The real window maximized to the
+  work area and restored, closed and reopened from the tray, and minimized
+  and came back through 打开仪表盘.
+- `formColumn` and `formField` stack a muted caption over the control; the
+  account, proxy, keep-alive, settings and account-name fields use them.
+- 日志's card wraps the toolbar, the monospace pane and the footer; the header
+  (详细日志, 清除, 打开目录) stays above it.
+- 代理's copy section is two rows with the action at the right edge, not a
+  form of fields.
+- 终端管理 always draws its summary and two cards; offline the summary reads
+  the 0 counts and each card holds the offline placeholder, with the refresh
+  disabled. `TestTerminalsPageShowsEmptyCardsOffline` covers it.
+- The language segment is aligned to the start so it sizes to its labels.
+- 关于 centers the shield (48 DIP) and `goTrust <version>` and keeps the
+  project/license rows; the version row is gone.
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` and
+  `reuse lint`; renders at 900 and 720 in both appearances.
 
 ## Out of scope
 
