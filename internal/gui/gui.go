@@ -56,6 +56,16 @@ func Run(configPath string) error {
 		runOnUI:    mygo.RunOnMain,
 	}
 
+	// One instance per launch: a second launch hands its command line to the
+	// running process and exits here, before it opens the log (which may
+	// rotate at startup) or binds the handoff port. The handler that brings
+	// the window forward is registered below, once the logger exists; mygo
+	// queues a message on the main loop until Run starts, so a launch that
+	// arrives in between still finds it.
+	if !mygo.App.RequestSingleInstanceLock() {
+		return nil
+	}
+
 	fileLog, logErr := logging.New(logging.Options{
 		Verbose: cfg.Logging.Verbose,
 	})
@@ -78,6 +88,14 @@ func Run(configPath string) error {
 			session.SetProtocolDebug(true)
 		}
 	}
+
+	// A second launch brings the running window forward. mygo runs the handler
+	// on the main thread inside the launch's activation token, which is what
+	// lets Wayland grant the focus.
+	mygo.App.OnSecondInstance(func([]string, string) {
+		application.logf("second instance: showing the window")
+		application.showWindow()
+	})
 
 	// One settings draft lives as long as the window: a page switch or hiding
 	// the window keeps the edits, and the pages render it in place.
@@ -205,10 +223,6 @@ type attemptCancel struct {
 }
 
 func (a *app) runUI(ctx context.Context) error {
-	if !mygo.App.RequestSingleInstanceLock() {
-		return nil
-	}
-
 	// Quit runs the quit sequence, so the tray disappears, the proxies close
 	// and the single-instance lock is released. Exit would skip all three and
 	// leave a stale socket behind.
@@ -393,10 +407,13 @@ func (a *app) closeWindow() {
 	}
 }
 
-// showWindow reveals the window on the page it already shows. The tray icon
-// uses it, so a click never loses the page the user was reading.
+// showWindow brings the window forward on the page it already shows: restored
+// from a minimize, shown if it was hidden, and focused. The tray icon, 打开
+// 仪表盘, a second launch and a session that failed while hidden use it, so
+// none of them loses the page the user was reading.
 func (a *app) showWindow() {
 	if window := a.window.Load(); window != nil {
+		window.Restore()
 		window.Show()
 		window.Focus()
 	}

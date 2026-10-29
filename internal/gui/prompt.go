@@ -744,12 +744,9 @@ func (a *app) cancelPrompts(cause error) {
 }
 
 // revealWindow brings the main window forward: a login started from the tray
-// would otherwise wait on a hidden window.
+// would otherwise wait on a hidden or minimized window.
 func (a *app) revealWindow() {
-	if window := a.window.Load(); window != nil {
-		window.Show()
-		window.Focus()
-	}
+	a.showWindow()
 }
 
 // openBrowser opens a URL with the desktop's default browser.
