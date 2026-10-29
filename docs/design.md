@@ -27,8 +27,8 @@ an entry in its decisions table.
   included, to the light or the dark theme (`mygo.Theme.SetSource`); the
   choice lasts for the run.
 * The sidebar is the only navigation: 仪表盘, a separator, 账户, 代理, 保活,
-  启动, 终端管理, 日志, 设置, then a spacer, a separator and 多账户 at the
-  bottom. The active page is tinted with the accent; the rows are tabs for
+  启动, 终端管理, 日志, 设置, 关于, then a spacer, a separator and 多账户 at
+  the bottom. The active page is tinted with the accent; the rows are tabs for
   assistive technology, and Enter or Space activates them.
 * 多账户 is quieter than the pages above it: a subdued row whose tag is the
   live account, so the account list does not read as one more step of the
@@ -138,17 +138,23 @@ an entry in its decisions table.
 * A switch row is one target: the whole label toggles, as the mockup's label
   wraps its switch. The track is the mockup's 34×20 pill, accent when on and
   `switchOff` when off; the startup, keep-alive and 详细日志 settings use it.
-* 设置's rows fill their card: 数据文件, 设备标识, the language segment and
-  the About rows. The language segment is content-sized, not stretched. The
-  About card shows the shield and `goTrust <version>` centered, then
-  项目主页 and 许可证 as rows, not rows with a button: the row itself opens
-  the page, with the arrow at its right. 日志's block (toolbar, pane and
-  footer) is one card, so its border closes on every side; its header has the
-  详细日志 switch, 清除 and 打开目录, and 清除 truncates the file and drops
-  its rotations. 代理's PAC and Clash/Mihomo rows carry their 复制 at the
-  card's right edge. 终端管理 keeps its summary line, its 刷新 in the page
-  heading and its two cards before a session exists, with 0 counts and the
-  offline placeholder. The account list keeps no footer hint.
+* 设置's rows fill their card: 数据文件, 设备标识 and the language segment.
+  The language segment is content-sized, not stretched, and carries no hint
+  line. 关于 is its own page below 设置: centered shield and
+  `goTrust <version>`, then 项目主页 and 许可证 as rows, not rows with a
+  button: the row itself opens the page, with the arrow at its right. The
+  page has no heading of its own.
+* 保活's fields carry no hint lines. A malformed interval, or one shorter
+  than the minimum, is refused with the minimum (10s), never with the 90s
+  default: `errKeepAliveInvalid`/`errKeepAliveShort` name the shortest
+  accepted cadence.
+* 日志's block (toolbar, pane and footer) is one card, so its border closes
+  on every side; its header has the 详细日志 switch, 清除 and 打开目录, and
+  清除 truncates the file and drops its rotations. 代理's PAC and
+  Clash/Mihomo rows carry their 复制 at the card's right edge. 终端管理 keeps
+  its summary line, its 刷新 in the page heading and its two cards before a
+  session exists, with 0 counts and the offline placeholder; it has no
+  caption of its own. The account list keeps no footer hint.
 
 ## A draft, a save bar and a toast
 
