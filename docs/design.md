@@ -93,6 +93,19 @@ an entry in its decisions table. The layout they describe is
 * A resource row's actions go behind one menu (`Element.Menu` on the dots
   glyph), not two visible buttons per row.
 
+## The tray
+
+* The menu is the tray's one interface: the status line, 打开仪表盘,
+  打开默认应用, 连接/断开, 切换账户 when there is more than one account, and
+  退出. 设置 is not there.
+* On Linux the icon is an AppIndicator. With a menu set, a click opens it
+  (GNOME's extension waits out the double-click time and then opens it on a
+  single click). Activation shows the window and keeps its page: GNOME's
+  extension sends it on a double click, and only when
+  libayatana-appindicator3 has the `activate` signal; older releases have
+  none. 打开仪表盘 is therefore the item that always brings the window
+  forward, and it selects the dashboard.
+
 ## A login never needs a second window
 
 * Captcha, one-time code, SSO, device binding, the method chooser and the
