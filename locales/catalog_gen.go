@@ -214,15 +214,15 @@ func (msgs Messages) ProfileName(name string) string {
 	return Catalog.Format(msgs.locale, "profileName", map[string]any{"name": name})
 }
 
-// SessionGateway says "网关地址 {host}:{port, number}"
+// SessionGateway says "网关地址 {host}:{port}"
 // in the language the app shows.
-func SessionGateway(host string, port int) string {
+func SessionGateway(host string, port string) string {
 	return In(i18n.Locale()).SessionGateway(host, port)
 }
 
-// SessionGateway says "网关地址 {host}:{port, number}"
+// SessionGateway says "网关地址 {host}:{port}"
 // in the language of msgs.
-func (msgs Messages) SessionGateway(host string, port int) string {
+func (msgs Messages) SessionGateway(host string, port string) string {
 	return Catalog.Format(msgs.locale, "sessionGateway", map[string]any{"host": host, "port": port})
 }
 

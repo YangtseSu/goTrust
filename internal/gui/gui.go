@@ -276,16 +276,28 @@ func (a *app) reconcileAutostart() {
 	}
 }
 
+// The window's size and the page minimum the views are drawn at. GTK applies
+// the minimum hint to the whole surface, its CSD shadow margins included, so
+// the hint carries that margin on top of the page minimum.
+const (
+	windowWidth        = 900
+	windowHeight       = 740
+	windowMinWidth     = 720
+	windowMinHeight    = 560
+	windowShadowWidth  = 52
+	windowShadowHeight = 52
+)
+
 func (a *app) openWindow(hidden bool) {
 	if a.window.Load() != nil {
 		return
 	}
 	window := mygo.NewWindow(mygo.WindowOptions{
 		Title:          "goTrust",
-		Width:          900,
-		Height:         740,
-		MinWidth:       720,
-		MinHeight:      560,
+		Width:          windowWidth,
+		Height:         windowHeight,
+		MinWidth:       windowMinWidth + windowShadowWidth,
+		MinHeight:      windowMinHeight + windowShadowHeight,
 		TitleBarStyle:  mygo.TitleBarHidden,
 		TitleBarHeight: gotrustui.TitleBarHeight,
 		Hidden:         hidden,

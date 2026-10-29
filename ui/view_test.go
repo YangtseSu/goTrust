@@ -692,8 +692,8 @@ func labels(items []*mygo.MenuItem) []string {
 }
 
 // The ladder says which attempt is next and how long the wait is, and the
-// phase line is where it lives now that the chip is gone; that is the only
-// place a user learns the app is retrying instead of hanging.
+// phase chip is where it lives; that is the only place a user learns the app
+// is retrying instead of hanging.
 func TestReconnectCountdownIsRendered(t *testing.T) {
 	cfg := config.Default()
 	cfg.Profiles[0].Server.Address = "vpn.example.com"
@@ -722,6 +722,22 @@ func TestReconnectCountdownIsRendered(t *testing.T) {
 	}
 	if got := TrayStatus(state.Session); got != "重连中 (2/5，4 秒后)" {
 		t.Fatalf("tray status = %q, want the attempt and the wait", got)
+	}
+}
+
+// A port is part of an address, not a quantity: the gateway line must not
+// group its digits, or a five-digit port reads as "38,265".
+func TestGatewayPortIsNotGrouped(t *testing.T) {
+	cfg := config.Default()
+	cfg.Profiles[0].Server.Address = "127.0.0.1"
+	cfg.Profiles[0].Server.Port = 38265
+	state := State{Session: session.State{Phase: session.PhaseIdle}, Config: cfg}
+
+	tester := ui.NewTester(View(&state, Actions{}), 900, 740)
+	tester.Frame()
+
+	if !tester.HasText("网关地址 127.0.0.1:38265") {
+		t.Fatalf("the port was reformatted; texts: %v", tester.Texts())
 	}
 }
 

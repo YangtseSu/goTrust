@@ -520,17 +520,28 @@ func sessionLine(c *ui.Context, state *State) {
 	})
 }
 
-// phaseText is the phase as the window's headline. The reconnect ladder is the
+// phaseText is the phase as the window's headline: a pill with the state's
+// colour on its dot and on its tint, and the label in the theme's text colour,
+// so the colour never has to carry the words. The reconnect ladder is the
 // phase there: "重连中 (2/5，4 秒后)" says both that the session is gone and
-// what the app is doing about it. The status role is the one the old chip
-// carried, so assistive technology still announces the change.
+// what the app is doing about it. The status role makes assistive technology
+// announce the change.
 func phaseText(c *ui.Context, state *State) {
+	theme := c.Theme()
 	label := phaseLabel(state.Session)
 	if state.Session.Phase == session.PhaseReconnecting && state.Session.Reconnect.Attempt > 0 {
 		label = reconnectLabel(state.Session.Reconnect)
 	}
-	ui.Text(c, label).FontSize(textSize(c, panelScale)).FontWeight(600).SingleLine().
-		Role(ui.RoleStatus).Label(locales.StatusLabel(label))
+	ink := toneInk(theme, phaseTone(state.Session.Phase))
+	ui.Row(c).AlignItems(ui.Center).AlignSelf(ui.Start).Gap(theme.Space(2)).Shrink(1).
+		PaddingX(theme.Space(3)).PaddingY(theme.Space(1)).
+		Radius(999).Background(chipSurface(theme, ink)).
+		Role(ui.RoleStatus).Label(locales.StatusLabel(label)).
+		Children(func() {
+			ui.Box(c).Size(9, 9).Radius(5).Shrink(0).Background(ink)
+			ui.Text(c, label).FontSize(textSize(c, panelScale)).FontWeight(600).
+				SingleLine().Shrink(1).TextColor(theme.Text)
+		})
 }
 
 // sessionMeta is the one line under the phase: where it connects and how long
@@ -557,7 +568,7 @@ func sessionFacts(state *State, now time.Time) (string, tone) {
 		// missing from it.
 		return locales.ProfileUnconfigured(), toneNeutral
 	}
-	parts := []string{locales.SessionGateway(profile.ServerAddress(), profile.Server.Port)}
+	parts := []string{locales.SessionGateway(profile.ServerAddress(), strconv.Itoa(profile.Server.Port))}
 	live := state.Session
 	switch live.Phase {
 	case session.PhaseFailed:

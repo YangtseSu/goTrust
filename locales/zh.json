@@ -18,7 +18,7 @@
   "busyText": "处理中…",
   "profileUnconfigured": "尚未填写网关",
   "profileName": "账户 {name}",
-  "sessionGateway": "网关地址 {host}:{port, number}",
+  "sessionGateway": "网关地址 {host}:{port}",
   "sessionHeldMinutes": "{minutes, plural, other {已保持 # 分钟}}",
   "keepAliveAgoValue": "{seconds, plural, other {# 秒前}}",
   "metricAssigned": "已分配地址",
