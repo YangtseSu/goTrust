@@ -10,7 +10,7 @@ goTrust stores its settings in `config.toml`, whose location depends on the syst
 | macOS | `~/Library/Application Support/gotrust/config.toml` |
 | Windows | `%AppData%\gotrust\config.toml` |
 
-The file mode is 0600, because it may hold a password. The settings window writes this same file; editing it by hand also works, and the settings window re-reads it from disk before saving.
+The file mode is 0600, because it may hold a password. The window's save bar writes this same file; editing it by hand also works, but the app reads it only at startup while it runs, so a save from the window replaces the file with its draft.
 
 ## Complete example
 
@@ -74,7 +74,7 @@ client_data_path = ""
 
 | Field | Default | Description |
 |---|---|---|
-| `autostart` | `false` | Start when logging in to the system. Changing it in the settings window immediately updates the system autostart entry |
+| `autostart` | `false` | Start when logging in to the system. Changing it on the 启动 page immediately updates the system autostart entry |
 | `start_hidden` | `true` | On startup show only the tray icon, without opening a window |
 | `auto_connect` | `false` | Log in automatically after startup. Requires a saved password |
 | `auto_reconnect` | `false` | Reconnect automatically after the session drops: 1/2/4/8/16 seconds, up to 5 attempts |
@@ -86,7 +86,7 @@ client_data_path = ""
 | `socks5_bind` | `127.0.0.1:1080` | SOCKS5 listen address; empty disables this listener |
 | `http_bind` | `127.0.0.1:1081` | HTTP proxy listen address; empty disables this listener |
 
-Both listeners can bind only to loopback addresses (`127.0.0.1`, `::1`, `localhost`), with ports 1–65535. An address such as `0.0.0.0:1080` is rejected before login, and the settings window shows the same rule when saving. Keep at least one listener.
+Both listeners can bind only to loopback addresses (`127.0.0.1`, `::1`, `localhost`), with ports 1–65535. An address such as `0.0.0.0:1080` is rejected before login, and saving shows the same rule. Keep at least one listener.
 
 ### `[handoff]`
 
@@ -100,11 +100,11 @@ The endpoint accepts only `GET` and `HEAD`, and regenerates the PAC for the curr
 
 | Field | Default | Description |
 |---|---|---|
-| `verbose` | `false` | Emit protocol-level debug logs. The settings window toggle takes effect immediately and writes here |
+| `verbose` | `false` | Emit protocol-level debug logs. The 详细日志 switch on the 日志 page takes effect immediately and writes here |
 
 ### `[identity]`
 
-Usually there is no need to edit this by hand; the settings window shows the device identifier read-only.
+Usually there is no need to edit this by hand; 设置 → 本机数据 shows the device identifier read-only.
 
 | Field | Description |
 |---|---|
@@ -122,8 +122,8 @@ Each configuration corresponds to one account.
 | Field | Description |
 |---|---|
 | `id` | Stable identifier of the configuration. Generated on first read and unchanged by renaming; it is used only locally and not sent to the gateway. Copying it into another configuration replaces it with a new value |
-| `name` | Configuration name, also the name shown in the settings window |
-| `server.address` / `server.port` | Gateway address and port |
+| `name` | Configuration name, also the name shown on the 多账户 page |
+| `server.address` / `server.port` | Gateway address and port. The window has one 网关 field taking `host:port`; a bare host uses 443 |
 | `auth.username` | Username |
 | `auth.auth_type` / `auth.domain` | Authentication method and login domain. Empty means automatic: use the only method the gateway offers, and when several are offered, ask and remember the answer |
 | `auth.store_password` | Whether to write the password into the configuration file |
@@ -133,6 +133,8 @@ Each configuration corresponds to one account.
 | `keepalive.interval` | Keepalive interval, `90s` by default, minimum 10 s |
 | `keepalive.targets` | Manual keepalive targets, one per line, taking precedence over automatically derived targets |
 | `debug.client_data_path` | Custom login data file path. When empty, `client_data-<配置名>.json` in the configuration directory is used |
+
+The window's 网关 field accepts `host:port`, `https://host:port`, a bare host (443), a pasted path or trailing slash, and a bracketed IPv6 address with or without a port. Other schemes, an empty host and ports outside 1–65535 are rejected. On save the field is split back into `server.address` and `server.port`; the file format does not change.
 
 `client_data*.json` holds cookies and session tickets, also with mode 0600. Renaming a configuration moves it and deleting a configuration removes it, both only after settings are saved.
 

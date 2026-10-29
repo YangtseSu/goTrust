@@ -82,8 +82,8 @@ ydotool key 56:1 62:1 62:0 56:0    # Alt+F4
 ```
 
 Prefer keyboard over the pointer: focus order is stable enough for buttons,
-and it avoids the hot corner entirely. With the settings window focused,
-`Shift+Tab` then `Enter` reaches and activates 关闭.
+and it avoids the hot corner entirely. With the window focused, Esc cancels a
+login panel; there is no second window to close.
 
 Pointer input, only when needed:
 
@@ -97,10 +97,10 @@ or locate the light window rectangle with PIL. A window can be at a different
 position on each launch; do not reuse coordinates blindly. `grim` cannot capture
 this GNOME session (no wlr-screencopy); `flameshot full` works.
 
-The main window is 540x640 logical, about 900x1067 physical at scale 1.6667
-plus its title bar, and it opens centred; the 1600x1700+1100+250 crop above
-contains it on this display. Crop coordinates map to absolute physical pixels
-by adding the crop offset; the displayed image may be scaled, so multiply by
+The window is a 900x740 page area, 952x792 including GTK's CSD shadow, about
+1587x1320 physical at scale 1.6667, and it opens centred; the
+1600x1700+1100+250 crop above contains it on this display. Crop coordinates map
+to absolute physical pixels by adding the crop offset; the displayed image may be scaled, so multiply by
 `1600/displayed_width` first.
 
 ## flameshot
@@ -111,6 +111,37 @@ magick /tmp/shot.png -crop 1600x1700+1100+250 +repage /tmp/crop.png
 ```
 
 Only inspect the cropped app area. Delete every screenshot after use.
+
+## Driving the window without a pointer
+
+GTK4 exports the window over AT-SPI2 (`pyatspi` is installed here), which is
+how the one-window checks ran while screenshots were unavailable. A page tab,
+button or menu entry is an accessible node with a `click` action; an entry
+takes `setTextContents`. The application is named after the binary, so a test
+build renamed away from `gotrust` gets its own single-instance lock and its
+own tray item, and the installed app stays untouched.
+
+- A page switch is `doAction` on the `page tab` named 仪表盘, 账户, 代理, ….
+  The page heading, the 状态 chip (`notification`, `状态：未连接`) and the
+  power control (连接, 取消, 断开, 重试) are what to assert afterwards.
+- The tray menu is the app's own `com.canonical.dbusmenu` on its unique bus
+  name, at `/org/ayatana/NotificationItem/<name>_<pid>_1/Menu`:
+  `GetLayout` lists the items, `Event(id, "clicked", …)` activates one.
+  打开仪表盘 shows and focuses the window; 连接 starts the tray login. The
+  shell's own icon exposes no Action, so the icon click and the panel stay the
+  operator's check.
+- Wayland refuses focus stealing: a background launch cannot focus itself
+  even through `window.Focus()`. `Alt+Tab` with a synthetic keyboard focuses
+  it, after which the window shortcuts (Ctrl+Enter) arrive. A synthetic
+  keyboard or pointer must declare every key with `UI_SET_KEYBIT` and every
+  axis with `UI_SET_ABSBIT`; events for undeclared codes are dropped by the
+  kernel. `ydotool` is not installed here; `/dev/uinput` is world-writable, so
+  the same events can be written directly.
+- The window minimum is a surface size: GTK's hint counts the CSD shadow, and
+  on Wayland neither `Bounds` nor `ContentBounds` reports that margin. A page
+  minimum of 720x560 needs a 772x612 hint (`windowShadowWidth` and
+  `windowShadowHeight` in `internal/gui`); a test build opened at 600x400 is
+  clamped to a 720x560 page, which is how the compensation was checked.
 
 ## Launch and quit
 
@@ -147,7 +178,8 @@ Measured on 0.6.3, 0.6.4, 0.7.1 and 0.7.2:
 - Hiding one window from another window's frame, and `Show`, were always fine.
 - If mygo is ever moved back to a release without the fix, hiding a window from
   its own frame must go through `go func() { mygo.RunOnMain(fn) }()` again. The
-  settings window hides on close; reopening reloads the saved draft.
+  one window hides on close and keeps its settings draft; reopening it from
+  the tray shows the same page and edits.
 
 ## Frame rules
 
