@@ -31,6 +31,26 @@ The review settled these points:
   with more than one account), 退出 — no 设置;
 - no memory display; the traffic card is optional.
 
+### Phase 15: The theme keeps the desktop's preferences
+
+- **Status:** complete
+- `themeFor(c)` copies `*c.Theme()` and overrides the palette, so the frame's
+  followed `FontSize` survives; `View` sets it and derives
+  `paletteFor(theme.Dark)`.
+- High contrast is re-applied after the palette (`Border`/`TextMuted` mixed
+  toward `Text`, `Focus` opaque); the copied `Scrollbar` already carries
+  `follow`'s change because the palette never overrides it.
+- Tests: `ui.NewTester` with `SetPreferences(TextScale: 1.5)` gives
+  `FontSize` 21; high contrast mixes the palette's border and muted ink and
+  makes focus opaque; the default palette is used as drawn. The render set
+  wrote 102 images at the default scale; a throwaway 1.0/1.5 dashboard
+  render showed larger text with the layout holding.
+- Real window: a test build under headless mutter logged `goTrust ready`,
+  started the auto-connect login and exited 0 on SIGTERM (known Gtk-CRITICAL
+  scale warning only).
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .`,
+  `reuse lint`.
+
 ### Phase 14: The settings draft on the main thread
 
 - **Status:** complete

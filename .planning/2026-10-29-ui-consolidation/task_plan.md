@@ -13,12 +13,12 @@ separate chip.
 
 ## Next Step
 
-Start Phase 15: keep the desktop's theme preferences. Phase 14 (the settings
-draft on the main thread) is complete; Phases 16-19 follow in order.
+Start Phase 16: make the sidebar a real tab list. Phase 15 (the theme keeping
+the desktop's preferences) is complete; Phases 17-19 follow in order.
 
 ## Current Phase
 
-Phase 14 complete; Phases 15-19 pending.
+Phase 15 complete; Phases 16-19 pending.
 
 ## Decisions already made
 
@@ -777,18 +777,51 @@ Notes:
 
 ### Phase 15: The theme keeps the desktop's preferences
 
-`themeFor` rebuilds from `ui.LightTheme()`/`DarkTheme()`, which bypasses
-`Theme.follow`: the desktop's text scale and high-contrast adjustments are
-lost. The docs' recipe is `t := *c.Theme()` and then override.
+`themeFor` rebuilt from `ui.LightTheme()`/`DarkTheme()`, which bypasses
+`Theme.follow`: the desktop's text scale and high-contrast adjustments were
+lost. The frame's own theme already carries them, so the palette is applied to
+a copy of it instead.
 
-- [ ] `themeFor(c)` copies `*c.Theme()`, overrides the palette colours and
+- [x] `themeFor(c)` copies `*c.Theme()`, overrides the palette colours and
       keeps `FontSize`; under `c.Preferences().HighContrast`, mix
       `Border`/`TextMuted` toward `Text` as `follow` does.
-- [ ] `View` calls `c.SetTheme(themeFor(c))`; `paletteFor(t.Dark)` still
+- [x] `View` calls `c.SetTheme(themeFor(c))`; `paletteFor(t.Dark)` still
       provides the app's own surfaces.
-- [ ] Test: `ui.NewTester` with `SetPreferences(ui.Preferences{TextScale:
+- [x] Test: `ui.NewTester` with `SetPreferences(ui.Preferences{TextScale:
       1.5})` renders larger text; a unit test asserts the copied `FontSize`.
-- **Status:** pending.
+- **Status:** complete.
+
+Notes:
+
+- v0.7.3 keeps the mechanism the audit relied on: `defaultTheme()` builds
+  `LightTheme()`/`DarkTheme()`, applies `follow(preferences)` once and caches
+  it; every frame's `context.reset` installs that copy, and `follow` scales
+  `FontSize`, mixes `Border`/`TextMuted`, sets `Focus.A = 255` and darkens
+  `Scrollbar`. The app's `SetTheme` replaces only that frame's theme, so the
+  next frame copies the followed default again and the scale cannot compound.
+- `themeFor` now takes the frame (`*ui.Context`). It keeps the copied
+  `FontSize`, `Font`, `Radius`, `Spacing`, `Scrollbar` and `Dark`, overrides
+  the colours with the mockup's palette, then re-applies the high-contrast
+  adjustment because the palette replaced the values `follow` had mixed.
+  `Scrollbar` needs no second pass: the palette never overrides it.
+- The desktop's accent is still not followed: the mockup owns the app's accent
+  colours (a design decision, unchanged). The app's own surfaces (root and
+  card borders, the sidebar and the log pane) also keep the palette; the
+  contrast adjustment covers the toolkit theme and therefore the controls and
+  dividers drawn from it.
+- Tests: `TestThemeForKeepsTheDesktopTextScale` (tester at 1.5 gives
+  `FontSize` 21), `TestThemeForReappliesHighContrast` (the palette's border and
+  muted ink are mixed again, `Focus.A` is 255) and
+  `TestThemeForUsesThePaletteByDefault`. The render set still wrote 102 images
+  at the default scale.
+- Visual check: a throwaway render of the dashboard at 1.0 and 1.5 showed the
+  heading, sidebar and card text larger at 1.5 with the layout holding; both
+  test and images were removed afterwards.
+- Real window: a test build under headless mutter logged `goTrust ready`,
+  started the auto-connect login and exited 0 on SIGTERM; only the known
+  Gtk-CRITICAL scale-factor warning remains.
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` and
+  `reuse lint` pass.
 
 ### Phase 16: The sidebar is a real tab list
 

@@ -363,7 +363,9 @@ status
   (`ui/runtime.go:516-521`, `ui/preferences.go:50-77`), which scales
   `FontSize` and adjusts contrast. Rebuilding from `LightTheme()/DarkTheme()`
   keeps the default 13/14 pt, so the desktop text scale and high contrast are
-  lost; `ui/styling.md:143-153` says to start from `*c.Theme()`.
+  lost; `ui/styling.md:143-153` says to start from `*c.Theme()`. Fixed in
+  Phase 15: `themeFor` copies the frame's theme, so the scale and the contrast
+  adjustments survive the palette.
 - **A tab list needs `FocusGroup`.** `ui.Tabs` wraps its `RoleTabList` in
   `FocusGroup(Horizontal)` and marks tabs `Checked` (v0.7.2 `ui/base.go`);
   our sidebar has the roles but no group, so every row is its own Tab stop.
