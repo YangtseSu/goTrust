@@ -30,10 +30,9 @@ import (
 type SettingsState struct {
 	Draft    config.Config
 	Selected int
-	// SelectText is the profile dropdown's value. Select writes it, then the
-	// view maps it back to Selected.
-	SelectText string
-	NameText   string
+	// NameText is the selected account's name, edited on 多账户. It is folded
+	// into the draft when the draft is saved.
+	NameText string
 	// Gateways is one host:port per profile: what an administrator hands over
 	// and what the field shows. ParseGateway splits it when the draft is saved.
 	Gateways []string
@@ -168,7 +167,6 @@ func NewSettingsState(cfg config.Config, logDir string) *SettingsState {
 	state.refresh()
 	if len(state.Draft.Profiles) > 0 {
 		state.NameText = state.Draft.Profiles[state.Selected].Name
-		state.SelectText = state.NameText
 	}
 	return state
 }
@@ -237,7 +235,6 @@ func (s *SettingsState) Reload(cfg config.Config) {
 	s.refresh()
 	if len(s.Draft.Profiles) > 0 {
 		s.NameText = s.Draft.Profiles[s.Selected].Name
-		s.SelectText = s.NameText
 	}
 	s.dropStaleMethods()
 }
@@ -252,7 +249,6 @@ func (s *SettingsState) Select(index int) bool {
 	changed := index != s.Selected
 	s.Selected = index
 	s.NameText = s.Draft.Profiles[index].Name
-	s.SelectText = s.NameText
 	// The name field now shows another profile's name, so any rename typed for
 	// the previous selection is gone.
 	s.renamed = nil
@@ -580,10 +576,6 @@ func splitTargets(text string) []string {
 // width, and an input stretched across it reads as a text area. The label
 // column keeps the controls aligned, so the cap is one width for every field.
 const fieldWidth = 360
-
-// profilePickerWidth keeps the profile picker beside its three actions at the
-// window's minimum width.
-const profilePickerWidth = 220
 
 // methodPickerWidth leaves room for 获取认证方式, which shares the row with the
 // picker instead of sitting under the field.

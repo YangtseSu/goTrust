@@ -180,6 +180,7 @@ const (
 	sidebarWidth  float32 = 208
 	navItemHeight float32 = 36
 	navIconSize   float32 = 18
+	navTagWidth   float32 = 76
 	pageMaxWidth  float32 = 680
 )
 
@@ -208,7 +209,7 @@ func sidebar(c *ui.Context, state *State, actions Actions) {
 				navItem(c, state, actions, PageSettings, disabled)
 				ui.Box(c).Grow(1)
 				navSeparator(c)
-				navItemTagged(c, state, actions, PageProfiles, disabled, activeAccountName(state.Config))
+				navAccount(c, state, actions, disabled)
 			})
 		ui.Divider(c)
 	})
@@ -217,12 +218,20 @@ func sidebar(c *ui.Context, state *State, actions Actions) {
 // navItem is one page's row: its glyph and its name, tinted with the accent
 // while the page is on screen.
 func navItem(c *ui.Context, state *State, actions Actions, page Page, disabled bool) {
-	navItemTagged(c, state, actions, page, disabled, "")
+	navRow(c, state, actions, page, disabled, "", false)
 }
 
-// navItemTagged is navItem with a short tag at its end, which the account
-// manager uses for the live account.
-func navItemTagged(c *ui.Context, state *State, actions Actions, page Page, disabled bool, tag string) {
+// navAccount is the account manager's row at the bottom of the sidebar: the
+// same row, quieter, tagged with the account the window is showing. It is a
+// page like the others, but it sits apart from them and reads as one.
+func navAccount(c *ui.Context, state *State, actions Actions, disabled bool) {
+	navRow(c, state, actions, PageProfiles, disabled, activeAccountName(state.Config), true)
+}
+
+// navRow draws one navigation row. A subdued row keeps the muted ink while its
+// page is on screen: it sits below the list, and the tag is what tells it
+// apart, so it must not compete with the pages above it.
+func navRow(c *ui.Context, state *State, actions Actions, page Page, disabled bool, tag string, subdued bool) {
 	theme := c.Theme()
 	label := pageLabel(page)
 	item := ui.ButtonBase(c).Height(navItemHeight).AlignItems(ui.Center).
@@ -232,10 +241,15 @@ func navItemTagged(c *ui.Context, state *State, actions Actions, page Page, disa
 	chosen := page == state.Page
 	ink := theme.TextMuted
 	if chosen {
-		ink = theme.Accent
 		item.Background(theme.Accent.Alpha(0.12).Over(theme.Surface))
+		if !subdued {
+			ink = theme.Accent
+		}
 	} else if item.Hovered() {
 		item.Background(theme.SurfaceHover)
+		if subdued {
+			ink = theme.Text
+		}
 	}
 	if disabled {
 		// A disabled button is still drawn; the panel owns the flow, so the
@@ -247,11 +261,12 @@ func navItemTagged(c *ui.Context, state *State, actions Actions, page Page, disa
 	item.Children(func() {
 		ui.Icon(c, pageIcon(page)).Size(navIconSize, navIconSize).Shrink(0).TextColor(ink)
 		text := ui.Text(c, label).FontSize(theme.FontSize - 1).TextColor(ink).SingleLine().Grow(1)
-		if chosen {
+		if chosen && !subdued {
 			text.FontWeight(600)
 		}
 		if tag != "" {
-			ui.Box(c).Padding(0, theme.Space(1.5)).Radius(999).Border(1, theme.Border).Shrink(0).Children(func() {
+			ui.Box(c).Padding(0, theme.Space(1.5)).Radius(999).Border(1, theme.Border).
+				Shrink(1).MaxWidth(navTagWidth).Children(func() {
 				ui.Text(c, tag).FontSize(textSize(c, captionScale)).TextColor(theme.TextMuted).SingleLine()
 			})
 		}
@@ -455,7 +470,7 @@ func titleBar(c *ui.Context, profile string) {
 			if profile != "" {
 				brand += " · " + profile
 			}
-			ui.Text(c, brand).FontSize(textSize(c, captionScale)).TextColor(c.Theme().TextMuted)
+			ui.Text(c, brand).FontSize(textSize(c, captionScale)).TextColor(c.Theme().TextMuted).SingleLine()
 		})
 }
 
@@ -1071,10 +1086,10 @@ func truncate(text string, limit int) string {
 }
 
 // TrayMenu builds the tray menu for the current state: a status line, the
-// connect toggle, the profile submenu, and the window commands. Copying a
-// PAC or a Clash rendering belongs to the window's 复制配置 menu alone: one
-// owner per action, one wording, and a tray menu that does not repeat the
-// window's exports.
+// connect toggle, the account submenu while there is more than one account,
+// and the window commands. Copying a PAC or a Clash rendering belongs to the
+// window's 复制配置 menu alone: one owner per action, one wording, and a tray
+// menu that does not repeat the window's exports.
 func TrayMenu(state *State, actions Actions) *mygo.Menu {
 	status := &mygo.MenuItem{
 		ID:       "status",
@@ -1103,11 +1118,14 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		}
 	}
 
-	profileItems := make([]*mygo.MenuItem, 0, len(state.Config.Profiles))
+	// 切换账户 appears only when there is a choice to make: one account has
+	// nothing to switch to, and an item that can only ever show itself is
+	// noise in a menu that exists for the session.
+	accounts := make([]*mygo.MenuItem, 0, len(state.Config.Profiles))
 	for _, profile := range state.Config.Profiles {
 		name := profile.Name
-		profileItems = append(profileItems, &mygo.MenuItem{
-			ID:      "profile:" + name,
+		accounts = append(accounts, &mygo.MenuItem{
+			ID:      "account:" + name,
 			Label:   name,
 			Type:    mygo.MenuItemRadio,
 			Checked: name == state.Config.ActiveProfile,
@@ -1117,10 +1135,6 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 				}
 			},
 		})
-	}
-	profiles := &mygo.MenuItem{ID: "profiles", Label: locales.TrayProfiles(), Submenu: profileItems}
-	if len(profileItems) == 0 {
-		profiles.Disabled = true
 	}
 
 	show := &mygo.MenuItem{ID: "show", Label: locales.TrayShow(), Click: func(*mygo.MenuItem, *mygo.Window) {
@@ -1148,15 +1162,14 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		}
 	}}
 
-	return mygo.NewMenu([]*mygo.MenuItem{
-		status,
-		mygo.Separator(),
-		toggle,
-		profiles,
-		mygo.Separator(),
-		show,
-		openApp,
-		mygo.Separator(),
-		quit,
-	})
+	items := []*mygo.MenuItem{status, mygo.Separator(), toggle}
+	if len(accounts) > 1 {
+		items = append(items, &mygo.MenuItem{
+			ID:      "accounts",
+			Label:   locales.TraySwitchAccount(),
+			Submenu: accounts,
+		})
+	}
+	items = append(items, mygo.Separator(), show, openApp, mygo.Separator(), quit)
+	return mygo.NewMenu(items)
 }

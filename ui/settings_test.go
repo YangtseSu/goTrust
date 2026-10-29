@@ -434,7 +434,7 @@ func TestSidebarSwitchesPages(t *testing.T) {
 		{"终端管理", PageTerminals, "连接后可读取终端列表", "登录系统时启动"},
 		{"日志", PageLogs, "/tmp/logs", "连接后可读取终端列表"},
 		{"设置", PageSettings, "详细日志", "/tmp/logs"},
-		{"多账户", PageProfiles, "当前配置", "详细日志"},
+		{"多账户", PageProfiles, "账户名称", "详细日志"},
 	}
 	for _, testCase := range pages {
 		openPage(t, tester, testCase.label)
@@ -455,6 +455,37 @@ func TestSidebarSwitchesPages(t *testing.T) {
 	}
 	if !tester.HasText("连接后显示网关授予的资源") {
 		t.Fatalf("the dashboard is missing; texts: %v", tester.Texts())
+	}
+}
+
+// The account rows are the picker: every account shows its name and gateway,
+// the live one carries 当前, and a click moves the draft's selection to that
+// account, which is what the other pages then edit.
+func TestAccountsPageRowsMarkTheLiveAccountAndSelect(t *testing.T) {
+	cfg := config.Default()
+	if _, err := cfg.AddProfile("工作"); err != nil {
+		t.Fatalf("add account: %v", err)
+	}
+	cfg.ActiveProfile = config.DefaultProfileName
+	cfg.Profiles[cfg.ProfileIndex("工作")].Server.Address = "vpn.example.com"
+
+	state := NewSettingsState(cfg, "/tmp/logs")
+	_, tester := newShell(t, state, settingsActionsFor(state), PageProfiles)
+
+	if !tester.HasText(locales.NameField()) {
+		t.Fatalf("多账户 has no account name field; texts: %v", tester.Texts())
+	}
+	if !tester.HasText("vpn.example.com:443") {
+		t.Fatalf("the row does not show its gateway; texts: %v", tester.Texts())
+	}
+	if !tester.HasText(locales.ProfileCurrent()) {
+		t.Fatalf("no row marks the live account; texts: %v", tester.Texts())
+	}
+	if err := tester.Click("工作"); err != nil {
+		t.Fatalf("click the second account: %v", err)
+	}
+	if state.Selected != state.Draft.ProfileIndex("工作") {
+		t.Fatalf("selected = %d, want the 工作 account", state.Selected)
 	}
 }
 
@@ -512,7 +543,7 @@ func TestAccountPageHintsAtTheProfileSwitch(t *testing.T) {
 	state.AddProfile()
 
 	_, tester := newShell(t, state, SettingsActions{}, PageAccount)
-	if !tester.HasText("保存后将切换到配置") {
+	if !tester.HasText("保存后将切换到账户") {
 		t.Fatalf("no switch hint; texts: %v", tester.Texts())
 	}
 }
@@ -702,7 +733,7 @@ func TestProfilesPageDeletesWithoutAPanic(t *testing.T) {
 	}
 
 	tester.Frame()
-	if !tester.HasText("已删除配置；保存后生效") {
+	if !tester.HasText("已删除账户；保存后生效") {
 		t.Fatalf("the status line did not survive; texts: %v", tester.Texts())
 	}
 }

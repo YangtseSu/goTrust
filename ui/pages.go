@@ -4,6 +4,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/egoist/mygo/ui"
 
 	"github.com/YangtseSu/goTrust/locales"
@@ -203,8 +205,10 @@ func settingsPage(c *ui.Context, state *State, actions Actions) {
 	})
 }
 
-// profilesPage keeps account management reachable while the rows and the
-// rename move here: the draft's selection and the three list actions.
+// profilesPage manages the accounts: one row per account for the draft's
+// selection, the selected account's name, and the three list actions. A row is
+// the picker: choosing one edits that account, and 保存 makes the choice the
+// live account and moves the stored client data after a rename.
 func profilesPage(c *ui.Context, state *State, actions Actions) {
 	settings := state.Settings
 	if settings == nil {
@@ -212,29 +216,67 @@ func profilesPage(c *ui.Context, state *State, actions Actions) {
 	}
 	pageScroll(c, func() {
 		windowHeading(c, pageLabel(PageProfiles))
+		settings.refresh()
+		accounts := settings.Draft.ProfileNames()
+		ui.Column(c).Gap(2).Role(ui.RoleRadioGroup).Children(func() {
+			for index := range accounts {
+				accountRow(c, settings, actions, index)
+			}
+		})
 		ui.Form(c, func() {
-			ui.Field(c, locales.CurrentProfile(), func() {
-				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-					names := settings.Draft.ProfileNames()
-					if ui.Select(c, &settings.SelectText, names).Label(locales.CurrentProfile()).
-						MaxWidth(profilePickerWidth).Changed() {
-						if chosen := indexOf(names, settings.SelectText); chosen >= 0 && actions.Settings.SelectProfile != nil {
-							actions.Settings.SelectProfile(chosen)
-						}
-					}
-					if ui.Button(c, locales.ProfileNew()).Clicked() && actions.Settings.NewProfile != nil {
-						actions.Settings.NewProfile()
-					}
-					if ui.Button(c, locales.ProfileDuplicate()).Clicked() && actions.Settings.DuplicateProfile != nil {
-						actions.Settings.DuplicateProfile()
-					}
-					if ui.Button(c, locales.ProfileDelete()).Disabled(len(names) == 1).Clicked() &&
-						actions.Settings.DeleteProfile != nil {
-						actions.Settings.DeleteProfile()
-					}
-				})
+			ui.Field(c, locales.NameField(), func() {
+				ui.TextInput(c, &settings.NameText).MaxWidth(fieldWidth)
 			})
+		})
+		ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			if ui.Button(c, locales.ProfileNew()).Clicked() && actions.Settings.NewProfile != nil {
+				actions.Settings.NewProfile()
+			}
+			if ui.Button(c, locales.ProfileDuplicate()).Clicked() && actions.Settings.DuplicateProfile != nil {
+				actions.Settings.DuplicateProfile()
+			}
+			if ui.Button(c, locales.ProfileDelete()).Disabled(len(accounts) == 1).Clicked() &&
+				actions.Settings.DeleteProfile != nil {
+				actions.Settings.DeleteProfile()
+			}
 		})
 		caption(c, locales.ProfilesHint())
 	})
+}
+
+// accountRow is one account in the draft: its name, its gateway and whether the
+// session is already on it. The tint marks the account the form edits, 当前
+// marks the live one.
+func accountRow(c *ui.Context, settings *SettingsState, actions Actions, index int) {
+	theme := c.Theme()
+	profile := settings.Draft.Profiles[index]
+	gateway := strings.TrimSpace(settings.Gateways[index])
+	if gateway == "" {
+		gateway = locales.ProfileUnconfigured()
+	}
+	chosen := index == settings.Selected
+	row := ui.ButtonBase(c).AlignItems(ui.Center).Padding(theme.Space(1.5), theme.Space(2)).
+		Radius(theme.Radius).Gap(theme.Space(2)).Role(ui.RoleRadio).
+		Label(profile.Name).Checked(chosen)
+	if chosen {
+		row.Background(theme.Accent.Alpha(0.12).Over(theme.Surface))
+	} else if row.Hovered() {
+		row.Background(theme.SurfaceHover)
+	}
+	row.Children(func() {
+		ui.Avatar(c, profile.Name, nil)
+		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+			name := ui.Text(c, profile.Name).FontSize(theme.FontSize).SingleLine()
+			if chosen {
+				name.FontWeight(600)
+			}
+			caption(c, gateway).SingleLine()
+		})
+		if profile.Name == settings.ActiveAtOpen {
+			caption(c, locales.ProfileCurrent())
+		}
+	})
+	if row.Clicked() && actions.Settings.SelectProfile != nil {
+		actions.Settings.SelectProfile(index)
+	}
 }

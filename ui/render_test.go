@@ -282,6 +282,17 @@ func renderStates(t *testing.T, dir, lang string) {
 			}
 		})
 	})
+	// 多账户: two accounts, the live one and the one the draft edits.
+	t.Run("settings-accounts", func(t *testing.T) {
+		pageView("settings-accounts", PageProfiles, func(state *SettingsState) {
+			if _, err := state.Draft.AddProfile("工作"); err != nil {
+				t.Fatalf("add account: %v", err)
+			}
+			state.Draft.Profiles[1].Server.Address = "vpn2.example.com"
+			state.refresh()
+			state.Select(1)
+		})
+	})
 	t.Run("settings-unsaved", func(t *testing.T) {
 		pageView("settings-unsaved", PageAccount, func(state *SettingsState) {
 			state.Gateways[0] = "vpn.example.com:8443"

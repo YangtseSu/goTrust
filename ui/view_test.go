@@ -52,8 +52,8 @@ func TestViewRendersEveryPhase(t *testing.T) {
 			if !tester.HasText(phaseLabel(state.Session)) {
 				t.Fatalf("the phase label %q is missing", phaseLabel(state.Session))
 			}
-			if !tester.HasText("配置") {
-				t.Fatal("the active profile is missing")
+			if !tester.HasText(config.DefaultProfileName) {
+				t.Fatal("the active account is missing")
 			}
 		})
 	}
@@ -74,7 +74,7 @@ func TestProfileSummaryShowsTheActiveAccount(t *testing.T) {
 	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 
-	if !tester.HasText("goTrust · 配置 默认") {
+	if !tester.HasText("goTrust · 账户 默认") {
 		t.Fatalf("the active account is missing from the title bar; texts: %v", tester.Texts())
 	}
 	if !tester.HasText("vpn.example.com:443") {
@@ -170,6 +170,31 @@ func TestShellIsOneSurface(t *testing.T) {
 		if !tester.HasText(label) {
 			t.Fatalf("the navigation is missing %q", label)
 		}
+	}
+}
+
+// The bottom item names the live account, so every page says which account an
+// action applies to. The name is user data and is not translated: the tag is
+// the bare name, inside the sidebar and not the page.
+func TestSidebarTagsTheLiveAccount(t *testing.T) {
+	cfg := config.Default()
+	if _, err := cfg.AddProfile("工作"); err != nil {
+		t.Fatalf("add account: %v", err)
+	}
+	cfg.ActiveProfile = "工作"
+	state := State{
+		Session: session.State{Phase: session.PhaseIdle},
+		Config:  cfg,
+	}
+	tester := ui.NewTester(View(&state, Actions{}), 900, 740)
+	tester.Frame()
+
+	tag, ok := tester.Find("工作")
+	if !ok {
+		t.Fatalf("the live account is not tagged; texts: %v", tester.Texts())
+	}
+	if tag.X+tag.W > sidebarWidth {
+		t.Fatalf("the tag at %+v is outside the %v wide sidebar", tag, sidebarWidth)
 	}
 }
 
@@ -484,13 +509,13 @@ func TestTrayMenuStatusProfilesAndToggle(t *testing.T) {
 		}
 	}
 
-	var toggle, profiles *mygo.MenuItem
+	var toggle, accounts *mygo.MenuItem
 	for _, item := range items {
 		switch item.Label {
 		case "断开":
 			toggle = item
-		case "配置":
-			profiles = item
+		case "切换账户":
+			accounts = item
 		}
 	}
 	if toggle == nil {
@@ -501,18 +526,18 @@ func TestTrayMenuStatusProfilesAndToggle(t *testing.T) {
 		t.Fatalf("toggle did not disconnect: login=%d logout=%d", login, logout)
 	}
 
-	if profiles == nil {
-		t.Fatalf("no profile submenu in %v", labels(items))
+	if accounts == nil {
+		t.Fatalf("no account submenu in %v", labels(items))
 	}
-	if len(profiles.Submenu) != 2 {
-		t.Fatalf("profile items = %d, want 2", len(profiles.Submenu))
+	if len(accounts.Submenu) != 2 {
+		t.Fatalf("account items = %d, want 2", len(accounts.Submenu))
 	}
-	if !profiles.Submenu[0].Checked || profiles.Submenu[1].Checked {
-		t.Fatal("the active profile is not the checked one")
+	if !accounts.Submenu[0].Checked || accounts.Submenu[1].Checked {
+		t.Fatal("the active account is not the checked one")
 	}
-	profiles.Submenu[1].Click(profiles.Submenu[1], nil)
+	accounts.Submenu[1].Click(accounts.Submenu[1], nil)
 	if selected != "工作" {
-		t.Fatalf("profile click selected %q", selected)
+		t.Fatalf("account click selected %q", selected)
 	}
 }
 
@@ -535,6 +560,21 @@ func TestTrayMenuOffersConnectWhenIdle(t *testing.T) {
 	toggle.Click(toggle, nil)
 	if login != 1 {
 		t.Fatalf("login calls = %d", login)
+	}
+}
+
+// One account has nothing to switch to: the tray spends no line on a submenu
+// that could only ever show the account it is already on.
+func TestTrayMenuHidesTheAccountSubmenuForOneAccount(t *testing.T) {
+	state := State{
+		Session: session.State{Phase: session.PhaseIdle},
+		Config:  config.Default(),
+	}
+	menu := TrayMenu(&state, Actions{})
+	for _, item := range menu.Items() {
+		if item.ID == "accounts" {
+			t.Fatalf("a single-account tray still offers %q in %v", item.Label, labels(menu.Items()))
+		}
 	}
 }
 

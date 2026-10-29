@@ -214,11 +214,11 @@ func (msgs Messages) ProfileUnconfigured() string {
 	return Catalog.Format(msgs.locale, "profileUnconfigured", nil)
 }
 
-// ProfileName says "配置 {name}"
+// ProfileName says "账户 {name}"
 // in the language the app shows.
 func ProfileName(name string) string { return In(i18n.Locale()).ProfileName(name) }
 
-// ProfileName says "配置 {name}"
+// ProfileName says "账户 {name}"
 // in the language of msgs.
 func (msgs Messages) ProfileName(name string) string {
 	return Catalog.Format(msgs.locale, "profileName", map[string]any{"name": name})
@@ -266,21 +266,21 @@ func (msgs Messages) KeepAliveAgo(seconds int) string {
 	return Catalog.Format(msgs.locale, "keepAliveAgo", map[string]any{"seconds": seconds})
 }
 
-// ProfileMissing says "配置 {name} 不存在"
+// ProfileMissing says "账户 {name} 不存在"
 // in the language the app shows.
 func ProfileMissing(name string) string { return In(i18n.Locale()).ProfileMissing(name) }
 
-// ProfileMissing says "配置 {name} 不存在"
+// ProfileMissing says "账户 {name} 不存在"
 // in the language of msgs.
 func (msgs Messages) ProfileMissing(name string) string {
 	return Catalog.Format(msgs.locale, "profileMissing", map[string]any{"name": name})
 }
 
-// ProfileChanged says "配置已切换，请重新填写"
+// ProfileChanged says "账户已切换，请重新填写"
 // in the language the app shows.
 func ProfileChanged() string { return In(i18n.Locale()).ProfileChanged() }
 
-// ProfileChanged says "配置已切换，请重新填写"
+// ProfileChanged says "账户已切换，请重新填写"
 // in the language of msgs.
 func (msgs Messages) ProfileChanged() string {
 	return Catalog.Format(msgs.locale, "profileChanged", nil)
@@ -848,14 +848,14 @@ func (msgs Messages) TrayStatusOffline() string {
 	return Catalog.Format(msgs.locale, "trayStatusOffline", nil)
 }
 
-// TrayProfiles says "配置"
+// TraySwitchAccount says "切换账户"
 // in the language the app shows.
-func TrayProfiles() string { return In(i18n.Locale()).TrayProfiles() }
+func TraySwitchAccount() string { return In(i18n.Locale()).TraySwitchAccount() }
 
-// TrayProfiles says "配置"
+// TraySwitchAccount says "切换账户"
 // in the language of msgs.
-func (msgs Messages) TrayProfiles() string {
-	return Catalog.Format(msgs.locale, "trayProfiles", nil)
+func (msgs Messages) TraySwitchAccount() string {
+	return Catalog.Format(msgs.locale, "traySwitchAccount", nil)
 }
 
 // TrayShow says "显示窗口"
@@ -1690,11 +1690,11 @@ func (msgs Messages) PageProfiles() string {
 	return Catalog.Format(msgs.locale, "pageProfiles", nil)
 }
 
-// ProfilesHint says "新建、复制、删除和切换在保存后生效。"
+// ProfilesHint says "选择一行编辑该账户；新建、复制、删除和切换在保存后生效。"
 // in the language the app shows.
 func ProfilesHint() string { return In(i18n.Locale()).ProfilesHint() }
 
-// ProfilesHint says "新建、复制、删除和切换在保存后生效。"
+// ProfilesHint says "选择一行编辑该账户；新建、复制、删除和切换在保存后生效。"
 // in the language of msgs.
 func (msgs Messages) ProfilesHint() string {
 	return Catalog.Format(msgs.locale, "profilesHint", nil)
@@ -1780,31 +1780,31 @@ func (msgs Messages) SettingsEffectLive() string {
 	return Catalog.Format(msgs.locale, "settingsEffectLive", nil)
 }
 
-// SettingsSwitchHint says "保存后将切换到配置 {name}"
+// SettingsSwitchHint says "保存后将切换到账户 {name}"
 // in the language the app shows.
 func SettingsSwitchHint(name string) string { return In(i18n.Locale()).SettingsSwitchHint(name) }
 
-// SettingsSwitchHint says "保存后将切换到配置 {name}"
+// SettingsSwitchHint says "保存后将切换到账户 {name}"
 // in the language of msgs.
 func (msgs Messages) SettingsSwitchHint(name string) string {
 	return Catalog.Format(msgs.locale, "settingsSwitchHint", map[string]any{"name": name})
 }
 
-// CurrentProfile says "当前配置"
+// ProfileCurrent says "当前"
 // in the language the app shows.
-func CurrentProfile() string { return In(i18n.Locale()).CurrentProfile() }
+func ProfileCurrent() string { return In(i18n.Locale()).ProfileCurrent() }
 
-// CurrentProfile says "当前配置"
+// ProfileCurrent says "当前"
 // in the language of msgs.
-func (msgs Messages) CurrentProfile() string {
-	return Catalog.Format(msgs.locale, "currentProfile", nil)
+func (msgs Messages) ProfileCurrent() string {
+	return Catalog.Format(msgs.locale, "profileCurrent", nil)
 }
 
-// NameField says "名称"
+// NameField says "账户名称"
 // in the language the app shows.
 func NameField() string { return In(i18n.Locale()).NameField() }
 
-// NameField says "名称"
+// NameField says "账户名称"
 // in the language of msgs.
 func (msgs Messages) NameField() string {
 	return Catalog.Format(msgs.locale, "nameField", nil)
@@ -1840,21 +1840,21 @@ func (msgs Messages) ProfileDelete() string {
 	return Catalog.Format(msgs.locale, "profileDelete", nil)
 }
 
-// ProfileBaseName says "配置"
+// ProfileBaseName says "账户 1"
 // in the language the app shows.
 func ProfileBaseName() string { return In(i18n.Locale()).ProfileBaseName() }
 
-// ProfileBaseName says "配置"
+// ProfileBaseName says "账户 1"
 // in the language of msgs.
 func (msgs Messages) ProfileBaseName() string {
 	return Catalog.Format(msgs.locale, "profileBaseName", nil)
 }
 
-// ProfileBaseNameN says "配置 {n, number}"
+// ProfileBaseNameN says "账户 {n, number}"
 // in the language the app shows.
 func ProfileBaseNameN(n int) string { return In(i18n.Locale()).ProfileBaseNameN(n) }
 
-// ProfileBaseNameN says "配置 {n, number}"
+// ProfileBaseNameN says "账户 {n, number}"
 // in the language of msgs.
 func (msgs Messages) ProfileBaseNameN(n int) string {
 	return Catalog.Format(msgs.locale, "profileBaseNameN", map[string]any{"n": n})
@@ -1880,11 +1880,11 @@ func (msgs Messages) ProfileCopyNameN(name string, n int) string {
 	return Catalog.Format(msgs.locale, "profileCopyNameN", map[string]any{"name": name, "n": n})
 }
 
-// ProfileCreated says "已新建配置 {name}；保存后生效"
+// ProfileCreated says "已新建 {name}；保存后生效"
 // in the language the app shows.
 func ProfileCreated(name string) string { return In(i18n.Locale()).ProfileCreated(name) }
 
-// ProfileCreated says "已新建配置 {name}；保存后生效"
+// ProfileCreated says "已新建 {name}；保存后生效"
 // in the language of msgs.
 func (msgs Messages) ProfileCreated(name string) string {
 	return Catalog.Format(msgs.locale, "profileCreated", map[string]any{"name": name})
@@ -1900,41 +1900,41 @@ func (msgs Messages) ProfileCopied(name string) string {
 	return Catalog.Format(msgs.locale, "profileCopied", map[string]any{"name": name})
 }
 
-// ProfileDeleted says "已删除配置；保存后生效"
+// ProfileDeleted says "已删除账户；保存后生效"
 // in the language the app shows.
 func ProfileDeleted() string { return In(i18n.Locale()).ProfileDeleted() }
 
-// ProfileDeleted says "已删除配置；保存后生效"
+// ProfileDeleted says "已删除账户；保存后生效"
 // in the language of msgs.
 func (msgs Messages) ProfileDeleted() string {
 	return Catalog.Format(msgs.locale, "profileDeleted", nil)
 }
 
-// ErrNoProfiles says "没有可用的配置"
+// ErrNoProfiles says "没有可用的账户"
 // in the language the app shows.
 func ErrNoProfiles() string { return In(i18n.Locale()).ErrNoProfiles() }
 
-// ErrNoProfiles says "没有可用的配置"
+// ErrNoProfiles says "没有可用的账户"
 // in the language of msgs.
 func (msgs Messages) ErrNoProfiles() string {
 	return Catalog.Format(msgs.locale, "errNoProfiles", nil)
 }
 
-// ErrProfileNameEmpty says "配置名称不能为空"
+// ErrProfileNameEmpty says "账户名称不能为空"
 // in the language the app shows.
 func ErrProfileNameEmpty() string { return In(i18n.Locale()).ErrProfileNameEmpty() }
 
-// ErrProfileNameEmpty says "配置名称不能为空"
+// ErrProfileNameEmpty says "账户名称不能为空"
 // in the language of msgs.
 func (msgs Messages) ErrProfileNameEmpty() string {
 	return Catalog.Format(msgs.locale, "errProfileNameEmpty", nil)
 }
 
-// ErrProfileNameExists says "配置名称 {name} 已存在"
+// ErrProfileNameExists says "账户名称 {name} 已存在"
 // in the language the app shows.
 func ErrProfileNameExists(name string) string { return In(i18n.Locale()).ErrProfileNameExists(name) }
 
-// ErrProfileNameExists says "配置名称 {name} 已存在"
+// ErrProfileNameExists says "账户名称 {name} 已存在"
 // in the language of msgs.
 func (msgs Messages) ErrProfileNameExists(name string) string {
 	return Catalog.Format(msgs.locale, "errProfileNameExists", map[string]any{"name": name})
@@ -2050,11 +2050,11 @@ func (msgs Messages) ResetNeedsConnection() string {
 	return Catalog.Format(msgs.locale, "resetNeedsConnection", nil)
 }
 
-// ResetOnlyActive says "只有当前连接的配置可以重置密码"
+// ResetOnlyActive says "只有当前连接的账户可以重置密码"
 // in the language the app shows.
 func ResetOnlyActive() string { return In(i18n.Locale()).ResetOnlyActive() }
 
-// ResetOnlyActive says "只有当前连接的配置可以重置密码"
+// ResetOnlyActive says "只有当前连接的账户可以重置密码"
 // in the language of msgs.
 func (msgs Messages) ResetOnlyActive() string {
 	return Catalog.Format(msgs.locale, "resetOnlyActive", nil)
@@ -2310,11 +2310,11 @@ func (msgs Messages) ClientData() string {
 	return Catalog.Format(msgs.locale, "clientData", nil)
 }
 
-// ClientDataPlaceholder says "留空则按配置名存放"
+// ClientDataPlaceholder says "留空则按账户名存放"
 // in the language the app shows.
 func ClientDataPlaceholder() string { return In(i18n.Locale()).ClientDataPlaceholder() }
 
-// ClientDataPlaceholder says "留空则按配置名存放"
+// ClientDataPlaceholder says "留空则按账户名存放"
 // in the language of msgs.
 func (msgs Messages) ClientDataPlaceholder() string {
 	return Catalog.Format(msgs.locale, "clientDataPlaceholder", nil)
@@ -2948,21 +2948,21 @@ func (msgs Messages) SettingsSaved() string {
 	return Catalog.Format(msgs.locale, "settingsSaved", nil)
 }
 
-// SwitchFailed says "切换配置失败: {error}"
+// SwitchFailed says "切换账户失败: {error}"
 // in the language the app shows.
 func SwitchFailed(error string) string { return In(i18n.Locale()).SwitchFailed(error) }
 
-// SwitchFailed says "切换配置失败: {error}"
+// SwitchFailed says "切换账户失败: {error}"
 // in the language of msgs.
 func (msgs Messages) SwitchFailed(error string) string {
 	return Catalog.Format(msgs.locale, "switchFailed", map[string]any{"error": error})
 }
 
-// ProfileSwitched says "配置已切换，未保存的修改已丢弃"
+// ProfileSwitched says "账户已切换，未保存的修改已丢弃"
 // in the language the app shows.
 func ProfileSwitched() string { return In(i18n.Locale()).ProfileSwitched() }
 
-// ProfileSwitched says "配置已切换，未保存的修改已丢弃"
+// ProfileSwitched says "账户已切换，未保存的修改已丢弃"
 // in the language of msgs.
 func (msgs Messages) ProfileSwitched() string {
 	return Catalog.Format(msgs.locale, "profileSwitched", nil)
@@ -3028,31 +3028,31 @@ func (msgs Messages) OpenLogsFailed(error string) string {
 	return Catalog.Format(msgs.locale, "openLogsFailed", map[string]any{"error": error})
 }
 
-// AutoConnectNoAddress says "自动连接未执行：请先在设置中填写网关地址"
+// AutoConnectNoAddress says "自动连接未执行：请先在账户中填写网关地址"
 // in the language the app shows.
 func AutoConnectNoAddress() string { return In(i18n.Locale()).AutoConnectNoAddress() }
 
-// AutoConnectNoAddress says "自动连接未执行：请先在设置中填写网关地址"
+// AutoConnectNoAddress says "自动连接未执行：请先在账户中填写网关地址"
 // in the language of msgs.
 func (msgs Messages) AutoConnectNoAddress() string {
 	return Catalog.Format(msgs.locale, "autoConnectNoAddress", nil)
 }
 
-// AutoConnectNoUsername says "自动连接未执行：请先在设置中填写用户名"
+// AutoConnectNoUsername says "自动连接未执行：请先在账户中填写用户名"
 // in the language the app shows.
 func AutoConnectNoUsername() string { return In(i18n.Locale()).AutoConnectNoUsername() }
 
-// AutoConnectNoUsername says "自动连接未执行：请先在设置中填写用户名"
+// AutoConnectNoUsername says "自动连接未执行：请先在账户中填写用户名"
 // in the language of msgs.
 func (msgs Messages) AutoConnectNoUsername() string {
 	return Catalog.Format(msgs.locale, "autoConnectNoUsername", nil)
 }
 
-// AutoConnectNoPassword says "自动连接未执行：没有保存的密码，请先在设置中保存密码"
+// AutoConnectNoPassword says "自动连接未执行：没有保存的密码，请先在账户中保存密码"
 // in the language the app shows.
 func AutoConnectNoPassword() string { return In(i18n.Locale()).AutoConnectNoPassword() }
 
-// AutoConnectNoPassword says "自动连接未执行：没有保存的密码，请先在设置中保存密码"
+// AutoConnectNoPassword says "自动连接未执行：没有保存的密码，请先在账户中保存密码"
 // in the language of msgs.
 func (msgs Messages) AutoConnectNoPassword() string {
 	return Catalog.Format(msgs.locale, "autoConnectNoPassword", nil)
@@ -3138,11 +3138,11 @@ func (msgs Messages) SavePasswordFailed(error string) string {
 	return Catalog.Format(msgs.locale, "savePasswordFailed", map[string]any{"error": error})
 }
 
-// TotpNotStored says "未保存 TOTP 密钥：请先在设置中勾选保存密码"
+// TotpNotStored says "未保存 TOTP 密钥：请先在账户中勾选保存密码"
 // in the language the app shows.
 func TotpNotStored() string { return In(i18n.Locale()).TotpNotStored() }
 
-// TotpNotStored says "未保存 TOTP 密钥：请先在设置中勾选保存密码"
+// TotpNotStored says "未保存 TOTP 密钥：请先在账户中勾选保存密码"
 // in the language of msgs.
 func (msgs Messages) TotpNotStored() string {
 	return Catalog.Format(msgs.locale, "totpNotStored", nil)
