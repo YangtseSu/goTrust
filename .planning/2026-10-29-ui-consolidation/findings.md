@@ -303,3 +303,12 @@ status
 - **A page below 设置 is a new Page.** `PageAbout` shifts `PageProfiles`'
   value but no state is persisted by number; `pageLabel` reuses 关于 for the
   sidebar and `aboutPage` draws no heading, so the page body never repeats it.
+
+## Phase 11 facts
+
+- **Panels fit the card only after a cap.** The captcha image was 440 DIPs
+  wide; a 16 DIP card padding in a 464 DIP content column left 432, so the
+  cap is 400. The card keeps the image inside at the minimum window.
+- **The forced password panel keeps its scroll.** The card grows and shrinks
+  inside the panel slot, the body scrolls, and the foot stays at the card's
+  bottom.

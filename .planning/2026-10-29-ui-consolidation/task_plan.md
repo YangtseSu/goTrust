@@ -13,11 +13,11 @@ separate chip.
 
 ## Next Step
 
-Phase 10 is complete. The optional traffic card (Phase 7) has not been started.
+Phase 11 is complete. The optional traffic card (Phase 7) has not been started.
 
 ## Current Phase
 
-Phase 10 complete; Phase 7 optional and not started.
+Phase 11 complete; Phase 7 optional and not started.
 
 ## Decisions already made
 
@@ -577,6 +577,29 @@ Notes:
   heading. The settings page keeps language and local data only.
 - The render set gained `about` (900) and `page-about-*` (720, dark); the
   terminal page's 720 render shows the heading refresh and no caption.
+
+### Phase 11: Panel design pass and About room
+
+- [x] 关于's centered block takes more vertical room: a 72 DIP shield and
+      padded name/version.
+- [x] Every remaining panel follows the page design: captcha, code, SSO,
+      choice, device binding and both password changes use the card face and
+      the labels-above fields.
+- [x] The captcha image is capped at 400 DIPs, so its card still fits the
+      720 DIP window.
+- **Status:** complete.
+
+Notes:
+
+- `panelCard` gives a login panel the page card's surface, border and radius;
+  each panel keeps its heading, its fields (`formColumn`/`formField`) and its
+  foot inside the card. The forced password change keeps its scrolling body
+  with the foot pinned at the card's bottom.
+- The About hero is 72 DIP with 40 DIP above and below; the two link rows
+  follow under a divider.
+- Renders: `main-captcha`, `main-code`, `main-choice`, `main-sso`,
+  `main-password`, `settings-password` and `about` were checked at 900, plus
+  the small and dark page sets.
 
 ## Out of scope
 

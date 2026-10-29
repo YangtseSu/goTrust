@@ -256,6 +256,16 @@ The review settled these points:
 - Render: `GOTRUST_RENDER_DIR` wrote 98 images after the chip change; the five
   dashboard phases, dark mode, the panel and 720×560 were checked.
 
+### Phase 11: Panel design pass and About room
+
+- **Status:** complete
+- About: the hero is 72 DIP with vertical padding, then the link rows.
+- Panels: `panelCard` wraps the captcha, one-time code, SSO, method chooser,
+  device binding, forced password change and the voluntary password change;
+  each uses the labels-above fields and the foot inside the card.
+- Captcha: max width 400 so the card fits the minimum window.
+- Verification: full checks and the panel/About renders.
+
 ### Phase 10: Copy and About cleanup
 
 - **Status:** complete
