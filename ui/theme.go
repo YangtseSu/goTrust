@@ -26,6 +26,117 @@ const (
 	rowGap        = 8  // between the parts of one group
 )
 
+// palette is the colour set the mockup draws the window with. mygo's Theme
+// carries the control colours; the extra surfaces (the window, the sidebar,
+// the inputs' fill and the log pane) are the app's own, so they live here.
+type palette struct {
+	content ui.Color
+	surface ui.Color
+	sidebar ui.Color
+	hover   ui.Color
+	border  ui.Color
+	text    ui.Color
+	muted   ui.Color
+
+	accent     ui.Color
+	accentWeak ui.Color
+
+	success ui.Color
+	warning ui.Color
+	danger  ui.Color
+
+	switchOff ui.Color
+	logBG     ui.Color
+
+	powerOn   ui.Color
+	powerWait ui.Color
+	powerFail ui.Color
+}
+
+func paletteFor(dark bool) palette {
+	if dark {
+		return palette{
+			content: ui.Hex("#1e2025"),
+			surface: ui.Hex("#23262c"),
+			sidebar: ui.Hex("#1a1c21"),
+			hover:   ui.Hex("#2b2f37"),
+			border:  ui.Hex("#32363f"),
+			text:    ui.Hex("#e7e9ee"),
+			muted:   ui.Hex("#9aa1ad"),
+
+			accent:     ui.Hex("#77a8fb"),
+			accentWeak: ui.Hex("#1f2b41"),
+
+			success: ui.Hex("#5cc98a"),
+			warning: ui.Hex("#e5a54b"),
+			danger:  ui.Hex("#f0736a"),
+
+			switchOff: ui.Hex("#3a3f49"),
+			logBG:     ui.Hex("#15171b"),
+
+			powerOn:   ui.Hex("#16a34a"),
+			powerWait: ui.Hex("#d97706"),
+			powerFail: ui.Hex("#dc2626"),
+		}
+	}
+	return palette{
+		content: ui.Hex("#fbfbfc"),
+		surface: ui.Hex("#ffffff"),
+		sidebar: ui.Hex("#f1f3f6"),
+		hover:   ui.Hex("#eceef2"),
+		border:  ui.Hex("#e2e5ea"),
+		text:    ui.Hex("#1f2328"),
+		muted:   ui.Hex("#6b7280"),
+
+		accent:     ui.Hex("#2563eb"),
+		accentWeak: ui.Hex("#e8effe"),
+
+		success: ui.Hex("#15803d"),
+		warning: ui.Hex("#b45309"),
+		danger:  ui.Hex("#b42318"),
+
+		switchOff: ui.Hex("#d3d7de"),
+		logBG:     ui.Hex("#f7f8fa"),
+
+		powerOn:   ui.Hex("#16a34a"),
+		powerWait: ui.Hex("#d97706"),
+		powerFail: ui.Hex("#dc2626"),
+	}
+}
+
+// palette is the mockup's colours for the appearance the frame uses.
+func paletteOf(c *ui.Context) palette { return paletteFor(c.Theme().Dark) }
+
+// themeFor is the mygo theme the frame draws with: the mockup's colours on
+// the toolkit's metrics, so mygo's own widgets (inputs, switches, selects,
+// scrollbars) sit in the same palette as the views.
+func themeFor(dark bool) *ui.Theme {
+	theme := ui.LightTheme()
+	if dark {
+		theme = ui.DarkTheme()
+	}
+	p := paletteFor(dark)
+	theme.Background = p.content
+	theme.Surface = p.surface
+	theme.SurfaceHover = p.hover
+	theme.SurfacePressed = p.hover.Mix(p.text, 0.08)
+	theme.Border = p.border
+	theme.Text = p.text
+	theme.TextMuted = p.muted
+	theme.Accent = p.accent
+	theme.AccentHover = p.accent.Mix(p.text, 0.12)
+	theme.AccentPressed = p.accent.Mix(p.text, 0.2)
+	theme.AccentText = ui.RGB(255, 255, 255)
+	theme.Danger = p.danger
+	theme.Warning = p.warning
+	theme.Success = p.success
+	theme.Selection = p.accent.Alpha(0.25)
+	theme.Focus = p.accent.Alpha(0.55)
+	theme.Inverse = p.text
+	theme.InverseText = p.content
+	return theme
+}
+
 // tone is the meaning of a colour, not the colour itself: the theme decides
 // what success and failure look like in the light and in the dark.
 type tone uint8
@@ -192,8 +303,9 @@ func textButton(c *ui.Context, label string) ui.Element {
 // what draws the card.
 func card(c *ui.Context) ui.Element {
 	theme := c.Theme()
-	return ui.Column(c).Padding(theme.Space(3)).Radius(theme.Radius*2).
-		Border(1, theme.Border).Background(theme.Background)
+	p := paletteOf(c)
+	return ui.Column(c).Padding(theme.Space(4)).Radius(theme.Radius*2).
+		Border(1, p.border).Background(p.surface)
 }
 
 // busyLine is the visible sign that a save is running: a spinner and a word, so

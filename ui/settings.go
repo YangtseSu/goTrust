@@ -151,7 +151,9 @@ type SettingsActions struct {
 	SetAutostart func(bool)
 	// SetVerbose changes the running log level immediately.
 	SetVerbose func(bool)
-	OpenLogs   func()
+	// ClearLogs truncates the log file and removes its rotated copies.
+	ClearLogs func()
+	OpenLogs  func()
 	// DiscoverAuth asks the gateway in the draft for its authentication
 	// methods; SelectAuth stores the chosen one in the draft.
 	DiscoverAuth func()
@@ -610,19 +612,18 @@ const fieldWidth = 360
 const methodPickerWidth = 240
 
 func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActions, profile *config.Profile, index int) {
-	caption(c, locales.SettingsEffectLogin())
 	ui.Form(c, func() {
 		ui.Field(c, locales.FieldGateway(), func() {
-			ui.TextInput(c, &state.Gateways[index]).Placeholder("vpn.example.com:443").MaxWidth(fieldWidth)
+			ui.TextInput(c, &state.Gateways[index]).Placeholder("vpn.example.com:443")
 		})
 		ui.Field(c, locales.FieldUsername(), func() {
-			ui.TextInput(c, &profile.Auth.Username).MaxWidth(fieldWidth)
+			ui.TextInput(c, &profile.Auth.Username)
 		})
 		// The password and 保存密码 are one row: the check box belongs to the
 		// value beside it, and the hint about a gateway that asks later is the
 		// placeholder it cannot be if it is a caption under the field.
 		ui.Field(c, locales.FieldPassword(), func() {
-			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).MaxWidth(fieldWidth).Children(func() {
+			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 				ui.TextInput(c, &profile.Auth.Password).Password().Grow(1).Shrink(1).
 					Placeholder(locales.PasswordPlaceholder())
 				ui.Checkbox(c, &profile.Auth.StorePass, locales.StorePassword())
@@ -632,7 +633,7 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(8).Children(func() {
 				options := methodOptions(state.Methods, profile.Auth.AuthType, profile.Auth.Domain)
 				chosen := methodValue(state.Methods, profile.Auth.AuthType, profile.Auth.Domain)
-				if ui.Select(c, &chosen, options).MaxWidth(methodPickerWidth).Changed() {
+				if ui.Select(c, &chosen, options).Grow(1).Changed() {
 					if picked := indexOf(options, chosen); picked >= 0 && actions.SelectAuth != nil {
 						actions.SelectAuth(picked)
 					}
@@ -644,29 +645,43 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 			caption(c, authMethodHint(state))
 		})
 		ui.Field(c, locales.LoginDomain(), func() {
-			ui.TextInput(c, &profile.Auth.Domain).Placeholder("local").MaxWidth(fieldWidth)
+			ui.TextInput(c, &profile.Auth.Domain).Placeholder("local")
 		})
-		ui.Field(c, locales.PasswordSecurity(), func() {
-			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(8).Children(func() {
-				if ui.Button(c, locales.ResetPassword()).Disabled(!state.CanChangePassword()).Clicked() && actions.OpenPassword != nil {
-					actions.OpenPassword()
-				}
+	})
+}
+
+// securitySection is the account's 安全 card: the voluntary password change
+// and, when the login stored one, the TOTP secret.
+func securitySection(c *ui.Context, state *SettingsState, actions Actions, profile *config.Profile) {
+	theme := c.Theme()
+	ui.Column(c).Gap(rowGap).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+				ui.Text(c, locales.ChangePassword()).FontSize(theme.FontSize)
+				sub := locales.ChangePasswordDesc()
 				if !state.Online {
-					caption(c, locales.ResetNeedsConnection())
+					sub = locales.ResetNeedsConnection()
 				} else if !state.CanChangePassword() {
-					caption(c, locales.ResetOnlyActive())
+					sub = locales.ResetOnlyActive()
 				}
+				caption(c, sub)
 			})
+			if ui.Button(c, locales.EditPassword()).Disabled(!state.CanChangePassword()).
+				Clicked() && actions.Settings.OpenPassword != nil {
+				actions.Settings.OpenPassword()
+			}
 		})
 		if profile.Auth.TOTPSecret != "" {
-			ui.Field(c, locales.TotpSection(), func() {
-				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(8).Children(func() {
+			ui.Divider(c)
+			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+				ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+					ui.Text(c, locales.TotpSection()).FontSize(theme.FontSize)
 					caption(c, locales.TotpStored())
-					if ui.Button(c, locales.CommonRemove()).Clicked() {
-						profile.Auth.TOTPSecret = ""
-						state.SetStatus(locales.TotpRemoved(), false)
-					}
 				})
+				if ui.Button(c, locales.CommonRemove()).Clicked() {
+					profile.Auth.TOTPSecret = ""
+					state.SetStatus(locales.TotpRemoved(), false)
+				}
 			})
 		}
 	})
@@ -676,123 +691,97 @@ func proxySection(c *ui.Context, state *SettingsState) {
 	caption(c, locales.SettingsEffectConnect())
 	ui.Form(c, func() {
 		ui.Field(c, locales.Socks5Listen(), func() {
-			ui.TextInput(c, &state.Draft.Proxy.SOCKS5Bind).Placeholder("127.0.0.1:1080").MaxWidth(fieldWidth)
+			ui.TextInput(c, &state.Draft.Proxy.SOCKS5Bind).Placeholder("127.0.0.1:1080")
 		})
 		ui.Field(c, locales.HttpListen(), func() {
-			ui.TextInput(c, &state.Draft.Proxy.HTTPBind).Placeholder("127.0.0.1:1081").MaxWidth(fieldWidth)
+			ui.TextInput(c, &state.Draft.Proxy.HTTPBind).Placeholder("127.0.0.1:1081")
 		})
 		caption(c, locales.ProxyHint())
 	})
 }
 
 func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profile, enabled *bool, index int) {
-	caption(c, locales.SettingsEffectConnect())
-	ui.Form(c, func() {
-		ui.Field(c, "", func() {
-			if ui.Checkbox(c, enabled, locales.KeepAliveEnable()).Changed() {
-				profile.Keep.SetEnabled(*enabled)
-			}
-		})
-		ui.Field(c, locales.KeepAliveInterval(), func() {
-			ui.TextInput(c, &profile.Keep.Interval).Placeholder("90s").MaxWidth(fieldWidth)
-			caption(c, locales.KeepAliveIntervalHint())
-		})
-		ui.Field(c, locales.KeepAliveTargets(), func() {
-			ui.TextArea(c, &state.Targets[index]).Placeholder(locales.KeepAliveTargetsPlaceholder()).MaxWidth(fieldWidth)
-			caption(c, locales.KeepAliveTargetsHint())
+	card(c).Gap(rowGap).Children(func() {
+		if switchRow(c, enabled, locales.KeepAliveEnable()) {
+			profile.Keep.SetEnabled(*enabled)
+		}
+		ui.Divider(c)
+		ui.Form(c, func() {
+			ui.Field(c, locales.KeepAliveInterval(), func() {
+				ui.TextInput(c, &profile.Keep.Interval).Placeholder("90s")
+				caption(c, locales.KeepAliveIntervalHint())
+			})
+			ui.Field(c, locales.KeepAliveTargets(), func() {
+				ui.TextArea(c, &state.Targets[index]).Placeholder(locales.KeepAliveTargetsPlaceholder())
+				caption(c, locales.KeepAliveTargetsHint())
+			})
 		})
 	})
 }
 
-// startupSection is 启动: the four things the app does around a session. The
-// language moved to 设置, where the rest of the app-wide settings live.
 func startupSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
-	caption(c, locales.SettingsEffectStartup())
-	ui.Form(c, func() {
-		ui.Field(c, "", func() {
-			if ui.Checkbox(c, &state.Draft.App.Autostart, locales.Autostart()).Changed() && actions.SetAutostart != nil {
-				actions.SetAutostart(state.Draft.App.Autostart)
-			}
-		})
-		ui.Field(c, "", func() {
-			ui.Checkbox(c, &state.Draft.App.AutoConnect, locales.AutoConnect())
-		})
-		ui.Field(c, "", func() {
-			ui.Checkbox(c, &state.Draft.App.StartHidden, locales.StartHidden())
-		})
-		ui.Field(c, "", func() {
-			ui.Checkbox(c, &state.Draft.App.AutoReconnect, locales.AutoReconnect())
-		})
+	card(c).Gap(rowGap).Children(func() {
+		if switchRow(c, &state.Draft.App.Autostart, locales.Autostart()) && actions.SetAutostart != nil {
+			actions.SetAutostart(state.Draft.App.Autostart)
+		}
+		ui.Divider(c)
+		switchRow(c, &state.Draft.App.AutoConnect, locales.AutoConnect())
+		ui.Divider(c)
+		switchRow(c, &state.Draft.App.StartHidden, locales.StartHidden())
+		ui.Divider(c)
+		switchRow(c, &state.Draft.App.AutoReconnect, locales.AutoReconnect())
 	})
 }
 
-// localDataSection is 本机数据: the stored client data file, the device the
-// portal sees, and the settings file the [identity] section lives in. The
-// placeholder is the file the current account would use, so an empty field
-// still says where the account keeps its material.
 func localDataSection(c *ui.Context, state *SettingsState, profile *config.Profile, actions SettingsActions) {
-	ui.Column(c).Gap(6).Children(func() {
+	card(c).Gap(rowGap).Children(func() {
 		sectionHeading(c, locales.LocalData())
-		caption(c, locales.SettingsEffectLogin())
 		ui.Form(c, func() {
 			ui.Field(c, locales.ClientData(), func() {
-				input := ui.TextInput(c, &profile.Debug.ClientData).MaxWidth(fieldWidth)
+				input := ui.TextInput(c, &profile.Debug.ClientData)
 				if resolved, err := state.Draft.ClientDataPathFor(*profile); err == nil {
 					input.Placeholder(shortPath(resolved))
 				}
 			})
-			// The device identity is hand-edited only: a wrong id is a support
-			// problem, so the window shows the values in effect and opens the file.
-			ui.Field(c, locales.DeviceID(), func() {
-				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-					deviceID := state.Draft.Identity.DeviceID
-					if deviceID == "" {
-						deviceID = locales.NotGenerated()
-					}
-					ui.Text(c, deviceID).FontSize(c.Theme().FontSize).Font("monospace").TextColor(c.Theme().TextMuted)
-					if ui.Button(c, locales.OpenConfig()).Description(locales.OpenConfigDesc()).Clicked() && actions.OpenConfig != nil {
-						actions.OpenConfig()
-					}
-				})
-			})
+		})
+		ui.Divider(c)
+		deviceID := state.Draft.Identity.DeviceID
+		if deviceID == "" {
+			deviceID = locales.NotGenerated()
+		}
+		rowLine(c, locales.DeviceID(), deviceID, func() {
+			if ui.Button(c, locales.OpenConfig()).Description(locales.OpenConfigDesc()).Clicked() && actions.OpenConfig != nil {
+				actions.OpenConfig()
+			}
 		})
 	})
 }
 
-// aboutSection is 关于: the release, the project and the license. The two
-// buttons open their pages in the browser; the version is the string the
-// release workflow links in.
 func aboutSection(c *ui.Context, actions SettingsActions) {
-	ui.Column(c).Gap(6).Children(func() {
+	theme := c.Theme()
+	card(c).Gap(rowGap).Children(func() {
 		sectionHeading(c, locales.AboutSection())
-		ui.Form(c, func() {
-			ui.Field(c, locales.VersionLabel(), func() {
-				ui.Text(c, releaseVersion()).FontSize(c.Theme().FontSize).Font("monospace")
-			})
-			ui.Field(c, locales.ProjectHome(), func() {
-				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-					ui.Text(c, projectHost).FontSize(c.Theme().FontSize).Font("monospace").TextColor(c.Theme().TextMuted)
-					if ui.Button(c, locales.CommonOpen()).Label(locales.OpenProjectDesc()).
-						Clicked() && actions.OpenURL != nil {
-						actions.OpenURL(projectURL)
-					}
-				})
-			})
-			ui.Field(c, locales.LicenseLabel(), func() {
-				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-					ui.Text(c, licenseLine).FontSize(c.Theme().FontSize).TextColor(c.Theme().TextMuted)
-					if ui.Button(c, locales.CommonOpen()).Label(locales.ViewLicenseDesc()).
-						Clicked() && actions.OpenURL != nil {
-						actions.OpenURL(licenseURL)
-					}
-				})
-			})
+		rowLine(c, locales.VersionLabel(), "", func() {
+			ui.Text(c, releaseVersion()).FontSize(theme.FontSize).Font("monospace").
+				TextColor(paletteOf(c).muted)
+		})
+		ui.Divider(c)
+		linkRow(c, locales.ProjectHome(), projectHost, func() {
+			if actions.OpenURL != nil {
+				actions.OpenURL(projectURL)
+			}
+		})
+		ui.Divider(c)
+		linkRow(c, locales.LicenseLabel(), licenseLine, func() {
+			if actions.OpenURL != nil {
+				actions.OpenURL(licenseURL)
+			}
 		})
 	})
 }
 
 // The project's public addresses. The host is what the window shows; the
-// buttons open the https pages.
+// rows open the https pages.
 const (
 	projectHost = "github.com/YangtseSu/goTrust"
 	projectURL  = "https://" + projectHost
@@ -834,20 +823,125 @@ func shortPath(path string) string {
 // field of the state, not a local, so the click survives into the pass that
 // reports Changed.
 func languageSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
-	ui.Column(c).Gap(6).Children(func() {
+	card(c).Gap(rowGap).Children(func() {
 		sectionHeading(c, locales.Language())
 		if ui.Segmented(c, &state.LocaleIndex,
 			locales.LanguageSystem(),
 			i18n.Autonym("zh"),
 			i18n.Autonym("en"),
-		).MaxWidth(fieldWidth).Changed() && actions.SetLocale != nil {
+		).Changed() && actions.SetLocale != nil {
 			actions.SetLocale(localeTag(state.LocaleIndex))
 		}
 		caption(c, locales.LanguageHint())
 	})
 }
 
-// localeTag maps a picker index to the tag SetLocale takes.
+// rowLine is one titled row of a card: the title and an optional sub line on
+// the left, the value or the action on the right.
+func rowLine(c *ui.Context, title, sub string, right func()) {
+	theme := c.Theme()
+	ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+			ui.Text(c, title).FontSize(theme.FontSize)
+			if sub != "" {
+				caption(c, sub).SingleLine()
+			}
+		})
+		if right != nil {
+			right()
+		}
+	})
+}
+
+// linkRow is a row that opens a page in the browser. The whole row is the
+// target: the mockup has no separate 打开 button.
+func linkRow(c *ui.Context, title, sub string, open func()) {
+	theme := c.Theme()
+	p := paletteOf(c)
+	row := ui.ButtonBase(c).AlignItems(ui.Center).Padding(theme.Space(1.5), 0).
+		Radius(theme.Radius).Gap(rowGap).Label(title)
+	if row.Hovered() {
+		row.Background(p.hover)
+	}
+	row.Children(func() {
+		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+			ui.Text(c, title).FontSize(theme.FontSize)
+			if sub != "" {
+				caption(c, sub).SingleLine()
+			}
+		})
+		ui.Icon(c, iconArrowUpRight).Size(16, 16).Shrink(0).TextColor(p.muted)
+	})
+	if row.Clicked() && open != nil {
+		open()
+	}
+}
+
+// switchLabel is a switch beside its label, as the log page's 详细日志 and
+// the mockup's toolbar draw it. The whole label is the target.
+func switchLabel(c *ui.Context, on *bool, label string) bool {
+	theme := c.Theme()
+	p := paletteOf(c)
+	row := ui.ButtonBase(c).AlignItems(ui.Center).Gap(theme.Space(2)).
+		Padding(theme.Space(0.5), theme.Space(1)).Radius(theme.Radius).
+		Role(ui.RoleSwitch).Label(label).Checked(*on)
+	if row.Hovered() {
+		row.Background(p.hover)
+	}
+	row.Children(func() {
+		switchTrack(c, *on)
+		ui.Text(c, label).FontSize(theme.FontSize)
+	})
+	if !row.Clicked() {
+		return false
+	}
+	*on = !*on
+	return true
+}
+
+// switchRow is a titled row with a switch at its right end; the row is the
+// control, as the mockup's label wraps its switch. It reports whether the
+// value changed this frame.
+func switchRow(c *ui.Context, on *bool, label string) bool {
+	theme := c.Theme()
+	p := paletteOf(c)
+	row := ui.ButtonBase(c).AlignItems(ui.Center).Gap(rowGap).
+		Padding(theme.Space(0.5), 0).Radius(theme.Radius).
+		Role(ui.RoleSwitch).Label(label).Checked(*on)
+	if row.Hovered() {
+		row.Background(p.hover)
+	}
+	row.Children(func() {
+		ui.Text(c, label).FontSize(theme.FontSize).Grow(1)
+		switchTrack(c, *on)
+	})
+	if !row.Clicked() {
+		return false
+	}
+	*on = !*on
+	return true
+}
+
+// switchTrack draws the mockup's switch: a 34x20 pill with a 16px knob at
+// the left when off and at the right when on.
+func switchTrack(c *ui.Context, on bool) {
+	p := paletteOf(c)
+	track := ui.Box(c).Width(34).Height(20).Radius(999).Shrink(0).Padding(2)
+	if on {
+		track.Background(p.accent)
+	} else {
+		track.Background(p.switchOff)
+	}
+	track.Children(func() {
+		ui.Row(c).Fill().Children(func() {
+			if on {
+				ui.Box(c).Grow(1)
+			}
+			ui.Box(c).Size(16, 16).Radius(8).Background(ui.RGB(255, 255, 255))
+		})
+	})
+}
+
 func localeTag(index int) string {
 	switch index {
 	case 1:

@@ -122,7 +122,14 @@ func accountPage(c *ui.Context, state *State, actions Actions) {
 		if active := settings.ActiveAtOpen; active != "" && active != profile.Name {
 			captionTone(c, locales.SettingsSwitchHint(profile.Name), toneWarning)
 		}
-		connectionSection(c, settings, actions.Settings, profile, index)
+		card(c).Gap(rowGap).Children(func() {
+			sectionHeading(c, locales.ConnectSection())
+			connectionSection(c, settings, actions.Settings, profile, index)
+		})
+		card(c).Gap(rowGap).Children(func() {
+			sectionHeading(c, locales.SecuritySection())
+			securitySection(c, settings, actions, profile)
+		})
 	})
 }
 
@@ -132,8 +139,13 @@ func proxyPage(c *ui.Context, state *State, actions Actions) {
 	}
 	pageScroll(c, func() {
 		windowHeading(c, pageLabel(PageProxy))
-		proxySection(c, state.Settings)
-		proxyCopySection(c, state, state.Settings, actions)
+		card(c).Gap(rowGap).Children(func() {
+			sectionHeading(c, locales.ProxyListeners())
+			proxySection(c, state.Settings)
+		})
+		card(c).Gap(rowGap).Children(func() {
+			proxyCopySection(c, state, state.Settings, actions)
+		})
 	})
 }
 
@@ -141,38 +153,37 @@ func proxyPage(c *ui.Context, state *State, actions Actions) {
 // the PAC address and one of the three renderings of the live grant. The two
 // actions were the dashboard's copy menu before the one-window shell.
 func proxyCopySection(c *ui.Context, state *State, settings *SettingsState, actions Actions) {
-	ui.Column(c).Gap(6).Children(func() {
-		sectionHeading(c, locales.CopyConfig())
-		ui.Form(c, func() {
-			ui.Field(c, locales.PacAddress(), func() {
-				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-					url := strings.TrimSpace(state.PACURL)
-					if url == "" {
-						caption(c, locales.PacOff())
-					} else {
-						ui.Text(c, url).FontSize(c.Theme().FontSize).Font("monospace")
-					}
-					if ui.Button(c, locales.CommonCopy()).Label(locales.CopyPAC()).
-						Disabled(url == "").Clicked() && actions.CopyPAC != nil {
-						actions.CopyPAC()
-					}
-				})
+	sectionHeading(c, locales.CopyConfig())
+	ui.Form(c, func() {
+		ui.Field(c, locales.PacAddress(), func() {
+			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+				url := strings.TrimSpace(state.PACURL)
+				if url == "" {
+					caption(c, locales.PacOff())
+				} else {
+					ui.Text(c, url).FontSize(c.Theme().FontSize).Font("monospace")
+				}
+				if ui.Button(c, locales.CommonCopy()).Label(locales.CopyPAC()).
+					Disabled(url == "").Clicked() && actions.CopyPAC != nil {
+					actions.CopyPAC()
+				}
 			})
-			ui.Field(c, locales.ClashMihomo(), func() {
-				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-					options := []string{locales.ClashPlain(), locales.ClashScript(), locales.ClashConfig()}
-					chosen := clashLabel(settings.ClashFormat)
-					if ui.Select(c, &chosen, options).MaxWidth(methodPickerWidth).Changed() {
-						settings.ClashFormat = clashFormat(chosen)
-					}
-					if ui.Button(c, locales.CommonCopy()).Label(locales.CopyClashDesc()).
-						Clicked() && actions.CopyClash != nil {
-						actions.CopyClash(settings.ClashFormat)
-					}
-				})
+		})
+		ui.Field(c, locales.ClashMihomo(), func() {
+			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+				options := []string{locales.ClashPlain(), locales.ClashScript(), locales.ClashConfig()}
+				chosen := clashLabel(settings.ClashFormat)
+				if ui.Select(c, &chosen, options).MaxWidth(methodPickerWidth).Changed() {
+					settings.ClashFormat = clashFormat(chosen)
+				}
+				if ui.Button(c, locales.CommonCopy()).Label(locales.CopyClashDesc()).
+					Clicked() && actions.CopyClash != nil {
+					actions.CopyClash(settings.ClashFormat)
+				}
 			})
 		})
 	})
+
 }
 
 // clashLabel is the picker's text for one rendering.
@@ -255,12 +266,16 @@ func logsPage(c *ui.Context, state *State, actions SettingsActions) {
 	}
 	lines := settings.visibleLogLines()
 	theme := c.Theme()
+	p := paletteOf(c)
 	ui.Column(c).Grow(1).Shrink(1).Gap(sectionGap).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 			windowHeading(c, pageLabel(PageLogs)).Grow(1)
-			if ui.Checkbox(c, &settings.Draft.Logging.Verbose, locales.VerboseLog()).Changed() &&
+			if switchLabel(c, &settings.Draft.Logging.Verbose, locales.VerboseLog()) &&
 				actions.SetVerbose != nil {
 				actions.SetVerbose(settings.Draft.Logging.Verbose)
+			}
+			if ui.Button(c, locales.ClearLogs()).Clicked() && actions.ClearLogs != nil {
+				actions.ClearLogs()
 			}
 			if ui.Button(c, locales.OpenLogsDir()).Description(locales.OpenLogsDesc()).
 				Disabled(settings.LogDir == "").Clicked() && actions.OpenLogs != nil {
@@ -276,7 +291,7 @@ func logsPage(c *ui.Context, state *State, actions SettingsActions) {
 			}
 		})
 		pane := ui.Scroll(c).Grow(1).Shrink(1).Padding(theme.Space(1.5)).
-			Border(1, theme.Border).Radius(theme.Radius).Background(theme.Surface)
+			Border(1, p.border).Radius(theme.Radius).Background(p.logBG)
 		pane.Children(func() {
 			ui.Column(c).Gap(0).Children(func() {
 				if len(lines) == 0 {
@@ -362,29 +377,31 @@ func profilesPage(c *ui.Context, state *State, actions Actions) {
 		windowHeading(c, pageLabel(PageProfiles))
 		settings.refresh()
 		accounts := settings.Draft.ProfileNames()
-		ui.Column(c).Gap(2).Role(ui.RoleRadioGroup).Children(func() {
-			for index := range accounts {
-				accountRow(c, settings, actions, index)
-			}
-		})
-		ui.Form(c, func() {
-			ui.Field(c, locales.NameField(), func() {
-				ui.TextInput(c, &settings.NameText).MaxWidth(fieldWidth)
+		card(c).Gap(rowGap).Children(func() {
+			sectionHeading(c, locales.PageAccount())
+			ui.Column(c).Gap(2).Role(ui.RoleRadioGroup).Children(func() {
+				for index := range accounts {
+					accountRow(c, settings, actions, index)
+				}
+			})
+			ui.Form(c, func() {
+				ui.Field(c, locales.NameField(), func() {
+					ui.TextInput(c, &settings.NameText)
+				})
+			})
+			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+				if ui.Button(c, locales.ProfileNew()).Clicked() && actions.Settings.NewProfile != nil {
+					actions.Settings.NewProfile()
+				}
+				if ui.Button(c, locales.ProfileDuplicate()).Clicked() && actions.Settings.DuplicateProfile != nil {
+					actions.Settings.DuplicateProfile()
+				}
+				if ui.Button(c, locales.ProfileDelete()).Disabled(len(accounts) == 1).Clicked() &&
+					actions.Settings.DeleteProfile != nil {
+					actions.Settings.DeleteProfile()
+				}
 			})
 		})
-		ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-			if ui.Button(c, locales.ProfileNew()).Clicked() && actions.Settings.NewProfile != nil {
-				actions.Settings.NewProfile()
-			}
-			if ui.Button(c, locales.ProfileDuplicate()).Clicked() && actions.Settings.DuplicateProfile != nil {
-				actions.Settings.DuplicateProfile()
-			}
-			if ui.Button(c, locales.ProfileDelete()).Disabled(len(accounts) == 1).Clicked() &&
-				actions.Settings.DeleteProfile != nil {
-				actions.Settings.DeleteProfile()
-			}
-		})
-		caption(c, locales.ProfilesHint())
 	})
 }
 
@@ -398,14 +415,15 @@ func accountRow(c *ui.Context, settings *SettingsState, actions Actions, index i
 	if gateway == "" {
 		gateway = locales.ProfileUnconfigured()
 	}
+	p := paletteOf(c)
 	chosen := index == settings.Selected
 	row := ui.ButtonBase(c).AlignItems(ui.Center).Padding(theme.Space(1.5), theme.Space(2)).
 		Radius(theme.Radius).Gap(theme.Space(2)).Role(ui.RoleRadio).
 		Label(profile.Name).Checked(chosen)
 	if chosen {
-		row.Background(theme.Accent.Alpha(0.12).Over(theme.Surface))
+		row.Background(p.accentWeak)
 	} else if row.Hovered() {
-		row.Background(theme.SurfaceHover)
+		row.Background(p.hover)
 	}
 	row.Children(func() {
 		ui.Avatar(c, profile.Name, nil)

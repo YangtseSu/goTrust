@@ -300,6 +300,7 @@ func (a *app) openWindow(hidden bool) {
 		MinHeight:      windowMinHeight + windowShadowHeight,
 		TitleBarStyle:  mygo.TitleBarHidden,
 		TitleBarHeight: gotrustui.TitleBarHeight,
+		Transparent:    true,
 		Hidden:         hidden,
 		Content: ui.View(func(c *ui.Context) {
 			a.mu.RLock()
@@ -322,6 +323,37 @@ func (a *app) openWindow(hidden bool) {
 		window.Hide()
 	})
 	a.window.Store(window)
+}
+
+// clearLogs empties the log file and its rotations; the page shows the empty
+// tail at once and the tailer restarts on the truncation.
+func (a *app) clearLogs() {
+	if a.log == nil {
+		return
+	}
+	if err := a.log.Clear(); err != nil {
+		a.setStatusError(locales.LogClearFailed(err.Error()))
+		a.logf("clear log: %v", err)
+		return
+	}
+	a.mu.Lock()
+	if settings := a.settings; settings != nil {
+		settings.LogLines = nil
+	}
+	a.mu.Unlock()
+	a.setStatus(locales.LogsCleared(), false)
+	a.invalidate()
+}
+
+// toggleTheme switches the whole application between the light and the dark
+// appearance; the next frame paints the other palette.
+func (a *app) toggleTheme() {
+	if mygo.Theme.IsDark() {
+		mygo.Theme.SetSource(mygo.ThemeLight)
+	} else {
+		mygo.Theme.SetSource(mygo.ThemeDark)
+	}
+	a.invalidate()
 }
 
 // showWindow reveals the window on the page it already shows. The tray icon
@@ -376,6 +408,7 @@ func (a *app) actions() gotrustui.Actions {
 		TrayLogin:     a.startSavedLogin,
 		Logout:        a.disconnect,
 		ShowPage:      a.showPage,
+		ToggleTheme:   a.toggleTheme,
 		SelectProfile: a.selectProfile,
 		Quit:          func() { mygo.App.Quit() },
 		Settings:      a.settingsActions(),
@@ -528,6 +561,7 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 		},
 		SetAutostart: a.setAutostart,
 		SetVerbose:   a.setVerbose,
+		ClearLogs:    a.clearLogs,
 		OpenLogs:     a.openLogs,
 		OpenConfig:   a.openConfig,
 		CopyLogs:     a.copyLogs,

@@ -1610,16 +1610,6 @@ func (msgs Messages) PageProfiles() string {
 	return Catalog.Format(msgs.locale, "pageProfiles", nil)
 }
 
-// ProfilesHint says "选择一行编辑该账户；新建、复制、删除和切换在保存后生效。"
-// in the language the app shows.
-func ProfilesHint() string { return In(i18n.Locale()).ProfilesHint() }
-
-// ProfilesHint says "选择一行编辑该账户；新建、复制、删除和切换在保存后生效。"
-// in the language of msgs.
-func (msgs Messages) ProfilesHint() string {
-	return Catalog.Format(msgs.locale, "profilesHint", nil)
-}
-
 // SettingsUnsaved says "未保存的修改"
 // in the language the app shows.
 func SettingsUnsaved() string { return In(i18n.Locale()).SettingsUnsaved() }
@@ -1650,16 +1640,6 @@ func (msgs Messages) SettingsDiscarded() string {
 	return Catalog.Format(msgs.locale, "settingsDiscarded", nil)
 }
 
-// SettingsEffectLogin says "下次登录生效"
-// in the language the app shows.
-func SettingsEffectLogin() string { return In(i18n.Locale()).SettingsEffectLogin() }
-
-// SettingsEffectLogin says "下次登录生效"
-// in the language of msgs.
-func (msgs Messages) SettingsEffectLogin() string {
-	return Catalog.Format(msgs.locale, "settingsEffectLogin", nil)
-}
-
 // SettingsEffectConnect says "下次连接生效"
 // in the language the app shows.
 func SettingsEffectConnect() string { return In(i18n.Locale()).SettingsEffectConnect() }
@@ -1668,16 +1648,6 @@ func SettingsEffectConnect() string { return In(i18n.Locale()).SettingsEffectCon
 // in the language of msgs.
 func (msgs Messages) SettingsEffectConnect() string {
 	return Catalog.Format(msgs.locale, "settingsEffectConnect", nil)
-}
-
-// SettingsEffectStartup says "下次启动生效"
-// in the language the app shows.
-func SettingsEffectStartup() string { return In(i18n.Locale()).SettingsEffectStartup() }
-
-// SettingsEffectStartup says "下次启动生效"
-// in the language of msgs.
-func (msgs Messages) SettingsEffectStartup() string {
-	return Catalog.Format(msgs.locale, "settingsEffectStartup", nil)
 }
 
 // SettingsEffectLive says "随连接实时读取"
@@ -1918,26 +1888,6 @@ func LoginDomain() string { return In(i18n.Locale()).LoginDomain() }
 // in the language of msgs.
 func (msgs Messages) LoginDomain() string {
 	return Catalog.Format(msgs.locale, "loginDomain", nil)
-}
-
-// PasswordSecurity says "密码安全"
-// in the language the app shows.
-func PasswordSecurity() string { return In(i18n.Locale()).PasswordSecurity() }
-
-// PasswordSecurity says "密码安全"
-// in the language of msgs.
-func (msgs Messages) PasswordSecurity() string {
-	return Catalog.Format(msgs.locale, "passwordSecurity", nil)
-}
-
-// ResetPassword says "重置密码"
-// in the language the app shows.
-func ResetPassword() string { return In(i18n.Locale()).ResetPassword() }
-
-// ResetPassword says "重置密码"
-// in the language of msgs.
-func (msgs Messages) ResetPassword() string {
-	return Catalog.Format(msgs.locale, "resetPassword", nil)
 }
 
 // ResetNeedsConnection says "连接后才能重置密码"
@@ -3270,22 +3220,112 @@ func (msgs Messages) LicenseLabel() string {
 	return Catalog.Format(msgs.locale, "licenseLabel", nil)
 }
 
-// OpenProjectDesc says "在浏览器中打开项目主页"
+// ThemeSwitchToDark says "切换到深色主题"
 // in the language the app shows.
-func OpenProjectDesc() string { return In(i18n.Locale()).OpenProjectDesc() }
+func ThemeSwitchToDark() string { return In(i18n.Locale()).ThemeSwitchToDark() }
 
-// OpenProjectDesc says "在浏览器中打开项目主页"
+// ThemeSwitchToDark says "切换到深色主题"
 // in the language of msgs.
-func (msgs Messages) OpenProjectDesc() string {
-	return Catalog.Format(msgs.locale, "openProjectDesc", nil)
+func (msgs Messages) ThemeSwitchToDark() string {
+	return Catalog.Format(msgs.locale, "themeSwitchToDark", nil)
 }
 
-// ViewLicenseDesc says "在浏览器中打开许可证"
+// ThemeSwitchToLight says "切换到浅色主题"
 // in the language the app shows.
-func ViewLicenseDesc() string { return In(i18n.Locale()).ViewLicenseDesc() }
+func ThemeSwitchToLight() string { return In(i18n.Locale()).ThemeSwitchToLight() }
 
-// ViewLicenseDesc says "在浏览器中打开许可证"
+// ThemeSwitchToLight says "切换到浅色主题"
 // in the language of msgs.
-func (msgs Messages) ViewLicenseDesc() string {
-	return Catalog.Format(msgs.locale, "viewLicenseDesc", nil)
+func (msgs Messages) ThemeSwitchToLight() string {
+	return Catalog.Format(msgs.locale, "themeSwitchToLight", nil)
+}
+
+// ConnectSection says "连接"
+// in the language the app shows.
+func ConnectSection() string { return In(i18n.Locale()).ConnectSection() }
+
+// ConnectSection says "连接"
+// in the language of msgs.
+func (msgs Messages) ConnectSection() string {
+	return Catalog.Format(msgs.locale, "connectSection", nil)
+}
+
+// SecuritySection says "安全"
+// in the language the app shows.
+func SecuritySection() string { return In(i18n.Locale()).SecuritySection() }
+
+// SecuritySection says "安全"
+// in the language of msgs.
+func (msgs Messages) SecuritySection() string {
+	return Catalog.Format(msgs.locale, "securitySection", nil)
+}
+
+// ChangePassword says "修改密码"
+// in the language the app shows.
+func ChangePassword() string { return In(i18n.Locale()).ChangePassword() }
+
+// ChangePassword says "修改密码"
+// in the language of msgs.
+func (msgs Messages) ChangePassword() string {
+	return Catalog.Format(msgs.locale, "changePassword", nil)
+}
+
+// EditPassword says "修改…"
+// in the language the app shows.
+func EditPassword() string { return In(i18n.Locale()).EditPassword() }
+
+// EditPassword says "修改…"
+// in the language of msgs.
+func (msgs Messages) EditPassword() string {
+	return Catalog.Format(msgs.locale, "editPassword", nil)
+}
+
+// ChangePasswordDesc says "通过网关修改当前账号的密码"
+// in the language the app shows.
+func ChangePasswordDesc() string { return In(i18n.Locale()).ChangePasswordDesc() }
+
+// ChangePasswordDesc says "通过网关修改当前账号的密码"
+// in the language of msgs.
+func (msgs Messages) ChangePasswordDesc() string {
+	return Catalog.Format(msgs.locale, "changePasswordDesc", nil)
+}
+
+// ClearLogs says "清除"
+// in the language the app shows.
+func ClearLogs() string { return In(i18n.Locale()).ClearLogs() }
+
+// ClearLogs says "清除"
+// in the language of msgs.
+func (msgs Messages) ClearLogs() string {
+	return Catalog.Format(msgs.locale, "clearLogs", nil)
+}
+
+// LogsCleared says "日志已清除"
+// in the language the app shows.
+func LogsCleared() string { return In(i18n.Locale()).LogsCleared() }
+
+// LogsCleared says "日志已清除"
+// in the language of msgs.
+func (msgs Messages) LogsCleared() string {
+	return Catalog.Format(msgs.locale, "logsCleared", nil)
+}
+
+// LogClearFailed says "清除日志失败: {error}"
+// in the language the app shows.
+func LogClearFailed(error string) string { return In(i18n.Locale()).LogClearFailed(error) }
+
+// LogClearFailed says "清除日志失败: {error}"
+// in the language of msgs.
+func (msgs Messages) LogClearFailed(error string) string {
+	return Catalog.Format(msgs.locale, "logClearFailed", map[string]any{"error": error})
+}
+
+// ProxyListeners says "本地监听"
+// in the language the app shows.
+func ProxyListeners() string { return In(i18n.Locale()).ProxyListeners() }
+
+// ProxyListeners says "本地监听"
+// in the language of msgs.
+func (msgs Messages) ProxyListeners() string {
+	return Catalog.Format(msgs.locale, "proxyListeners", nil)
 }

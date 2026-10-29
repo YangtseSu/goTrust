@@ -413,28 +413,26 @@ func TestResourceSearchFiltersLongGroups(t *testing.T) {
 	}
 }
 
-// Eight rows in a group still read without a filter; a ninth adds one.
-func TestResourceSearchAppearsOnlyForLongGroups(t *testing.T) {
-	entries := make([]session.ResourceEntry, 0, resourceSearchAt+1)
-	for i := 1; i <= resourceSearchAt; i++ {
-		entries = append(entries, session.ResourceEntry{Kind: session.ResourceApp, Title: fmt.Sprintf("App %d", i), Copy: fmt.Sprintf("App %d", i)})
-	}
+// The resource card offers its filter as soon as it holds a row, as the
+// mockup draws it in the header; an empty card has nothing to filter.
+func TestResourceSearchAppearsWithEntries(t *testing.T) {
 	state := State{
-		Session: session.State{Phase: session.PhaseOnline, Detail: "vpn.example.com:443", Resources: session.Resources{Entries: entries}},
+		Session: session.State{Phase: session.PhaseOnline, Detail: "vpn.example.com:443"},
 		Config:  config.Default(),
 	}
-
-	short := ui.NewTester(View(&state, Actions{}), 900, 640)
-	short.Frame()
-	if short.HasText("搜索资源") {
-		t.Fatal("eight rows in one group got a filter")
+	empty := ui.NewTester(View(&state, Actions{}), 900, 640)
+	empty.Frame()
+	if empty.HasText("搜索资源") {
+		t.Fatal("an empty resource card grew a filter")
 	}
 
-	state.Session.Resources.Entries = append(entries, session.ResourceEntry{Kind: session.ResourceApp, Title: "App 9", Copy: "App 9"})
-	long := ui.NewTester(View(&state, Actions{}), 900, 640)
-	long.Frame()
-	if !long.HasText("搜索资源") {
-		t.Fatalf("nine rows in one group got no filter; texts: %v", long.Texts())
+	state.Session.Resources.Entries = []session.ResourceEntry{
+		{Kind: session.ResourceApp, Title: "App 1", Copy: "App 1"},
+	}
+	filled := ui.NewTester(View(&state, Actions{}), 900, 640)
+	filled.Frame()
+	if !filled.HasText("搜索资源") {
+		t.Fatalf("the resource header lost its filter; texts: %v", filled.Texts())
 	}
 }
 

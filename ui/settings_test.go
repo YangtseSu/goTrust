@@ -298,7 +298,7 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 
 	_, tester := newShell(t, state, actions, PageAccount)
 
-	for _, wanted := range []string{"仪表盘", "账户", "代理", "保活", "启动", "终端管理", "日志", "设置", "多账户", "下次登录生效"} {
+	for _, wanted := range []string{"仪表盘", "账户", "代理", "保活", "启动", "终端管理", "日志", "设置", "多账户", "安全"} {
 		if !tester.HasText(wanted) {
 			t.Fatalf("%q is missing from the window; texts: %v", wanted, tester.Texts())
 		}
@@ -533,7 +533,7 @@ func TestSettingsSaveAndDiscardFollowTheDraft(t *testing.T) {
 	}
 }
 
-func TestSettingsKeepAliveCheckboxUpdatesTheProfile(t *testing.T) {
+func TestSettingsKeepAliveSwitchUpdatesTheProfile(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	state.Draft.Profiles[0].Keep.SetEnabled(true)
 
@@ -542,7 +542,7 @@ func TestSettingsKeepAliveCheckboxUpdatesTheProfile(t *testing.T) {
 		t.Fatalf("click keep-alive: %v", err)
 	}
 	if state.Draft.Profiles[0].Keep.IsEnabled() {
-		t.Fatal("clicking the check box did not disable the keep-alive")
+		t.Fatal("clicking the switch did not disable the keep-alive")
 	}
 }
 
@@ -1063,10 +1063,10 @@ func TestSettingsPageShowsLocalDataAndAbout(t *testing.T) {
 		}
 	}
 
-	if err := tester.Click(locales.OpenProjectDesc()); err != nil {
+	if err := tester.Click(locales.ProjectHome()); err != nil {
 		t.Fatalf("open the project: %v", err)
 	}
-	if err := tester.Click(locales.ViewLicenseDesc()); err != nil {
+	if err := tester.Click(locales.LicenseLabel()); err != nil {
 		t.Fatalf("open the license: %v", err)
 	}
 	if want := []string{projectURL, licenseURL}; len(opened) != len(want) ||

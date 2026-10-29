@@ -11,6 +11,7 @@ import (
 
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/session"
+	"github.com/YangtseSu/goTrust/locales"
 )
 
 // Every phase has one colour meaning, and a failure is the only red one.
@@ -106,6 +107,7 @@ func TestMainWindowTabOrder(t *testing.T) {
 	tester.Frame()
 
 	for _, want := range []string{
+		locales.ThemeSwitchToDark(),
 		"仪表盘", "账户", "代理", "保活", "启动", "终端管理", "日志", "设置", "多账户",
 		"连接",
 	} {

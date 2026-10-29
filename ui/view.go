@@ -109,6 +109,8 @@ type Actions struct {
 	// SelectProfile switches the active account. The application disconnects
 	// first and reconnects when auto-connect is on.
 	SelectProfile func(string)
+	// ToggleTheme switches between the light and the dark appearance.
+	ToggleTheme func()
 	// The captcha callbacks drive the pending click captcha: one point in
 	// image pixels at a time, an undo, a clear, the submit, and a cancel that
 	// abandons the login.
@@ -149,12 +151,22 @@ type Actions struct {
 // rather than to any page.
 func View(state *State, actions Actions) func(c *ui.Context) {
 	return func(c *ui.Context) {
+		// The frame follows the appearance mygo reports (the desktop's, or the
+		// one the title bar's switcher forced); the views paint it with the
+		// mockup's palette.
+		dark := c.Theme().Dark
+		c.SetTheme(themeFor(dark))
+		// The window is transparent: the rounded content is what the frame
+		// paints, and the corners outside it show the desktop.
+		c.Root().Background(ui.Transparent)
+		p := paletteFor(dark)
 		if state.Settings != nil {
 			// The profile buffers follow the draft, whichever page changed the
 			// list inside the last frame.
 			state.Settings.refresh()
 		}
-		root := ui.Column(c).Fill()
+		root := ui.Column(c).Fill().Radius(windowRadius).Border(1, p.border).
+			Background(p.content).Clip()
 		statusToast(c, root, "status", state.Status, state.StatusSeq, state.StatusError)
 		if state.Settings != nil {
 			statusToast(c, root, "settings-status", state.Settings.Status, state.Settings.StatusSeq, state.Settings.StatusError)
@@ -162,7 +174,7 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 		searchFocus := ui.Local(root, "search-focus", func() uint64 { return 0 })
 		windowShortcuts(c, state, actions, searchFocus)
 		root.Children(func() {
-			titleBar(c, activeProfileName(state.Config))
+			titleBar(c, activeProfileName(state.Config), actions)
 			// A Row centers its children vertically by default; the sidebar and
 			// the content have to fill the window instead.
 			ui.Row(c).Grow(1).Shrink(1).AlignItems(ui.Stretch).Children(func() {
@@ -182,6 +194,7 @@ const (
 	navIconSize   float32 = 18
 	navTagWidth   float32 = 76
 	pageMaxWidth  float32 = 680
+	windowRadius  float32 = 12
 )
 
 // sidebar is the window's navigation: the dashboard first, the pages that
@@ -196,7 +209,7 @@ func sidebar(c *ui.Context, state *State, actions Actions) {
 	ui.Row(c).Shrink(0).AlignItems(ui.Stretch).Children(func() {
 		ui.Column(c).Width(sidebarWidth).Shrink(0).
 			Padding(theme.Space(3), theme.Space(2.5), theme.Space(2.5), theme.Space(2.5)).
-			Gap(theme.Space(0.5)).Background(theme.Surface).Role(ui.RoleTabList).
+			Gap(theme.Space(0.5)).Background(paletteOf(c).sidebar).Role(ui.RoleTabList).
 			Children(func() {
 				navItem(c, state, actions, PageDashboard, disabled)
 				navSeparator(c)
@@ -238,15 +251,16 @@ func navRow(c *ui.Context, state *State, actions Actions, page Page, disabled bo
 		Padding(0, theme.Space(2.5)).Radius(theme.Radius).Gap(theme.Space(2.5)).
 		Role(ui.RoleTab).Label(label).Disabled(disabled)
 
+	p := paletteOf(c)
 	chosen := page == state.Page
-	ink := theme.TextMuted
+	ink := p.muted
 	if chosen {
-		item.Background(theme.Accent.Alpha(0.12).Over(theme.Surface))
+		item.Background(p.accentWeak)
 		if !subdued {
 			ink = theme.Accent
 		}
 	} else if item.Hovered() {
-		item.Background(theme.SurfaceHover)
+		item.Background(p.hover)
 		if subdued {
 			ink = theme.Text
 		}
@@ -421,7 +435,7 @@ func panelCancel(state *State, actions Actions) func() {
 // the list only exists on the dashboard.
 func resourceSearchShown(state *State) bool {
 	return state.Page == PageDashboard && !panelOpen(state) &&
-		resourceSearchNeeded(state.Session.Resources.Entries)
+		len(state.Session.Resources.Entries) > 0
 }
 
 // panelMaxWidth bounds a pre-login form. At the window's own width it changes
@@ -454,7 +468,7 @@ func grantedLine(c *ui.Context, state *State) {
 // titleBar is the window's own title bar: the brand, at caption size and
 // muted, inside the room the desktop's window controls leave. The strip drags
 // the window and holds no control, so a press anywhere on it moves the window.
-func titleBar(c *ui.Context, profile string) {
+func titleBar(c *ui.Context, profile string, actions Actions) {
 	bar := c.TitleBar()
 	height := bar.Height
 	if height <= 0 {
@@ -462,16 +476,48 @@ func titleBar(c *ui.Context, profile string) {
 		// still keeps the two windows aligned.
 		height = TitleBarHeight
 	}
-	ui.Row(c).Height(height).AlignItems(ui.Center).
-		Padding(0, bar.Right+windowPadding/2, 0, bar.Left+windowPadding/2).
-		DragWindow().
-		Children(func() {
-			brand := "goTrust"
-			if profile != "" {
-				brand += " · " + profile
-			}
-			ui.Text(c, brand).FontSize(textSize(c, captionScale)).TextColor(c.Theme().TextMuted).SingleLine()
-		})
+	theme := c.Theme()
+	p := paletteOf(c)
+	ui.Column(c).Shrink(0).Children(func() {
+		ui.Row(c).Height(height).AlignItems(ui.Center).
+			Padding(0, bar.Right+windowPadding/2, 0, bar.Left+windowPadding/2).
+			Background(p.surface).DragWindow().
+			Children(func() {
+				ui.Icon(c, iconBrand).Size(18, 18).Shrink(0).TextColor(p.accent)
+				brand := "goTrust"
+				if profile != "" {
+					brand += " · " + profile
+				}
+				ui.Text(c, brand).FontSize(theme.FontSize - 1).FontWeight(600).
+					TextColor(theme.Text).SingleLine()
+				ui.Box(c).Grow(1)
+				themeButton(c, actions)
+			})
+		ui.Divider(c)
+	})
+}
+
+// themeButton flips the light and the dark appearance: the glyph is the one
+// the click switches to, a moon while light and a sun while dark.
+func themeButton(c *ui.Context, actions Actions) {
+	theme := c.Theme()
+	p := paletteOf(c)
+	label := locales.ThemeSwitchToDark()
+	glyph := "☾"
+	if theme.Dark {
+		label = locales.ThemeSwitchToLight()
+		glyph = "☀"
+	}
+	button := ui.ButtonBase(c).Size(26, 26).Radius(theme.Radius).Label(label)
+	if button.Hovered() {
+		button.Background(p.hover)
+	}
+	button.Children(func() {
+		ui.Text(c, glyph).FontSize(theme.FontSize + 1).TextColor(p.muted)
+	})
+	if button.Clicked() && actions.ToggleTheme != nil {
+		actions.ToggleTheme()
+	}
 }
 
 // activeProfileName is the account the window is showing, as the title bar
@@ -616,13 +662,14 @@ type powerLook struct {
 // start a login, the three active phases end one, and both waiting phases are
 // the same amber spinner: a reconnect is a login the app is doing on its own.
 func powerAppearance(theme *ui.Theme, phase session.Phase) powerLook {
+	p := paletteFor(theme.Dark)
 	switch phase {
 	case session.PhaseOnline:
-		return powerLook{label: locales.Disconnect(), glyph: iconPowerStop, fill: theme.Success, ending: true}
+		return powerLook{label: locales.Disconnect(), glyph: iconPowerStop, fill: p.powerOn, ending: true}
 	case session.PhaseConnecting, session.PhaseReconnecting:
-		return powerLook{label: locales.CommonCancel(), fill: theme.Warning, ending: true}
+		return powerLook{label: locales.CommonCancel(), fill: p.powerWait, ending: true}
 	case session.PhaseFailed:
-		return powerLook{label: locales.Retry(), glyph: iconPowerFail, fill: theme.Danger}
+		return powerLook{label: locales.Retry(), glyph: iconPowerFail, fill: p.powerFail}
 	default:
 		return powerLook{label: locales.Connect(), glyph: iconPowerPlay, fill: theme.Accent}
 	}
@@ -867,7 +914,6 @@ func phaseActive(phase session.Phase) bool {
 const (
 	resourceIconSize     = 18 // the kind glyph, and so the height of a row's line
 	resourceRowPadY      = 6  // above and below a row's line
-	resourceSearchAt     = 8  // rows in one group that still read without a filter
 	resourceGroupSpacing = 12 // above a group's heading, except the first
 	resourceHeadingSpace = 4  // between a group's heading and its rows
 	resourceListMinRows  = 3
@@ -961,6 +1007,7 @@ func matchesResource(entry session.ResourceEntry, filter string) bool {
 func resources(c *ui.Context, state *State, actions Actions, searchFocus *uint64) {
 	granted := state.Session.Resources
 
+	var filter string
 	card(c).Grow(1).Shrink(1).Gap(rowGap).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 			sectionHeading(c, locales.ResourcesTitle())
@@ -969,6 +1016,9 @@ func resources(c *ui.Context, state *State, actions Actions, searchFocus *uint64
 			url := granted.DefaultAppURL()
 			if ui.Button(c, locales.OpenDefaultApp()).Disabled(url == "").Clicked() && actions.OpenResource != nil {
 				actions.OpenResource(url)
+			}
+			if len(granted.Entries) > 0 {
+				filter = resourceSearch(c, searchFocus)
 			}
 		})
 
@@ -984,10 +1034,6 @@ func resources(c *ui.Context, state *State, actions Actions, searchFocus *uint64
 			return
 		}
 
-		var filter string
-		if resourceSearchNeeded(granted.Entries) {
-			filter = resourceSearch(c, searchFocus)
-		}
 		groups := groupResources(granted.Entries, filter)
 		if len(groups) == 0 {
 			caption(c, locales.ResourceSearchEmpty())
@@ -1007,20 +1053,7 @@ func resources(c *ui.Context, state *State, actions Actions, searchFocus *uint64
 	})
 }
 
-// resourceSearchNeeded reports whether one kind holds more rows than the list
-// shows at once. A filter over a short list costs a line and a click and saves
-// neither.
-func resourceSearchNeeded(entries []session.ResourceEntry) bool {
-	counts := make(map[session.ResourceKind]int, len(resourceKinds))
-	for _, entry := range entries {
-		if counts[entry.Kind]++; counts[entry.Kind] > resourceSearchAt {
-			return true
-		}
-	}
-	return false
-}
-
-// resourceSearch is the filter above the list. What the user types belongs to
+// resourceSearch is the filter in the resource card's header. What the user types belongs to
 // the field, not to the app state: no other part of the window reads it, and a
 // new login can replace the rows without carrying a stale query. The field
 // follows focus, which is how the window's / reaches it.
@@ -1028,7 +1061,7 @@ func resourceSearch(c *ui.Context, focus *uint64) string {
 	row := ui.Row(c).AlignItems(ui.Center)
 	query := ui.Local(row, "resource-query", func() string { return "" })
 	row.Children(func() {
-		field := ui.SearchField(c, query).Label(locales.ResourceSearch()).Grow(1)
+		field := ui.SearchField(c, query).Label(locales.ResourceSearch()).Width(150).Shrink(0)
 		if focus != nil {
 			field.FocusBind(focus, *focus)
 		}

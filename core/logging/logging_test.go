@@ -155,6 +155,49 @@ func TestRotationKeepsBoundedFiles(t *testing.T) {
 	}
 }
 
+func TestClearTruncatesAndRemovesRotations(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gotrust.log")
+	logger, err := New(Options{Path: path, MaxBytes: 200, Backups: 2})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	for index := range 20 {
+		logger.Printf("line %02d aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", index)
+	}
+	if _, err := os.Stat(path + ".1"); err != nil {
+		t.Fatalf("the log did not rotate before the clear: %v", err)
+	}
+
+	if err := logger.Clear(); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after clear: %v", err)
+	}
+	if info.Size() != 0 {
+		t.Fatalf("the log is %d bytes after the clear", info.Size())
+	}
+	for _, name := range []string{path + ".1", path + ".2"} {
+		if _, err := os.Stat(name); !os.IsNotExist(err) {
+			t.Fatalf("%s survived the clear: %v", name, err)
+		}
+	}
+
+	logger.Printf("after clear")
+	if err := logger.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if strings.Contains(string(data), "line 19") || !strings.Contains(string(data), "after clear") {
+		t.Fatalf("the cleared file holds the wrong lines:\n%s", data)
+	}
+}
+
 func TestLoggerCreatesPrivateFile(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "state")
 	t.Setenv("XDG_STATE_HOME", dir)

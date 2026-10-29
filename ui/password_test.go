@@ -11,6 +11,7 @@ import (
 
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/session"
+	"github.com/YangtseSu/goTrust/locales"
 )
 
 // passwordTestStrategy is the smallest policy the panels can render: a length,
@@ -183,7 +184,7 @@ func TestSettingsPasswordPanel(t *testing.T) {
 	state := NewSettingsState(cfg, "/tmp/logs")
 	state.Online = false
 	_, tester := newShell(t, state, SettingsActions{}, PageAccount)
-	if !tester.HasText("重置密码") {
+	if !tester.HasText(locales.EditPassword()) {
 		t.Fatalf("the password button is missing; texts: %v", tester.Texts())
 	}
 	if !tester.HasText("连接后才能重置密码") {
@@ -193,7 +194,7 @@ func TestSettingsPasswordPanel(t *testing.T) {
 	opened := 0
 	state.Online = true
 	_, tester = newShell(t, state, SettingsActions{OpenPassword: func() { opened++ }}, PageAccount)
-	if err := tester.Click("重置密码"); err != nil {
+	if err := tester.Click(locales.EditPassword()); err != nil {
 		t.Fatalf("click the password button: %v", err)
 	}
 	if opened != 1 {

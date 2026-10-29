@@ -255,6 +255,26 @@ func (l *Logger) rotateLocked() {
 	}
 }
 
+// Clear truncates the log and removes its rotated copies. The file stays
+// open with O_APPEND, so the next line starts a fresh file without a reopen.
+func (l *Logger) Clear() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closed {
+		return nil
+	}
+	if l.file != nil {
+		if err := l.file.Truncate(0); err != nil {
+			return fmt.Errorf("truncate %s: %w", l.path, err)
+		}
+		l.size = 0
+	}
+	for index := 1; index <= l.backups; index++ {
+		_ = os.Remove(l.path + "." + strconv.Itoa(index))
+	}
+	return nil
+}
+
 // Close flushes a trailing partial line and closes the file. It is safe twice.
 func (l *Logger) Close() error {
 	l.mu.Lock()

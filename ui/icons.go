@@ -30,6 +30,13 @@ var (
 	// iconResourceOther marks a kind this build does not draw a row for yet.
 	iconResourceOther = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>`))
 
+	// iconBrand is the shield of the title bar: the app's own mark, next to
+	// the name.
+	iconBrand = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 19 6v5.5c0 4.4-2.9 7.6-7 9.5-4.1-1.9-7-5.1-7-9.5V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg>`))
+
+	// iconArrowUpRight marks a row that opens a page in the browser.
+	iconArrowUpRight = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg>`))
+
 	// iconRowMenu is a row's own actions. It is drawn as three dots instead of
 	// the arrowed menu button the header uses, because every row carries one
 	// and a list of buttons outshouts the rows.

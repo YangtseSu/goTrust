@@ -142,12 +142,14 @@ func TestAccountFormOrder(t *testing.T) {
 	texts := tester.Texts()
 
 	order := []string{
+		locales.ConnectSection(),
 		locales.FieldGateway(),
 		locales.FieldUsername(),
 		locales.FieldPassword(),
 		locales.AuthMethod(),
 		locales.LoginDomain(),
-		locales.PasswordSecurity(),
+		locales.SecuritySection(),
+		locales.ChangePassword(),
 	}
 	last := -1
 	for _, label := range order {
