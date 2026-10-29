@@ -93,8 +93,8 @@ needs a phase in the plan and an entry in its decisions table.
 
 ## mygo owns the toolkit behaviour
 
-* The windows use the pinned mygo fork: hidden title bars keep the desktop's
-  window controls, and a hide from a window's own frame is queued by the toolkit.
+* The windows use mygo 0.7.2: hidden title bars keep the desktop's window
+  controls, and a hide from a window's own frame is queued by the toolkit.
 * Views are pure functions of `ui.State`; they read no network and keep no global
   state. Widget state that belongs to one field lives in `ui.Local`, app state in
   the state struct.

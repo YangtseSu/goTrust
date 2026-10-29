@@ -60,11 +60,10 @@ each release are in `docs/development.md`.
 - Views are pure: no network, no global state; render them in tests.
 - A prompt page lives on the loopback interface only, under a single-use token,
   and never logs what was typed into it.
-- mygo comes from the fork pinned in `go.mod` (`YangtseSu/mygo`,
-  `linux-hide-in-frame`, the fix for issue #680): there, a window created,
-  shown, hidden or closed inside a frame is safe, `Hide` included. Drop the
-  `replace` once upstream ships the fix; if mygo moves back to a release
-  without it, hide a window from outside its own frame again through
+- mygo is upstream `github.com/egoist/mygo` v0.7.2, where a window created,
+  shown, hidden or closed inside a frame is safe, `Hide` included (the
+  `linux-hide-in-frame` fix for issue #680). If mygo moves to a release without
+  it, hide a window from outside its own frame again through
   `go func() { mygo.RunOnMain(fn) }()` (0.7.1 and earlier crash in
   `gdk_cairo_draw_from_gl` on Wayland). See `docs/agent-ui-testing.md`.
 - Never put real gateways, accounts, intranet addresses or client data in code,

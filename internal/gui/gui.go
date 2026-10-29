@@ -862,9 +862,9 @@ func (a *app) closeSettings() {
 }
 
 // hideSettings hides the settings window and discards its draft, so reopening
-// loads the saved settings again. Hide is safe from the window's own frame: the
-// pinned mygo defers a hide made while the surface draws to the next idle, as
-// it defers a destroy (PR #674), which is the fix for issue #680.
+// loads the saved settings again. Hide is safe from the window's own frame:
+// mygo 0.7.2 defers a hide made while the surface draws to the next idle, as it
+// defers a destroy (PR #674), which is the fix for issue #680.
 func (a *app) hideSettings(window *mygo.Window) {
 	window.Hide()
 	a.mu.Lock()

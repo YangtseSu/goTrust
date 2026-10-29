@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/egoist/mygo v0.7.1
+	github.com/egoist/mygo v0.7.2
 	github.com/jellydator/ttlcache/v3 v3.4.1
 	github.com/pquerna/otp v1.5.0
 	github.com/things-go/go-socks5 v0.1.3
@@ -26,5 +26,3 @@ require (
 )
 
 tool github.com/egoist/mygo/cmd/mygo
-
-replace github.com/egoist/mygo => github.com/YangtseSu/mygo v0.7.2-0.20261028152917-37187e4c9ff8
