@@ -13,12 +13,12 @@ separate chip.
 
 ## Next Step
 
-Start Phase 18: bring the window forward on a second launch. Phase 17 (the
-icon-only controls' names) is complete; Phase 19 follows.
+Start Phase 19: make the tray documentation match Linux. Phase 18 (the second
+launch) is complete.
 
 ## Current Phase
 
-Phase 17 complete; Phases 18-19 pending.
+Phase 18 complete; Phase 19 pending.
 
 ## Decisions already made
 
@@ -901,11 +901,37 @@ Notes:
 
 ### Phase 18: A second launch brings the window forward
 
-- [ ] Register `mygo.App.OnSecondInstance` before `App.Run`: restore, show and
+- [x] Register `mygo.App.OnSecondInstance` before `App.Run`: restore, show and
       focus the window, keeping the page.
-- [ ] Smoke: two launches under one headless session; the second exits and the
+- [x] Smoke: two launches under one headless session; the second exits and the
       first stays.
-- **Status:** pending.
+- **Status:** complete.
+
+Notes:
+
+- v0.7.3 forwards the second launch's arguments, working directory and
+  activation token over a per-user Unix socket and returns false after the
+  first instance has read them; the handler runs on the main thread inside
+  `WithActivationToken`, which is what lets Wayland grant the focus.
+- The audit's placement was revised by the smoke: the lock used to be taken
+  inside `runUI`, after logging, the session manager and the PAC server, so a
+  second launch opened the shared log (which may rotate at startup) and tried
+  to bind the PAC port, logging `address already in use` before exiting. `Run`
+  now takes the lock before logging and starts no handoff server in a second
+  instance. The handler is registered once the logger exists, still before
+  `App.Run`; a message that arrives in between is queued on the main loop and
+  sees the handler.
+- `showWindow` now restores a minimized window before showing and focusing it;
+  `revealWindow` (the pre-login panels) reuses it. The page is untouched, so
+  both the tray path and a second launch keep it.
+- Smoke: two launches of `/tmp/gt-phase18-bin` under one headless mutter
+  session with `start_hidden = true`; the second exited 0 in 4 ms, the first
+  stayed alive, logged `second instance: showing the window`, wrote no handoff
+  error, and exited 0 on SIGTERM. The second process still prints mygo's
+  GTK/a11y bus warning from `AllowForeground`, which is mygo's own path.
+- `README.md` records the behaviour for the user.
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` and
+  `reuse lint` pass.
 
 ### Phase 19: The tray documentation matches Linux
 

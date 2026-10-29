@@ -31,6 +31,28 @@ The review settled these points:
   with more than one account), 退出 — no 设置;
 - no memory display; the traffic card is optional.
 
+### Phase 18: A second launch brings the window forward
+
+- **Status:** complete
+- `Run` takes the single-instance lock before logging and the handoff server,
+  then registers `OnSecondInstance`; the handler restores, shows and focuses
+  the window, which keeps its page. The second process hands over its command
+  line and exits in a few milliseconds.
+- The audit's order was revised: the lock used to be taken inside `runUI`,
+  after logging, the manager and the PAC server. A second launch therefore
+  opened the shared log (which may rotate) and tried to bind the PAC port,
+  logging `address already in use`. Moving the lock to the top of `Run`
+  removes that side effect.
+- v0.7.3 runs the handlers on the main thread inside the launch's activation
+  token, so Wayland grants the focus; `showWindow` now calls `Restore`, `Show`
+  and `Focus`, and `revealWindow` reuses it.
+- Smoke: two launches of a test build under one headless mutter session;
+  the second exited 0 in 4 ms, the first stayed alive, logged
+  `second instance: showing the window`, had no handoff error, and exited 0
+  on SIGTERM.
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .`,
+  `reuse lint`.
+
 ### Phase 17: Icon-only controls speak for themselves
 
 - **Status:** complete

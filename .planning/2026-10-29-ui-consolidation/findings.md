@@ -381,7 +381,9 @@ status
 - **A second launch has no listener.** `RequestSingleInstanceLock` returns
   false in the second instance and the first is only notified through
   `OnSecondInstance` (`docs/app.md:96-108`); we register none, so the running
-  window does not come forward.
+  window does not come forward. Fixed in Phase 18: `Run` takes the lock before
+  logging and the handoff server and registers the handler that restores,
+  shows and focuses the window.
 - **Tray clicks on Linux.** With a menu set, a click opens the menu; an
   `OnClick` listener answers activation, which AppIndicator sends on a double
   click (`docs/menus.md:428-432`). Our pattern matches the documented one;
