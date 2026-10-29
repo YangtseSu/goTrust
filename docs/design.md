@@ -9,11 +9,21 @@ an entry in its decisions table.
 * The window is the app: a 900×740 page area by default, a 720×560 minimum.
   GTK counts the window's own shadow margin in the minimum hint, so the hint
   carries that margin on top of the page minimum (`windowShadowWidth`,
-  `windowShadowHeight` in `internal/gui`). The sidebar is 208 DIPs wide, the
-  page column stops at 680, and every form control stops at 360.
-* The title strip spans the window: the brand and the live account
-  (`goTrust · 账户 默认`). The desktop's own window controls live in it; a
-  close hides the window to the tray, and quitting stays in the tray menu.
+  `windowShadowHeight` in `internal/gui`). The sidebar is 208 DIPs wide and
+  the page column stops at 680; a form control fills its card.
+* The window surface is transparent and the content is clipped to a 12 DIP
+  radius, so all four corners are round. GTK keeps the shadow, the resize
+  edges and the desktop's window controls.
+* The title strip spans the window: the shield mark, the brand and the live
+  account (`goTrust · 账户 默认`), and the appearance switch at its right.
+  The desktop's own window controls live in it; a close hides the window to
+  the tray, and quitting stays in the tray menu.
+* A card is the grouped face of one thing (the session, the resources, a
+  settings group, the account's 连接 or 安全 section, the account list): the
+  mockup's surface colour, a 12 DIP radius and a 1 DIP border.
+* The appearance switch forces the whole application, mygo's own widgets
+  included, to the light or the dark theme (`mygo.Theme.SetSource`); the
+  choice lasts for the run.
 * The sidebar is the only navigation: 仪表盘, a separator, 账户, 代理, 保活,
   启动, 终端管理, 日志, 设置, then a spacer, a separator and 多账户 at the
   bottom. The active page is tinted with the accent; the rows are tabs for
@@ -35,8 +45,10 @@ an entry in its decisions table.
   the phase and the control carries the action.
 * The control is the one primary action on the page: a play triangle and
   连接 when idle or failed (重试), a spinner and 取消 while connecting or
-  reconnecting, a stop square and 断开 online. The hover fill is red for an
-  ending action and a darker accent for a starting one.
+  reconnecting, a stop square and 断开 online. Its fill is the mockup's
+  (#16a34a online, #d97706 waiting, #dc2626 failed, the accent when idle);
+  the hover fill is red for an ending action and a darker accent for a
+  starting one.
 * One meta line under the chip: `网关地址 host:port`, the time held when
   online, the failure detail in the danger tone, or the reconnect ladder
   (attempt and countdown) while it waits. A port is an identifier: it is
@@ -44,9 +56,10 @@ an entry in its decisions table.
 * A four-cell metrics row follows (已分配地址, SOCKS5, HTTP, 保活). A value the
   session does not have is `—`. The keep-alive cell carries the last probe's
   summary in its description, so the row stays one line.
-* The resources card is the second card: its title, the count and
-  打开默认应用 in the header, then the granted list. 打开默认应用 is disabled
-  while the grant has no launch address.
+* The resources card is the second card: its title, the count,
+  打开默认应用 and the search field in the header, then the granted list.
+  打开默认应用 is disabled while the grant has no launch address; the filter
+  appears as soon as there is a row, and / focuses it.
 * The session line is shared with the pre-login panels, so a question never
   hides the phase it belongs to.
 
@@ -79,6 +92,20 @@ an entry in its decisions table.
 * A panel is at most `panelMaxWidth` (560) wide: a maximized window must not
   stretch three fields across the screen.
 
+## The palette is the mockup's
+
+* Light: content `#fbfbfc`, cards and controls `#ffffff`, sidebar
+  `#f1f3f6`, hover `#eceef2`, border `#e2e5ea`, text `#1f2328`, muted
+  `#6b7280`, accent `#2563eb`, success `#15803d`, warning `#b45309`, danger
+  `#b42318`.
+* Dark: content `#1e2025`, cards and controls `#23262c`, sidebar
+  `#1a1c21`, hover `#2b2f37`, border `#32363f`, text `#e7e9ee`, muted
+  `#9aa1ad`, accent `#77a8fb`, success `#5cc98a`, warning `#e5a54b`, danger
+  `#f0736a`.
+* `themeFor` rebuilds mygo's theme from these colours, so inputs, switches,
+  selects and scrollbars sit in the same palette as the views. A change to
+  one colour moves the whole application with it.
+
 ## Semantic colour is a mark, not a fill
 
 * A tone is meaning, not a hex value (`tone`, `toneColor`, `toneInk`). The raw
@@ -104,6 +131,14 @@ an entry in its decisions table.
   8 DIP gap inside one group.
 * A row whose label can outgrow the line wraps instead of clipping; a long
   account name ellipsizes in the sidebar tag instead of squeezing 多账户.
+* A switch row is one target: the whole label toggles, as the mockup's label
+  wraps its switch. The track is the mockup's 34×20 pill, accent when on and
+  `switchOff` when off; the startup, keep-alive and 详细日志 settings use it.
+* 设置's rows fill their card: 数据文件, 设备标识, the language segment and
+  the About rows. 项目主页 and 许可证 are rows, not rows with a button: the
+  row itself opens the page, with the arrow at its right. 日志's header has
+  the 详细日志 switch, 清除 and 打开目录; 清除 truncates the file and drops
+  its rotations. The account list keeps no footer hint.
 
 ## A draft, a save bar and a toast
 
@@ -145,7 +180,8 @@ an entry in its decisions table.
 ## mygo owns the toolkit behaviour
 
 * The window uses mygo 0.7.2: a hidden title bar keeps the desktop's window
-  controls, and a hide from the window's own frame is queued by the toolkit.
+  controls, a hide from the window's own frame is queued by the toolkit, and
+  the transparent surface with `Clip` gives the four rounded corners.
 * Views are pure functions of `ui.State`; they read no network and keep no
   global state. Widget state that belongs to one field lives in `ui.Local`, app
   state in the state struct. `SettingsState` is the one long-lived draft the
