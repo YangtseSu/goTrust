@@ -346,9 +346,15 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 	}
 
 	openPage(t, tester, "设置")
-	for _, wanted := range []string{"语言", "跟随系统", "本机数据", "关于", "项目主页", "许可证"} {
+	for _, wanted := range []string{"语言", "跟随系统", "本机数据", "设备 ID"} {
 		if !tester.HasText(wanted) {
 			t.Fatalf("%q is missing from 设置; texts: %v", wanted, tester.Texts())
+		}
+	}
+	openPage(t, tester, "关于")
+	for _, wanted := range []string{"goTrust " + releaseVersion(), "项目主页", "许可证"} {
+		if !tester.HasText(wanted) {
+			t.Fatalf("%q is missing from 关于; texts: %v", wanted, tester.Texts())
 		}
 	}
 	// The log directory belongs to 日志 now, and so does the level switch.
@@ -443,8 +449,9 @@ func TestSidebarSwitchesPages(t *testing.T) {
 		{"启动", PageStartup, "登录系统时启动", "启用保活"},
 		{"终端管理", PageTerminals, "连接后可读取终端列表", "登录系统时启动"},
 		{"日志", PageLogs, "/tmp/logs", "连接后可读取终端列表"},
-		{"设置", PageSettings, "关于", "/tmp/logs"},
-		{"多账户", PageProfiles, "账户名称", "关于"},
+		{"设置", PageSettings, "语言", "/tmp/logs"},
+		{"关于", PageAbout, "项目主页", "语言"},
+		{"多账户", PageProfiles, "账户名称", "项目主页"},
 	}
 	for _, testCase := range pages {
 		openPage(t, tester, testCase.label)
@@ -532,6 +539,21 @@ func TestSettingsSaveAndDiscardFollowTheDraft(t *testing.T) {
 	tester.Frame()
 	if tester.HasText("未保存的修改") {
 		t.Fatal("the save bar outlived the discard")
+	}
+}
+
+// A short or malformed interval says what is allowed, not what the default
+// is: the shortest accepted cadence is 10s.
+func TestKeepAliveIntervalValidation(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	state.Draft.Profiles[0].Keep.Interval = "3s"
+	if _, err := state.Apply(); err == nil || !strings.Contains(err.Error(), "10s") {
+		t.Fatalf("3s = %v, want the 10s minimum", err)
+	}
+	state.Draft.Profiles[0].Keep.Interval = "3"
+	_, err := state.Apply()
+	if err == nil || !strings.Contains(err.Error(), "10s") || strings.Contains(err.Error(), "90") {
+		t.Fatalf("3 = %v, want the minimum and no 90s example", err)
 	}
 }
 
@@ -1074,17 +1096,24 @@ func TestSettingsPageShowsLocalDataAndAbout(t *testing.T) {
 	_, tester := newShell(t, state, actions, PageSettings)
 	for _, wanted := range []string{
 		"语言", "跟随系统", "本机数据", "数据文件", "6f1c9a2e4b7d", "打开配置文件",
-		"关于", "goTrust " + releaseVersion(), "项目主页", projectHost, "许可证", licenseLine,
 	} {
 		if !tester.HasText(wanted) {
 			t.Fatalf("%q is missing from 设置; texts: %v", wanted, tester.Texts())
 		}
 	}
 
-	if err := tester.Click(locales.ProjectHome()); err != nil {
+	_, about := newShell(t, state, actions, PageAbout)
+	for _, wanted := range []string{
+		"goTrust " + releaseVersion(), "项目主页", projectHost, "许可证", licenseLine,
+	} {
+		if !about.HasText(wanted) {
+			t.Fatalf("%q is missing from 关于; texts: %v", wanted, about.Texts())
+		}
+	}
+	if err := about.Click(locales.ProjectHome()); err != nil {
 		t.Fatalf("open the project: %v", err)
 	}
-	if err := tester.Click(locales.LicenseLabel()); err != nil {
+	if err := about.Click(locales.LicenseLabel()); err != nil {
 		t.Fatalf("open the license: %v", err)
 	}
 	if want := []string{projectURL, licenseURL}; len(opened) != len(want) ||

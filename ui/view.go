@@ -37,6 +37,7 @@ const (
 	PageTerminals
 	PageLogs
 	PageSettings
+	PageAbout
 	PageProfiles
 )
 
@@ -226,6 +227,7 @@ func sidebar(c *ui.Context, state *State, actions Actions) {
 				navItem(c, state, actions, PageTerminals, disabled)
 				navItem(c, state, actions, PageLogs, disabled)
 				navItem(c, state, actions, PageSettings, disabled)
+				navItem(c, state, actions, PageAbout, disabled)
 				ui.Box(c).Grow(1)
 				navSeparator(c)
 				navAccount(c, state, actions, disabled)

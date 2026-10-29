@@ -28,6 +28,8 @@ func pageLabel(page Page) string {
 		return locales.PageLogs()
 	case PageSettings:
 		return locales.PageSettings()
+	case PageAbout:
+		return locales.AboutSection()
 	case PageProfiles:
 		return locales.PageProfiles()
 	default:
@@ -62,6 +64,8 @@ func pageBody(c *ui.Context, state *State, actions Actions, searchFocus *uint64)
 		logsPage(c, state, actions.Settings)
 	case PageSettings:
 		settingsPage(c, state, actions)
+	case PageAbout:
+		aboutPage(c, actions.Settings)
 	case PageProfiles:
 		profilesPage(c, state, actions)
 	default:
@@ -373,7 +377,6 @@ func settingsPage(c *ui.Context, state *State, actions Actions) {
 		}
 		languageSection(c, settings, actions.Settings)
 		localDataSection(c, settings, profile, actions.Settings)
-		aboutSection(c, actions.Settings)
 	})
 }
 

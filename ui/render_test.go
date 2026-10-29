@@ -253,7 +253,7 @@ func renderStates(t *testing.T, dir, lang string) {
 	t.Run("settings-keepalive", func(t *testing.T) { savePage("settings-keepalive", renderPageState(cfg, PageKeepAlive)) })
 	t.Run("settings-startup", func(t *testing.T) { savePage("settings-startup", renderPageState(cfg, PageStartup)) })
 	t.Run("settings-terminal", func(t *testing.T) { savePage("settings-terminal", renderPageState(cfg, PageTerminals)) })
-	t.Run("settings-about", func(t *testing.T) { savePage("settings-about", renderPageState(cfg, PageSettings)) })
+	t.Run("about", func(t *testing.T) { savePage("about", renderPageState(cfg, PageAbout)) })
 	t.Run("settings-logs", func(t *testing.T) { savePage("settings-logs", renderPageState(cfg, PageLogs)) })
 	t.Run("settings-accounts", func(t *testing.T) {
 		view := renderPageState(cfg, PageProfiles)
@@ -316,6 +316,7 @@ func renderStates(t *testing.T, dir, lang string) {
 		{"terminals", PageTerminals},
 		{"logs", PageLogs},
 		{"settings", PageSettings},
+		{"about", PageAbout},
 		{"profiles", PageProfiles},
 	}
 	for _, page := range pages {

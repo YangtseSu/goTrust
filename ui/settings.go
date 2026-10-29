@@ -484,7 +484,7 @@ func (s *SettingsState) Apply() (config.Config, error) {
 	}
 	duration, err := time.ParseDuration(interval)
 	if err != nil || duration <= 0 {
-		return cfg, errors.New(locales.ErrKeepAliveInvalid())
+		return cfg, errors.New(locales.ErrKeepAliveInvalid(config.MinimumKeepAliveInterval.String()))
 	}
 	if duration < config.MinimumKeepAliveInterval {
 		return cfg, errors.New(locales.ErrKeepAliveShort(config.MinimumKeepAliveInterval.String()))
@@ -709,11 +709,9 @@ func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profi
 		formColumn(c, func() {
 			formField(c, locales.KeepAliveInterval(), func() {
 				ui.TextInput(c, &profile.Keep.Interval).Placeholder("90s")
-				caption(c, locales.KeepAliveIntervalHint())
 			})
 			formField(c, locales.KeepAliveTargets(), func() {
 				ui.TextArea(c, &state.Targets[index]).Placeholder(locales.KeepAliveTargetsPlaceholder())
-				caption(c, locales.KeepAliveTargetsHint())
 			})
 		})
 	})
@@ -757,28 +755,29 @@ func localDataSection(c *ui.Context, state *SettingsState, profile *config.Profi
 	})
 }
 
-func aboutSection(c *ui.Context, actions SettingsActions) {
+func aboutPage(c *ui.Context, actions SettingsActions) {
 	theme := c.Theme()
 	p := paletteOf(c)
-	card(c).Gap(rowGap).Children(func() {
-		sectionHeading(c, locales.AboutSection())
-		ui.Column(c).AlignItems(ui.Center).Gap(theme.Space(1.5)).
-			PaddingY(theme.Space(2)).Children(func() {
-			ui.Icon(c, iconBrand).Size(48, 48).TextColor(p.accent)
-			ui.Text(c, "goTrust "+releaseVersion()).FontSize(theme.FontSize + 1).
-				FontWeight(600).TextColor(theme.Text)
-		})
-		ui.Divider(c)
-		linkRow(c, locales.ProjectHome(), projectHost, func() {
-			if actions.OpenURL != nil {
-				actions.OpenURL(projectURL)
-			}
-		})
-		ui.Divider(c)
-		linkRow(c, locales.LicenseLabel(), licenseLine, func() {
-			if actions.OpenURL != nil {
-				actions.OpenURL(licenseURL)
-			}
+	pageScroll(c, func() {
+		card(c).Gap(rowGap).Children(func() {
+			ui.Column(c).AlignItems(ui.Center).Gap(theme.Space(1.5)).
+				PaddingY(theme.Space(2)).Children(func() {
+				ui.Icon(c, iconBrand).Size(48, 48).TextColor(p.accent)
+				ui.Text(c, "goTrust "+releaseVersion()).FontSize(theme.FontSize + 1).
+					FontWeight(600).TextColor(theme.Text)
+			})
+			ui.Divider(c)
+			linkRow(c, locales.ProjectHome(), projectHost, func() {
+				if actions.OpenURL != nil {
+					actions.OpenURL(projectURL)
+				}
+			})
+			ui.Divider(c)
+			linkRow(c, locales.LicenseLabel(), licenseLine, func() {
+				if actions.OpenURL != nil {
+					actions.OpenURL(licenseURL)
+				}
+			})
 		})
 	})
 }
@@ -835,7 +834,6 @@ func languageSection(c *ui.Context, state *SettingsState, actions SettingsAction
 		).AlignSelf(ui.Start).Changed() && actions.SetLocale != nil {
 			actions.SetLocale(localeTag(state.LocaleIndex))
 		}
-		caption(c, locales.LanguageHint())
 	})
 }
 
@@ -1025,7 +1023,6 @@ func authMethodHint(state *SettingsState) string {
 // both lists against the account's device limit, and the current device is
 // marked by selfId, exactly as the portal does.
 func terminalSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
-	caption(c, locales.SettingsEffectLive())
 	theme := c.Theme()
 	loaded := state.Online && state.TerminalsKnown && state.Terminals != nil
 	var terminals *session.Terminals

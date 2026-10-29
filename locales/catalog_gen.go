@@ -1650,16 +1650,6 @@ func (msgs Messages) SettingsEffectConnect() string {
 	return Catalog.Format(msgs.locale, "settingsEffectConnect", nil)
 }
 
-// SettingsEffectLive says "随连接实时读取"
-// in the language the app shows.
-func SettingsEffectLive() string { return In(i18n.Locale()).SettingsEffectLive() }
-
-// SettingsEffectLive says "随连接实时读取"
-// in the language of msgs.
-func (msgs Messages) SettingsEffectLive() string {
-	return Catalog.Format(msgs.locale, "settingsEffectLive", nil)
-}
-
 // SettingsSwitchHint says "保存后将切换到账户 {name}"
 // in the language the app shows.
 func SettingsSwitchHint(name string) string { return In(i18n.Locale()).SettingsSwitchHint(name) }
@@ -1820,14 +1810,16 @@ func (msgs Messages) ErrProfileNameExists(name string) string {
 	return Catalog.Format(msgs.locale, "errProfileNameExists", map[string]any{"name": name})
 }
 
-// ErrKeepAliveInvalid says "保活间隔不是有效时长，例如 90s"
+// ErrKeepAliveInvalid says "保活间隔不是有效时长，最短允许 {minimum}"
 // in the language the app shows.
-func ErrKeepAliveInvalid() string { return In(i18n.Locale()).ErrKeepAliveInvalid() }
+func ErrKeepAliveInvalid(minimum string) string {
+	return In(i18n.Locale()).ErrKeepAliveInvalid(minimum)
+}
 
-// ErrKeepAliveInvalid says "保活间隔不是有效时长，例如 90s"
+// ErrKeepAliveInvalid says "保活间隔不是有效时长，最短允许 {minimum}"
 // in the language of msgs.
-func (msgs Messages) ErrKeepAliveInvalid() string {
-	return Catalog.Format(msgs.locale, "errKeepAliveInvalid", nil)
+func (msgs Messages) ErrKeepAliveInvalid(minimum string) string {
+	return Catalog.Format(msgs.locale, "errKeepAliveInvalid", map[string]any{"minimum": minimum})
 }
 
 // ErrKeepAliveShort says "保活间隔至少 {minimum}：每次探测都是一次真实请求"
@@ -2000,16 +1992,6 @@ func (msgs Messages) KeepAliveInterval() string {
 	return Catalog.Format(msgs.locale, "keepAliveInterval", nil)
 }
 
-// KeepAliveIntervalHint says "至少 10 秒；默认 90 秒。"
-// in the language the app shows.
-func KeepAliveIntervalHint() string { return In(i18n.Locale()).KeepAliveIntervalHint() }
-
-// KeepAliveIntervalHint says "至少 10 秒；默认 90 秒。"
-// in the language of msgs.
-func (msgs Messages) KeepAliveIntervalHint() string {
-	return Catalog.Format(msgs.locale, "keepAliveIntervalHint", nil)
-}
-
 // KeepAliveTargets says "手动目标"
 // in the language the app shows.
 func KeepAliveTargets() string { return In(i18n.Locale()).KeepAliveTargets() }
@@ -2028,16 +2010,6 @@ func KeepAliveTargetsPlaceholder() string { return In(i18n.Locale()).KeepAliveTa
 // in the language of msgs.
 func (msgs Messages) KeepAliveTargetsPlaceholder() string {
 	return Catalog.Format(msgs.locale, "keepAliveTargetsPlaceholder", nil)
-}
-
-// KeepAliveTargetsHint says "只探测 http:// 目标：https 经 CONNECT 隧道，不算应用流量，不续期会话。"
-// in the language the app shows.
-func KeepAliveTargetsHint() string { return In(i18n.Locale()).KeepAliveTargetsHint() }
-
-// KeepAliveTargetsHint says "只探测 http:// 目标：https 经 CONNECT 隧道，不算应用流量，不续期会话。"
-// in the language of msgs.
-func (msgs Messages) KeepAliveTargetsHint() string {
-	return Catalog.Format(msgs.locale, "keepAliveTargetsHint", nil)
 }
 
 // Autostart says "登录系统时启动"
@@ -2158,16 +2130,6 @@ func LanguageSystem() string { return In(i18n.Locale()).LanguageSystem() }
 // in the language of msgs.
 func (msgs Messages) LanguageSystem() string {
 	return Catalog.Format(msgs.locale, "languageSystem", nil)
-}
-
-// LanguageHint says "切换后立即生效，并记住选择。"
-// in the language the app shows.
-func LanguageHint() string { return In(i18n.Locale()).LanguageHint() }
-
-// LanguageHint says "切换后立即生效，并记住选择。"
-// in the language of msgs.
-func (msgs Messages) LanguageHint() string {
-	return Catalog.Format(msgs.locale, "languageHint", nil)
 }
 
 // AuthAuto says "认证方式：自动"

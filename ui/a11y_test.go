@@ -109,7 +109,7 @@ func TestMainWindowTabOrder(t *testing.T) {
 	for _, want := range []string{
 		locales.ThemeSwitchToDark(),
 		locales.WindowMinimize(), locales.WindowMaximize(), locales.WindowClose(),
-		"仪表盘", "账户", "代理", "保活", "启动", "终端管理", "日志", "设置", "多账户",
+		"仪表盘", "账户", "代理", "保活", "启动", "终端管理", "日志", "设置", "关于", "多账户",
 		"连接",
 	} {
 		tester.Key(0, ui.KeyTab)
