@@ -31,7 +31,7 @@ type Captcha struct {
 
 // The captcha is drawn large enough to aim at but never taller than this.
 const (
-	captchaMaxWidth  float32 = 440
+	captchaMaxWidth  float32 = 400
 	captchaMaxHeight float32 = 200
 )
 

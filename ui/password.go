@@ -133,19 +133,19 @@ func RuleLabel(rule session.PasswordRule) string {
 
 // passwordFields renders the inputs both password panels share.
 func passwordFields(c *ui.Context, prompt *PasswordPrompt) {
-	ui.Column(c).Gap(rowGap).Children(func() {
+	formColumn(c, func() {
 		if prompt.ShowAccount {
-			ui.Field(c, locales.FieldNewUsername(), func() {
+			formField(c, locales.FieldNewUsername(), func() {
 				ui.TextInput(c, &prompt.NewUserName).Placeholder(locales.FieldNewUsername())
 			})
 		}
-		ui.Field(c, locales.FieldOldPassword(), func() {
+		formField(c, locales.FieldOldPassword(), func() {
 			ui.TextInput(c, &prompt.OldPassword).Password().Placeholder(locales.PlaceholderOldPassword())
 		})
-		ui.Field(c, locales.FieldNewPassword(), func() {
+		formField(c, locales.FieldNewPassword(), func() {
 			ui.TextInput(c, &prompt.NewPassword).Password().Placeholder(locales.PlaceholderNewPassword())
 		})
-		ui.Field(c, locales.FieldConfirmPassword(), func() {
+		formField(c, locales.FieldConfirmPassword(), func() {
 			ui.TextInput(c, &prompt.Confirm).Password().Placeholder(locales.PlaceholderNewPassword())
 		})
 		if prompt.CanSkip {
@@ -197,7 +197,7 @@ func passwordPanel(c *ui.Context, state *State, actions Actions) {
 	// The form is taller than the window's minimum, so it scrolls under a
 	// pinned action row: the buttons stay reachable at 440x400 instead of
 	// being clipped with the rules.
-	ui.Column(c).Grow(1).Shrink(1).Gap(sectionGap).Children(func() {
+	panelCard(c).Grow(1).Shrink(1).Children(func() {
 		ui.Scroll(c).Grow(1).Shrink(1).Children(func() {
 			ui.Column(c).Gap(sectionGap).Children(func() {
 				ui.Column(c).Gap(6).Children(func() {
@@ -235,7 +235,7 @@ func passwordPanel(c *ui.Context, state *State, actions Actions) {
 func settingsPasswordPanel(c *ui.Context, state *SettingsState, actions SettingsActions) {
 	prompt := state.Password
 
-	ui.Column(c).Gap(sectionGap).Children(func() {
+	panelCard(c).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
 			panelHeading(c, locales.PasswordTitle())
 			caption(c, locales.PasswordVoluntaryHint())

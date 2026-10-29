@@ -865,7 +865,7 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 	captcha := state.Captcha
 	width, height := captcha.DisplaySize()
 
-	ui.Column(c).Gap(sectionGap).Children(func() {
+	panelCard(c).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
 			panelHeading(c, locales.CaptchaTitle())
 			caption(c, locales.CaptchaHint())

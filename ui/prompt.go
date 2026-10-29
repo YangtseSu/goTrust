@@ -115,7 +115,7 @@ func panelActions(c *ui.Context, cancel func(), answers func()) {
 func codePanel(c *ui.Context, state *State, actions Actions) {
 	prompt := state.Code
 
-	ui.Column(c).Gap(sectionGap).Children(func() {
+	panelCard(c).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
 			panelHeading(c, CodeTitle(prompt.Kind))
 			if prompt.Message != "" {
@@ -123,8 +123,8 @@ func codePanel(c *ui.Context, state *State, actions Actions) {
 			}
 		})
 
-		ui.Column(c).Gap(rowGap).Children(func() {
-			ui.Field(c, locales.CodeField(), func() {
+		formColumn(c, func() {
+			formField(c, locales.CodeField(), func() {
 				ui.TextInput(c, &prompt.Code).Placeholder(locales.CodePlaceholder()).
 					OnSubmit(func() {
 						if prompt.CanSubmit() && actions.SubmitCode != nil {
@@ -138,7 +138,7 @@ func codePanel(c *ui.Context, state *State, actions Actions) {
 			if prompt.AllowTOTPSecret {
 				ui.Checkbox(c, &prompt.StoreSecret, locales.CodeStoreTOTP())
 				if prompt.StoreSecret {
-					ui.Field(c, locales.CodeTOTPField(), func() {
+					formField(c, locales.CodeTOTPField(), func() {
 						ui.TextInput(c, &prompt.TOTPSecret).Placeholder(locales.CodeTOTPPlaceholder())
 					})
 					caption(c, locales.CodeTOTPHint())
@@ -158,7 +158,7 @@ func codePanel(c *ui.Context, state *State, actions Actions) {
 func externalPanel(c *ui.Context, state *State, actions Actions) {
 	prompt := state.External
 
-	ui.Column(c).Gap(sectionGap).Children(func() {
+	panelCard(c).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
 			panelHeading(c, ExternalTitle(prompt.Kind))
 			if prompt.Message != "" {
@@ -177,13 +177,15 @@ func externalPanel(c *ui.Context, state *State, actions Actions) {
 			}
 		})
 
-		ui.Field(c, locales.CallbackField(), func() {
-			ui.TextInput(c, &prompt.Callback).Placeholder("https://…/passport/v1/auth/…?…").
-				OnSubmit(func() {
-					if strings.TrimSpace(prompt.Callback) != "" && actions.SubmitExternal != nil {
-						actions.SubmitExternal()
-					}
-				})
+		formColumn(c, func() {
+			formField(c, locales.CallbackField(), func() {
+				ui.TextInput(c, &prompt.Callback).Placeholder("https://…/passport/v1/auth/…?…").
+					OnSubmit(func() {
+						if strings.TrimSpace(prompt.Callback) != "" && actions.SubmitExternal != nil {
+							actions.SubmitExternal()
+						}
+					})
+			})
 		})
 
 		panelActions(c, actions.CancelExternal, func() {
@@ -201,7 +203,7 @@ func externalPanel(c *ui.Context, state *State, actions Actions) {
 func deviceBindPanel(c *ui.Context, state *State, actions Actions) {
 	prompt := state.DeviceBind
 
-	ui.Column(c).Gap(sectionGap).Children(func() {
+	panelCard(c).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
 			panelHeading(c, locales.BindTitle())
 			caption(c, locales.BindHint())
@@ -210,14 +212,14 @@ func deviceBindPanel(c *ui.Context, state *State, actions Actions) {
 			}
 		})
 
-		ui.Column(c).Gap(rowGap).Children(func() {
-			if prompt.DeviceID != "" {
-				ui.Field(c, locales.DeviceID(), func() {
+		if prompt.DeviceID != "" {
+			formColumn(c, func() {
+				formField(c, locales.DeviceID(), func() {
 					ui.Text(c, prompt.DeviceID).FontSize(textSize(c, captionScale)).
 						TextColor(c.Theme().TextMuted)
 				})
-			}
-		})
+			})
+		}
 
 		panelActions(c, actions.CancelDeviceBind, func() {
 			if ui.PrimaryButton(c, locales.BindAllow()).Clicked() && actions.AllowDeviceBind != nil {
@@ -231,7 +233,7 @@ func deviceBindPanel(c *ui.Context, state *State, actions Actions) {
 func choicePanel(c *ui.Context, state *State, actions Actions) {
 	choice := state.Choice
 
-	ui.Column(c).Gap(sectionGap).Children(func() {
+	panelCard(c).Children(func() {
 		ui.Column(c).Gap(6).Children(func() {
 			panelHeading(c, locales.ChoiceTitle())
 			caption(c, locales.ChoiceHint(len(choice.Methods)))

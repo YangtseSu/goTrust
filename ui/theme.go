@@ -325,6 +325,13 @@ func card(c *ui.Context) ui.Element {
 		Border(1, p.border).Background(p.surface)
 }
 
+// panelCard gives a pre-login question the face of a page card: the same
+// surface, border and radius, with the panel's own gap between its heading,
+// its fields and its foot. The caller bounds it to panelMaxWidth.
+func panelCard(c *ui.Context) ui.Element {
+	return card(c).Gap(sectionGap)
+}
+
 // busyLine is the visible sign that a save is running: a spinner and a word, so
 // a slow disk does not look like a frozen window. The dashboard's control says
 // the same for a login through its own spinner.
