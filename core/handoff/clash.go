@@ -88,7 +88,7 @@ func (s Snapshot) ClashScript() (string, error) {
 
 	var b strings.Builder
 	s.writeHeader(&b, "Clash Verge Rev script", "// ")
-	b.WriteString("// Paste into 配置 → 全局扩展脚本 (Script), save and enable it.\n")
+	b.WriteString("// Paste into Profiles → Global Extend Script (Script), save and enable it.\n")
 	b.WriteString("function main(config, profileName) {\n")
 	fmt.Fprintf(&b, "  var proxy = %s;\n", proxyJSON)
 	fmt.Fprintf(&b, "  var group = %s;\n", groupJSON)

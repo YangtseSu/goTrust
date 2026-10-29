@@ -12,7 +12,7 @@ import (
 	"github.com/YangtseSu/goTrust/core/session"
 )
 
-// The traffic card is the mockup's: 流量, the two directions with their newest
+// The traffic card is the mockup's: Traffic, the two directions with their newest
 // rates, the minute's window at the right, and the sparkline under them.
 func TestTrafficCardShowsTheRates(t *testing.T) {
 	state := State{

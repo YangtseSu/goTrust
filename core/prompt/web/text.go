@@ -3,14 +3,8 @@
 
 package web
 
-import (
-	"os"
-	"strings"
-)
-
 // texts are the words of the pages. Package core cannot reach MyGo's catalogs,
-// so the pages carry their own two languages: the tag names the language, and
-// every visible word comes from here.
+// so the pages carry their own English words; HTML names the language.
 type texts struct {
 	HTML string
 
@@ -91,85 +85,6 @@ type texts struct {
 	RuleNotInHistory string
 }
 
-var chinese = texts{
-	HTML: "zh-CN",
-
-	SuccessTitle: "已提交",
-	SuccessBody:  "可以关闭此页面，登录会继续。",
-
-	CodeTitle:    "输入验证码",
-	CodeLabel:    "验证码",
-	CodeSkip:     "跳过二次认证",
-	CodeSkipHint: "勾选“跳过二次认证”后可以不填验证码，是否放行由网关决定。",
-
-	Submit: "提交",
-
-	TextCaptchaTitle:  "图形验证码",
-	TextCaptchaPrompt: "请输入图片中的字符。",
-	CaptchaAlt:        "验证码",
-	CaptchaCharsLabel: "图中字符",
-
-	ClickPrompt: "请按图片要求的顺序点击图中的字符。",
-	Undo:        "撤销",
-	ClearAll:    "全部清除",
-	Selected:    "已选 %d 个点",
-
-	ExternalTitle:   "浏览器登录",
-	ExternalMessage: "请在浏览器中完成登录。",
-	LoginPage:       "登录页面：",
-	ExternalHint:    "完成登录后浏览器会停在一个打不开的地址；把地址栏里的完整链接粘贴到下面。",
-	CallbackLabel:   "回调地址",
-
-	PasswordTitle:     "修改密码",
-	AccountLabel:      "账号：",
-	RulesTitle:        "密码要求",
-	NewUsername:       "新账号名",
-	OldPassword:       "旧密码",
-	NewPassword:       "新密码",
-	ConfirmPassword:   "确认新密码",
-	ChangeButton:      "修改密码",
-	SkipButton:        "跳过，稍后再改",
-	ParseFailure:      "表单无法解析，请重试。",
-	CodeEmpty:         "请输入验证码",
-	CaptchaCharsEmpty: "请输入图中的字符",
-	ClickUnreadable:   "无法读取点击位置，请重新点击",
-	ClickEmpty:        "请先在图片上点击字符",
-	ClickInvalid:      "点击位置无效，请重新点击",
-	CallbackEmpty:     "请粘贴回调地址",
-	OldPasswordEmpty:  "请输入旧密码",
-	NewPasswordEmpty:  "请输入新密码",
-	PasswordMismatch:  "两次输入的新密码不一致",
-	NewUsernameEmpty:  "请输入新账号名",
-
-	BindTitle:     "绑定此设备",
-	BindMessage:   "网关要求把这台设备绑定到当前账号。绑定后它出现在终端管理里。",
-	DeviceIDLabel: "设备 ID：",
-	AllowBind:     "允许绑定",
-	DenyBind:      "拒绝",
-
-	MethodTitle:   "选择认证方式",
-	MethodMessage: "网关提供多种认证方式，请选择一种。",
-	DecisionEmpty: "请选择允许或拒绝",
-	MethodEmpty:   "请选择一种认证方式",
-
-	CodeSMS:     "短信验证码",
-	CodeTOTP:    "动态口令",
-	CodeRadius:  "令牌口令",
-	CodeGeneric: "验证码",
-	CodeMessage: "网关要求输入一次性的%s。",
-
-	RuleLength:       "密码长度至少 %d 位",
-	RuleLetters:      "密码需包含任意字母",
-	RuleUpperLower:   "密码需同时包含大小写字母",
-	RuleNumber:       "密码需包含数字",
-	RuleSpecial:      "密码需包含特殊字符",
-	RuleNoUsername:   "密码不能包含用户名",
-	RuleNoRepeat:     "密码不能包含 %d 位连续重复字符",
-	RuleNoSequence:   "密码不能包含键盘连续排序字符或常规连续字符",
-	RuleNotWeak:      "密码不能属于常见弱密码",
-	RuleNotInHistory: "新密码不能与历史前 %d 次密码重复",
-}
-
 var english = texts{
 	HTML: "en",
 
@@ -221,7 +136,7 @@ var english = texts{
 	NewUsernameEmpty:  "Enter the new username",
 
 	BindTitle:     "Bind this device",
-	BindMessage:   "The gateway asks to bind this device to your account. It then appears in Terminal management.",
+	BindMessage:   "The gateway asks to bind this device to your account. It then appears in Terminals.",
 	DeviceIDLabel: "Device ID: ",
 	AllowBind:     "Allow",
 	DenyBind:      "Deny",
@@ -247,47 +162,4 @@ var english = texts{
 	RuleNoSequence:   "No keyboard or character runs",
 	RuleNotWeak:      "Not a common weak password",
 	RuleNotInHistory: "Not one of the last %d passwords",
-}
-
-// textsFor returns the words of one language, both of which read their own
-// numbers.
-func textsFor(language string) texts {
-	if language == "en" {
-		return english
-	}
-	return chinese
-}
-
-// resolveLanguage reads the language of a tag, or of the POSIX locale
-// environment when the tag is empty. The pages speak Chinese and English; any
-// other language gets the source language.
-func resolveLanguage(tag string) string {
-	if strings.TrimSpace(tag) == "" {
-		for _, name := range []string{"LC_ALL", "LC_MESSAGES", "LANG"} {
-			if value := os.Getenv(name); strings.TrimSpace(value) != "" {
-				tag = value
-				break
-			}
-		}
-	}
-	return languageBase(tag)
-}
-
-// languageBase reduces a BCP 47 tag or a POSIX locale to the language the
-// pages speak.
-func languageBase(tag string) string {
-	tag = strings.ToLower(strings.TrimSpace(tag))
-	if cut := strings.IndexAny(tag, "_.@-"); cut >= 0 {
-		tag = tag[:cut]
-	}
-	switch tag {
-	case "zh":
-		return "zh"
-	case "en":
-		return "en"
-	case "c", "posix":
-		return "en"
-	default:
-		return "zh"
-	}
 }

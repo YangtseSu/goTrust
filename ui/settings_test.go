@@ -313,7 +313,7 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 	}
 
 	openPage(t, tester, "多账户")
-	// 新建 makes the draft differ from the file, which is what shows 保存.
+	// New makes the draft differ from the file, which is what shows Save.
 	if err := tester.Click("新建"); err != nil {
 		t.Fatalf("click new: %v", err)
 	}
@@ -357,7 +357,7 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 			t.Fatalf("%q is missing from 关于; texts: %v", wanted, tester.Texts())
 		}
 	}
-	// The log directory belongs to 日志 now, and so does the level switch.
+	// The log directory belongs to Logs now, and so does the level switch.
 	if tester.HasText("/var/log/gotrust") {
 		t.Fatal("the log directory is still on 设置")
 	}
@@ -375,7 +375,7 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 		t.Fatalf("verbose = %v calls = %d", state.Draft.Logging.Verbose, verbose)
 	}
 
-	// The title strip's 关闭窗口 hides the window; there is no second window
+	// The title strip's Close window hides the window; there is no second window
 	// to close.
 	if !tester.HasText(locales.WindowClose()) {
 		t.Fatal("the title bar lost its close control")
@@ -476,7 +476,7 @@ func TestSidebarSwitchesPages(t *testing.T) {
 }
 
 // The account rows are the picker: every account shows its name and gateway,
-// the live one carries 当前, and a click moves the draft's selection to that
+// the live one carries Current, and a click moves the draft's selection to that
 // account, which is what the other pages then edit.
 func TestAccountsPageRowsMarkTheLiveAccountAndSelect(t *testing.T) {
 	cfg := config.Default()
@@ -570,7 +570,7 @@ func TestSettingsKeepAliveSwitchUpdatesTheProfile(t *testing.T) {
 	}
 }
 
-// 终端管理 shows its cards and the zero counts before a session exists, so
+// Terminals shows its cards and the zero counts before a session exists, so
 // the page keeps its shape while it waits for the portal.
 func TestTerminalsPageShowsEmptyCardsOffline(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
@@ -608,7 +608,7 @@ func TestSettingsReloadDiscardsEdits(t *testing.T) {
 }
 
 // Choosing a discovered method stores the exact pair the gateway matches;
-// choosing 自动 clears it again.
+// choosing Automatic clears it again.
 func TestSettingsSelectAuthStoresThePair(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	state.Gateways[0] = "vpn.example.com:443"
@@ -754,7 +754,7 @@ func settingsActionsFor(state *SettingsState) SettingsActions {
 
 // Deleting the selected profile shrinks the draft from inside the frame. The
 // rest of that frame must not index the profile that disappeared: the old
-// code read Gateways[1] after 新建 → 删除 and panicked on the GTK main thread.
+// code read Gateways[1] after New → Delete and panicked on the GTK main thread.
 func TestProfilesPageDeletesWithoutAPanic(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	_, tester := newShell(t, state, settingsActionsFor(state), PageProfiles)
@@ -788,8 +788,8 @@ func TestProfilesPageDeletesWithoutAPanic(t *testing.T) {
 
 // Gateways and keep-alive targets live in buffers indexed like Draft.Profiles.
 // Deleting a middle profile has to drop that profile's buffers, not merely
-// truncate the end: 默认/B(b:8443)/C(c:9443) minus B must leave C holding its
-// own gateway.
+// truncate the end: the default account, B (b:8443) and C (c:9443), minus
+// B must leave C holding its own gateway.
 func TestSettingsDeleteKeepsGatewayAndTargetsOnTheirProfile(t *testing.T) {
 	state := threeProfileState(t)
 	state.Select(state.Draft.ProfileIndex("B"))
@@ -828,8 +828,8 @@ func TestSettingsDeleteKeepsGatewayAndTargetsOnTheirProfile(t *testing.T) {
 	}
 }
 
-// 复制 copies what the editor shows, including the unsaved gateway and targets,
-// and leaves the other profiles' buffers where they were.
+// The Copy button copies what the editor shows, including the unsaved
+// gateway and targets, and leaves the other profiles' buffers where they were.
 func TestSettingsDuplicateCopiesTheEditedBuffers(t *testing.T) {
 	state := threeProfileState(t)
 	state.Select(state.Draft.ProfileIndex("B"))
@@ -853,8 +853,8 @@ func TestSettingsDuplicateCopiesTheEditedBuffers(t *testing.T) {
 	}
 }
 
-// threeProfileState is 默认/B(b:8443)/C(c:9443) with distinct keep-alive
-// targets.
+// threeProfileState holds the default account, B (b:8443) and C (c:9443), with
+// distinct keep-alive targets.
 func threeProfileState(t *testing.T) *SettingsState {
 	t.Helper()
 	cfg := config.Default()
@@ -877,7 +877,7 @@ func threeProfileState(t *testing.T) *SettingsState {
 
 // A stored TOTP secret is a credential the form cannot show, so the connection
 // section offers a removal action. The removal is a draft edit and takes effect
-// with 保存.
+// with Save.
 func TestSettingsRemoveTheStoredTOTPSecret(t *testing.T) {
 	cfg := config.Default()
 	cfg.Profiles[0].Auth.TOTPSecret = "JBSWY3DPEHPK3PXP"
@@ -980,7 +980,7 @@ func TestSettingsShowsAndChangesTrust(t *testing.T) {
 	}
 }
 
-// 代理 owns the two copy actions the dashboard used to hide in its menu: the
+// Proxy owns the two copy actions the dashboard used to hide in its menu: the
 // PAC address and one of the three Clash/Mihomo renderings.
 func TestProxyPageCopiesTheProxyConfig(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
@@ -1029,8 +1029,9 @@ func TestProxyPageCopiesTheProxyConfig(t *testing.T) {
 	}
 }
 
-// 日志 is a live tail of the file: the filter narrows it, 复制 copies what is
-// shown, and 详细日志 raises the level through the same saved setting.
+// Logs is a live tail of the file: the filter narrows it, the Copy button
+// copies what is shown, and Verbose log raises the level through the same saved
+// setting.
 func TestLogPageFiltersCopiesAndToggles(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	state.LogPath = "/tmp/logs/gotrust.log"
@@ -1081,8 +1082,8 @@ func TestLogPageFiltersCopiesAndToggles(t *testing.T) {
 	}
 }
 
-// 设置 is the app's own data and its release: the language, the client data
-// file and identity, and 关于 with the pages the project lives on.
+// Settings is the app's own data and its release: the language, the client data
+// file and identity, and About with the pages the project lives on.
 func TestSettingsPageShowsLocalDataAndAbout(t *testing.T) {
 	cfg := config.Default()
 	cfg.Identity.DeviceID = "6f1c9a2e4b7d"
@@ -1121,7 +1122,7 @@ func TestSettingsPageShowsLocalDataAndAbout(t *testing.T) {
 		t.Fatalf("opened = %v, want %v", opened, want)
 	}
 
-	// The language moved off 启动: the page is the four toggles only.
+	// The language moved off Startup: the page is the four toggles only.
 	_, startup := newShell(t, state, actions, PageStartup)
 	if startup.HasText("跟随系统") {
 		t.Fatal("the language switch is still on 启动")

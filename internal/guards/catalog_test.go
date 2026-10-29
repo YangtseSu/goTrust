@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -114,4 +115,65 @@ func TestCatalogsCarryTheSameKeys(t *testing.T) {
 				other, len(missing), source, strings.Join(missing, ", "))
 		}
 	}
+}
+
+// TestCatalogsAreTranslated keeps a message from shipping empty, or in the
+// English catalog still in the source language. The placeholders must agree by
+// name; the ICU form may differ, as Chinese needs no plural.
+func TestCatalogsAreTranslated(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("locate the module root: %v", err)
+	}
+	catalogs := map[string]map[string]any{}
+	for _, lang := range []string{"zh", "en"} {
+		body, err := os.ReadFile(filepath.Join(root, "locales", lang+".json"))
+		if err != nil {
+			t.Fatalf("read the %s catalog: %v", lang, err)
+		}
+		var messages map[string]any
+		if err := json.Unmarshal(body, &messages); err != nil {
+			t.Fatalf("parse the %s catalog: %v", lang, err)
+		}
+		catalogs[lang] = messages
+	}
+
+	placeholder := regexp.MustCompile(`\{([A-Za-z_][A-Za-z0-9_]*)[,}]`)
+	for key, value := range catalogs["zh"] {
+		if strings.HasPrefix(key, "@") {
+			continue
+		}
+		zh, ok := value.(string)
+		if !ok {
+			t.Errorf("%s: the zh message is not a string", key)
+			continue
+		}
+		en, ok := catalogs["en"][key].(string)
+		if !ok {
+			t.Errorf("%s: the en message is not a string", key)
+			continue
+		}
+		for lang, text := range map[string]string{"zh": zh, "en": en} {
+			if strings.TrimSpace(text) == "" {
+				t.Errorf("%s: the %s message is empty", key, lang)
+			}
+		}
+		if strings.IndexFunc(en, isHan) >= 0 {
+			t.Errorf("%s: the English message still carries Chinese: %q", key, en)
+		}
+		if zhNames, enNames := messageNames(placeholder, zh), messageNames(placeholder, en); !slices.Equal(zhNames, enNames) {
+			t.Errorf("%s: placeholders zh %v, en %v", key, zhNames, enNames)
+		}
+	}
+}
+
+// messageNames returns the sorted placeholder names of an ICU message.
+func messageNames(placeholder *regexp.Regexp, text string) []string {
+	matches := placeholder.FindAllStringSubmatch(text, -1)
+	names := make([]string, 0, len(matches))
+	for _, match := range matches {
+		names = append(names, match[1])
+	}
+	slices.Sort(names)
+	return names
 }

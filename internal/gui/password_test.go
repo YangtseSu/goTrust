@@ -234,7 +234,7 @@ func TestStoreChangedPasswordWritesTheCredential(t *testing.T) {
 		t.Fatalf("stored password = %q", stored.Active().Auth.Password)
 	}
 
-	// Without 保存密码 the file must not carry the new credential, but the
+	// Without Save password the file must not carry the new credential, but the
 	// running configuration still needs it for the next login.
 	cfg.Profiles[0].Auth.StorePass = false
 	if err := config.SaveFile(path, cfg.ForDisk()); err != nil {

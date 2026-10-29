@@ -21,7 +21,7 @@ const (
 	logTailWindow = 256 << 10
 )
 
-// logTail follows one log file for the 日志 page. It reads only what was
+// logTail follows one log file for the Logs page. It reads only what was
 // appended since the last poll, so a long-running session costs one stat and
 // one read per second. The file is reopened when it is replaced or truncated:
 // the logger rotates through a rename, and an operator may empty the file.

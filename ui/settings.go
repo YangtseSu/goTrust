@@ -22,7 +22,7 @@ import (
 
 // SettingsState is the window's settings draft. It is a clone of the live
 // configuration, edited by the pages for the life of the window: a page
-// switch or hiding the window keeps the edits, and 保存, 放弃, a profile
+// switch or hiding the window keeps the edits, and Save, Discard, a profile
 // switch and a login that saves the draft reload it from the file.
 //
 // The text fields edit the draft directly, except the gateway and the
@@ -32,7 +32,7 @@ import (
 type SettingsState struct {
 	Draft    config.Config
 	Selected int
-	// NameText is the selected account's name, edited on 多账户. It is folded
+	// NameText is the selected account's name, edited on Accounts. It is folded
 	// into the draft when the draft is saved.
 	NameText string
 	// Gateways is one host:port per profile: what an administrator hands over
@@ -47,7 +47,7 @@ type SettingsState struct {
 	// confirmation.
 	StatusError bool
 	LogDir      string
-	// LogPath is the file the 日志 page tails, empty when the app runs
+	// LogPath is the file the Logs page tails, empty when the app runs
 	// without a log file. LogLines is the tail itself, oldest first, and the
 	// gui's tailer replaces it as the file grows.
 	LogPath  string
@@ -60,8 +60,8 @@ type SettingsState struct {
 	// logSeen is how many lines the last frame showed: the pane follows the
 	// newest line only when the count changed.
 	logSeen int
-	// ClashFormat is the 代理 page's copy picker: which Clash/Mihomo rendering
-	// 复制 writes to the clipboard.
+	// ClashFormat is the Proxy page's copy picker: which Clash/Mihomo rendering
+	// Copy writes to the clipboard.
 	ClashFormat ClashFormat
 	Busy        bool
 	// Online mirrors the live session: a voluntary password change goes through
@@ -82,14 +82,14 @@ type SettingsState struct {
 	TrustBusy   bool
 	TrustStatus string
 	TrustError  bool
-	// Terminals is the portal's 终端管理 answer: trusted and temporary
+	// Terminals is the portal's Terminals data: trusted and temporary
 	// endpoints. TerminalsKnown distinguishes "not loaded yet" from both lists
 	// being empty.
 	Terminals      *session.Terminals
 	TerminalsKnown bool
-	// Methods are the gateway's offered authentication methods, filled by 获取
-	// 认证方式. MethodsFrom is the gateway they belong to, so a reload or a
-	// profile switch only drops them when the target really changed.
+	// Methods are the gateway's offered authentication methods, filled by
+	// Load methods. MethodsFrom is the gateway they belong to, so a reload or
+	// a profile switch only drops them when the target really changed.
 	Methods     []session.AuthMethod
 	MethodsFrom string
 	Discovering bool
@@ -173,7 +173,7 @@ type SettingsActions struct {
 	OpenConfig func()
 	// CopyLogs puts the visible log lines on the clipboard.
 	CopyLogs func(string)
-	// OpenURL opens an http(s) page in the browser, for the 关于 links.
+	// OpenURL opens an http(s) page in the browser, for the About links.
 	OpenURL func(string)
 	// SetLocale shows the app in the tag's language, "" to follow the desktop.
 	SetLocale func(string)
@@ -220,7 +220,8 @@ func (s *SettingsState) refresh() {
 
 // selection returns the index and the profile the editor shows, or nil after
 // refresh when nothing is selectable. A frame reads it again after a profile
-// button ran, because 新建/复制/删除 change the list from inside that frame.
+// button ran, because New/Duplicate/Delete change the list from inside that
+// frame.
 func (s *SettingsState) selection() (int, *config.Profile) {
 	s.refresh()
 	if s.Selected < 0 || s.Selected >= len(s.Draft.Profiles) {
@@ -541,7 +542,7 @@ func (s *SettingsState) folded() config.Config {
 	}
 	profile := &cfg.Profiles[index]
 	// The name is folded even when it is blank: an empty name is an edit, and
-	// the window has to offer 保存 so the validation error can explain it.
+	// the window has to offer Save so the validation error can explain it.
 	profile.Name = strings.TrimSpace(s.NameText)
 	for profileIndex := range cfg.Profiles {
 		address, port, problem := ParseGateway(s.Gateways[profileIndex])
@@ -574,7 +575,7 @@ func (s *SettingsState) Changed() bool {
 		return true
 	}
 	// A gateway field that does not parse is still an edit: the save bar has
-	// to offer 保存 so Apply can say what is wrong with it.
+	// to offer Save so Apply can say what is wrong with it.
 	for index := range s.Draft.Profiles {
 		if _, _, problem := ParseGateway(s.Gateways[index]); problem != "" {
 			return true
@@ -610,7 +611,7 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 		formField(c, locales.FieldUsername(), func() {
 			ui.TextInput(c, &profile.Auth.Username)
 		})
-		// The password and 保存密码 are one row: the check box belongs to the
+		// The password and Save password are one row: the check box belongs to the
 		// value beside it, and the hint about a gateway that asks later is the
 		// placeholder it cannot be if it is a caption under the field.
 		formField(c, locales.FieldPassword(), func() {
@@ -643,7 +644,7 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 	})
 }
 
-// securitySection is the account's 安全 card: the voluntary password change
+// securitySection is the account's Security card: the voluntary password change
 // and, when the login stored one, the TOTP secret.
 func securitySection(c *ui.Context, state *SettingsState, actions Actions, profile *config.Profile) {
 	theme := c.Theme()
@@ -851,7 +852,7 @@ func rowLine(c *ui.Context, title, sub string, right func()) {
 }
 
 // linkRow is a row that opens a page in the browser. The whole row is the
-// target: the mockup has no separate 打开 button.
+// target: the mockup has no separate Open button.
 func linkRow(c *ui.Context, title, sub string, open func()) {
 	theme := c.Theme()
 	p := paletteOf(c)
@@ -874,7 +875,7 @@ func linkRow(c *ui.Context, title, sub string, open func()) {
 	}
 }
 
-// switchLabel is a switch beside its label, as the log page's 详细日志 and
+// switchLabel is a switch beside its label, as the log page's Verbose log and
 // the mockup's toolbar draw it. The whole label is the target.
 func switchLabel(c *ui.Context, on *bool, label string) bool {
 	theme := c.Theme()
@@ -1011,7 +1012,7 @@ func authMethodHint(state *SettingsState) string {
 	return ""
 }
 
-// terminalSection is the live 终端管理 page: the portal lists trusted
+// terminalSection is the live Terminals page: the portal lists trusted
 // endpoints separately from the temporary login history. The summary counts
 // both lists against the account's device limit, and the current device is
 // marked by selfId, exactly as the portal does.
@@ -1196,7 +1197,7 @@ func terminalKind(terminal session.Terminal) string {
 	}
 }
 
-// terminalAddress is the login location with the address beside it, and 内网
+// terminalAddress is the login location with the address beside it, and Intranet
 // for the portal's "LAN".
 func terminalAddress(terminal session.Terminal) string {
 	location := strings.TrimSpace(terminal.LastLoginAddress)

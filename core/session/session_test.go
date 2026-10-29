@@ -343,7 +343,7 @@ func TestDialServesAReconnectingSessionThatStillHasATunnel(t *testing.T) {
 	manager := New(Options{})
 	dialer := &stubTunnelDialer{}
 	manager.dialer = dialer
-	manager.set(State{Phase: PhaseReconnecting, Detail: "正在恢复会话", Since: time.Now()})
+	manager.set(State{Phase: PhaseReconnecting, Detail: "restoring the session", Since: time.Now()})
 
 	conn, err := manager.Dial(context.Background(), "tcp", "192.0.2.10:443")
 	if err != nil {
@@ -452,7 +452,7 @@ func gatewayConfig(t *testing.T) config.Config {
 	return cfg
 }
 
-// 断开 cancels the login. The cancelled attempt must not publish a failure:
+// Disconnect cancels the login. The cancelled attempt must not publish a failure:
 // it would overwrite the idle state the disconnect publishes and paint an
 // English "context canceled" over the window.
 func TestACancelledLoginPublishesNoFailure(t *testing.T) {
@@ -549,7 +549,7 @@ func TestLoginRefusesAClientOwnedRestore(t *testing.T) {
 	manager := New(Options{Config: func() config.Config { return config.Default() }})
 	client := &atrust.Client{}
 	manager.mu.Lock()
-	manager.state = State{Phase: PhaseReconnecting, Detail: "正在恢复会话"}
+	manager.state = State{Phase: PhaseReconnecting, Detail: "restoring the session"}
 	manager.client = client
 	manager.mu.Unlock()
 
@@ -603,10 +603,10 @@ func TestPublicationsAreOrdered(t *testing.T) {
 	}
 }
 
-// 断开 closes the L3 connection while the upstream packet loop is reading it.
-// That loop panics on a read error unless the internal upstream hook says the
-// shutdown is terminal, and that hook is unreachable from this module: the
-// panic used to end the whole tray app (journal: `panic: EOF` in
+// Disconnect closes the L3 connection while the upstream packet loop is
+// reading it. That loop panics on a read error unless the internal upstream
+// hook says the shutdown is terminal, and that hook is unreachable from this
+// module: the panic used to end the whole tray app (journal: `panic: EOF` in
 // stack/gvisor.(*Stack).Run). The wrapper must keep the process alive and log
 // why the stack stopped.
 func TestAPacketStackPanicDoesNotKillTheApp(t *testing.T) {

@@ -341,7 +341,7 @@ type AuthConfig struct {
 	// pair exactly; an empty AuthType means "use the method the gateway
 	// offers" and ignores the domain.
 	Domain string `toml:"domain"`
-	// AuthType is the authType the gateway offers, chosen with 获取认证方式.
+	// AuthType is the authType the gateway offers, chosen with Load methods.
 	// Empty selects automatically: the only offered method is used, several
 	// ask the user.
 	AuthType  string `toml:"auth_type"`
@@ -377,7 +377,7 @@ type DebugConfig struct {
 }
 
 // NewProfile returns the settings one profile starts from. A new account
-// stores its password unless the user unticks 保存密码: the settings file is
+// stores its password unless the user unticks Save password: the settings file is
 // mode 0600, and a stored password is what lets auto-connect work. An existing
 // profile keeps whatever its file says.
 func NewProfile(name string) Profile {
@@ -619,7 +619,7 @@ func (c Config) Clone() Config {
 
 // ForDisk returns a copy that the settings file may carry. The TOTP secret is
 // a second credential for the same account, so it follows the password toggle:
-// unchecking 保存密码 must not leave it on disk. The in-memory configuration
+// unchecking Save password must not leave it on disk. The in-memory configuration
 // keeps both for the run that wrote it, which is why this is a copy.
 func (c Config) ForDisk() Config {
 	disk := c.Clone()

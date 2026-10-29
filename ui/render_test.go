@@ -135,7 +135,7 @@ func renderStates(t *testing.T, dir, lang string) {
 			state: State{
 				Session: session.State{
 					Phase:     session.PhaseReconnecting,
-					Detail:    "会话已过期",
+					Detail:    "the session expired",
 					Since:     time.Now(),
 					Reconnect: session.ReconnectState{Attempt: 2, Max: 5, NextAt: time.Now().Add(4 * time.Second)},
 					KeepAlive: session.KeepAliveState{Target: "http://192.0.2.10/", Err: "timeout", At: time.Now()},
@@ -414,7 +414,7 @@ func renderPageState(cfg config.Config, page Page) *State {
 	}
 }
 
-// renderLogLines is a short tail for the 日志 page: what the app writes after a
+// renderLogLines is a short tail for the Logs page: what the app writes after a
 // login, without any account material.
 func renderLogLines() []string {
 	return []string{

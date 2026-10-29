@@ -138,7 +138,7 @@ func TestTooltipMirrorsPhaseAndKeepAlive(t *testing.T) {
 	}
 }
 
-// The reconnect phase is an active session: 断开 must stop it, and the tray
+// The reconnect phase is an active session: Disconnect must stop it, and the tray
 // must count down rather than claim the user is disconnected.
 func TestReconnectIsAnActiveSession(t *testing.T) {
 	for _, phase := range []session.Phase{session.PhaseOnline, session.PhaseConnecting, session.PhaseReconnecting} {
@@ -325,14 +325,14 @@ func TestRestartProxyClosesTheOldListenersBeforeBinding(t *testing.T) {
 }
 
 // expire publishes a terminal failure with Attention: the listeners belong to
-// the dead session and must be released, or 连接 can never bind them again.
+// the dead session and must be released, or Connect can never bind them again.
 func TestTerminalSessionFailureReleasesTheProxyListeners(t *testing.T) {
 	application, old := testProxyApp(t)
 	address := old.Listeners()[0].Address
 
 	application.onSessionState(session.State{
 		Phase:     session.PhaseFailed,
-		Detail:    "会话已过期，需要重新登录",
+		Detail:    "the session expired; sign in again",
 		Attention: true,
 	})
 
@@ -402,7 +402,8 @@ func TestSessionStatePublishesOnlineThroughTheUISeam(t *testing.T) {
 	}
 }
 
-// 断开 runs inside a frame on the UI thread. Manager.Logout waits for the login
+// Disconnect runs inside a frame on the UI thread. Manager.Logout waits for
+// the login
 // it just cancelled, and that login publishes through onSessionState → onMain,
 // which needs the frame to finish. Joining the logout on the caller deadlocks
 // the process; it has to return first.
@@ -582,7 +583,8 @@ func TestOpenURLAllowsOnlyHTTP(t *testing.T) {
 	}
 }
 
-// A server that finishes binding after 断开 must close itself: the epoch moved,
+// A server that finishes binding after Disconnect must close itself: the epoch
+// moved,
 // so installing it would hold the ports for a session that is already gone. The
 // release runs between the epoch read and the installation, which is the window
 // the guard exists for.
@@ -639,7 +641,7 @@ func TestAProxyBoundAfterReleaseClosesItself(t *testing.T) {
 	}
 }
 
-// 断开 cancels the attempt. The status line must report the stop instead of
+// Disconnect cancels the attempt. The status line must report the stop instead of
 // quoting the cancelled login in red: "context canceled" is English text in a
 // Chinese window, and the user caused it.
 func TestAStoppedAttemptReportsCancelled(t *testing.T) {
@@ -698,7 +700,8 @@ func TestProfileLockIsHeldForOneLiveLogin(t *testing.T) {
 	application.releaseProfileLock()
 }
 
-// 连接 on an incomplete saved profile opens 账户 instead of reporting an error
+// Connect on an incomplete saved profile opens Account instead of reporting an
+// error
 // the window offers no way to fix, and the connect path answers in the window's
 // words rather than the library's English.
 func TestIncompleteProfileOpensTheAccountPage(t *testing.T) {
@@ -724,7 +727,8 @@ func TestIncompleteProfileOpensTheAccountPage(t *testing.T) {
 	}
 }
 
-// 连接 saves a dirty draft first, so the gateway typed on 账户 is the one the
+// Connect saves a dirty draft first, so the gateway typed on Account is the one
+// the
 // login uses. A new profile stores its password by default.
 func TestLoginSavesTheDraftFirst(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
@@ -761,7 +765,7 @@ func TestLoginSavesTheDraftFirst(t *testing.T) {
 	}
 }
 
-// A draft that cannot be saved keeps its edits and moves the window to 账户;
+// A draft that cannot be saved keeps its edits and moves the window to Account;
 // both the file and the live settings stay as they were.
 func TestRejectedDraftSelectsTheAccountPage(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")

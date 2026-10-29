@@ -42,7 +42,8 @@ type ResourceEntry struct {
 	Detail string       `json:"detail,omitempty"`
 	// URL is a browser link when the rule or application suggests one.
 	URL string `json:"url,omitempty"`
-	// Copy is what the row's 复制 puts on the clipboard: the URL when there is
+	// Copy is what the row menu's Copy item puts on the clipboard: the URL when
+	// there is
 	// one, otherwise the title.
 	Copy string `json:"copy"`
 }

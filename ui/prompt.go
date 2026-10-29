@@ -94,10 +94,11 @@ func MethodLabel(method session.AuthMethod) string {
 	return method.String()
 }
 
-// panelActions is the foot of a login panel: 取消登录 on the left, away from the
-// answers, and the panel's own controls on the right, its primary action last.
+// panelActions is the foot of a login panel: Cancel login on the left, away
+// from the answers, and the panel's own controls on the right, its primary
+// action last.
 // Abandoning the login is a different intent from answering it, so it does not
-// sit beside 提交 where a mis-click ends the flow.
+// sit beside Submit where a mis-click ends the flow.
 func panelActions(c *ui.Context, cancel func(), answers func()) {
 	ui.Row(c).AlignItems(ui.Center).Justify(ui.SpaceBetween).Gap(rowGap).Children(func() {
 		if textButton(c, locales.CancelLogin()).Disabled(cancel == nil).Clicked() && cancel != nil {
@@ -198,7 +199,7 @@ func externalPanel(c *ui.Context, state *State, actions Actions) {
 }
 
 // deviceBindPanel confirms a gateway device-binding request. Binding is what
-// puts this installation in 终端管理 as a trusted device, so it is a decision,
+// puts this installation in Terminals as a trusted device, so it is a decision,
 // not a silent answer.
 func deviceBindPanel(c *ui.Context, state *State, actions Actions) {
 	prompt := state.DeviceBind

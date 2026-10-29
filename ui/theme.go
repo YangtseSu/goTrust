@@ -310,7 +310,7 @@ func captionTone(c *ui.Context, text string, t tone) ui.Element {
 }
 
 // textButton is a button that keeps only its label: a secondary action in a
-// panel (撤销, 清空) stays quieter than the filled primary button, and the
+// panel (Undo, Clear) stays quieter than the filled primary button, and the
 // pointer tints the padding so the target is still visible. It keeps the
 // vertical room of a filled button, so a row that mixes the two stays on one
 // line.

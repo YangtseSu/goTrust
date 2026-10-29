@@ -11,7 +11,7 @@ import (
 	"github.com/YangtseSu/goTrust/core/atrust/log"
 )
 
-// TerminalInfo is one row of the portal's 终端管理 lists. The portal returns
+// TerminalInfo is one row of the portal's Terminals lists. The portal returns
 // the trusted endpoints and the temporary login history as two status lists;
 // the fields are the ones its page renders.
 type TerminalInfo struct {
@@ -43,7 +43,7 @@ type QueryDeviceResult struct {
 	} `json:"trustDeviceConfig"`
 }
 
-// Terminals is both lists the portal's 终端管理 page shows.
+// Terminals holds both lists the portal's Terminals page shows.
 type Terminals struct {
 	Trusted                 []TerminalInfo
 	Temporary               []TerminalInfo

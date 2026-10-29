@@ -109,7 +109,7 @@
   "externalOpenDesc": "Open the login page in the browser",
   "callbackField": "Callback address",
   "bindTitle": "Bind this device",
-  "bindHint": "The gateway asks to bind this device to your account. Once confirmed, it appears in Terminal management.",
+  "bindHint": "The gateway asks to bind this device to your account. Once confirmed, it appears in Terminals.",
   "deviceID": "Device ID",
   "bindAllow": "Allow binding",
   "choiceTitle": "Choose a sign-in method",

@@ -179,7 +179,8 @@ func TestAccountFormOrder(t *testing.T) {
 	}
 }
 
-// 保存密码 edits the profile's own flag, which a new profile starts with set.
+// Save password edits the profile's own flag, which a new profile starts with
+// set.
 func TestAccountPasswordRowFollowsTheProfile(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	if !state.Draft.Profiles[0].Auth.StorePass {

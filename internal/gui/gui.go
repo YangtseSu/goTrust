@@ -159,7 +159,7 @@ type app struct {
 	view gotrustui.State
 	// settings is the window's settings draft. It is created at startup and
 	// kept for the life of the process, so hiding the window or switching a
-	// page keeps the edits; only 保存, 放弃, a profile switch and a login that
+	// page keeps the edits; only Save, Discard, a profile switch and a login that
 	// saves the draft reload it. The frame reads it without a lock, so every
 	// field is written on the toolkit's main thread: Run sets runOnUI to
 	// mygo.RunOnMain, and background work publishes through it.
@@ -183,7 +183,7 @@ type app struct {
 	// a release belongs to a session that is gone, so it closes itself instead
 	// of holding the ports the next connect needs.
 	proxyEpoch uint64
-	// attempt is the login or action in flight, so 断开 can cancel a login
+	// attempt is the login or action in flight, so Disconnect can cancel a login
 	// that is waiting on the network or on the user.
 	attempt *attemptCancel
 	// captcha is the reply channel of the challenge the window is showing,
@@ -204,7 +204,7 @@ type app struct {
 	// logoutPending is the channel of the join running off the UI thread, nil
 	// when none is pending. A login waits for it before Manager.Login.
 	logoutPending chan struct{}
-	// stopping suppresses the failure reveal while 断开 cancels a login: the
+	// stopping suppresses the failure reveal while Disconnect cancels a login: the
 	// user asked for it, so the window must not pop up with "cancelled".
 	stopping bool
 	// quitting lets the main window's close handler destroy it during Quit
@@ -257,7 +257,7 @@ func (a *app) runUI(ctx context.Context) error {
 		}
 		a.logf("goTrust ready; profile %s", a.cfg.ActiveProfile)
 
-		// 日志 shows the file as it grows; the tailer runs for the life of
+		// Logs shows the file as it grows; the tailer runs for the life of
 		// the app, so a page opened later already has the lines behind it.
 		if logFile := a.log; logFile != nil {
 			tail := &logTail{path: logFile.Path(), limit: gotrustui.LogTailLines, emit: a.setLogLines}
@@ -407,10 +407,10 @@ func (a *app) closeWindow() {
 	}
 }
 
-// showWindow brings the window forward on the page it already shows: restored
-// from a minimize, shown if it was hidden, and focused. The tray icon, 打开
-// 仪表盘, a second launch and a session that failed while hidden use it, so
-// none of them loses the page the user was reading.
+// showWindow brings the window forward on the page it already shows:
+// restored from a minimize, shown if it was hidden, and focused. The tray
+// icon, Open Dashboard, a second launch and a session that failed while hidden
+// use it, so none of them loses the page the user was reading.
 func (a *app) showWindow() {
 	if window := a.window.Load(); window != nil {
 		window.Restore()
@@ -420,7 +420,7 @@ func (a *app) showWindow() {
 }
 
 // showPage selects a page, then shows and focuses the window. The sidebar and
-// the tray's 打开仪表盘 use it.
+// the tray's Open Dashboard use it.
 func (a *app) showPage(page gotrustui.Page) {
 	a.mu.Lock()
 	a.view.Page = page
@@ -573,7 +573,7 @@ func (a *app) copyResource(value string) {
 	a.setStatus(locales.Copied(), false)
 }
 
-// copyLogs puts the visible log lines on the clipboard. 日志 disables 复制 when
+// copyLogs puts the visible log lines on the clipboard. Logs disables Copy when
 // there is nothing to copy, so an empty text here is a stale click.
 func (a *app) copyLogs(text string) {
 	if strings.TrimSpace(text) == "" {
@@ -638,7 +638,7 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 
 // setLocale shows the app in the tag's language, "" to follow the desktop. The
 // picker's index is the choice itself, not a reading of the resulting language,
-// so 跟随系统 stays selected while it follows.
+// so Follow the system stays selected while it follows.
 func (a *app) setLocale(tag string) {
 	a.mu.Lock()
 	a.localeChoice = localeChoiceFor(tag)
@@ -736,7 +736,7 @@ func (a *app) openSettingsPassword() {
 	}()
 }
 
-// refreshSettingsTerminals reads both 终端管理 lists through the live session.
+// refreshSettingsTerminals reads both Terminals lists through the live session.
 // The settings state owns the status line; the call runs off the UI thread
 // because the portal answers over the tunnel.
 func (a *app) refreshSettingsTerminals() {
@@ -948,7 +948,7 @@ func (a *app) async(fn func(context.Context) error) {
 		a.setStatus("", true)
 		err := fn(ctx)
 		if err != nil {
-			// 断开 cancels the attempt: the user asked for the stop, so report
+			// Disconnect cancels the attempt: the user asked for the stop, so report
 			// it as one instead of painting the cancelled login red.
 			if errors.Is(err, context.Canceled) || a.isStopping() {
 				a.setStatus(locales.Cancelled(), false)
@@ -961,10 +961,10 @@ func (a *app) async(fn func(context.Context) error) {
 	}()
 }
 
-// startLogin is 连接 in the window. The account page edits a draft, so a draft
+// startLogin is Connect in the window. The account page edits a draft, so a draft
 // that differs from the file is saved first: the gateway the user just typed is
 // the one the login uses. A draft that cannot be saved keeps its edits and
-// moves the window to 账户, where the reason names a field.
+// moves the window to Account, where the reason names a field.
 func (a *app) startLogin() {
 	if !a.saveDraftForLogin() {
 		return
@@ -973,7 +973,7 @@ func (a *app) startLogin() {
 }
 
 // saveDraftForLogin writes the settings draft when it differs from the file and
-// reports whether a login can go on. The window selects 账户 on a rejection:
+// reports whether a login can go on. The window selects Account on a rejection:
 // the reason is a sentence about one field, and the form has to be on screen.
 func (a *app) saveDraftForLogin() bool {
 	a.mu.RLock()
@@ -1000,7 +1000,8 @@ func (a *app) saveDraftForLogin() bool {
 	return true
 }
 
-// startSavedLogin is 连接 with the configuration already on disk. The tray uses
+// startSavedLogin is Connect with the configuration already on disk. The tray
+// uses
 // it: a tray click must not save the draft the window is still editing. An
 // incomplete profile cannot produce a login, and the library's validation
 // message names a field the window does not offer, so the window opens on the
@@ -1015,7 +1016,7 @@ func (a *app) startSavedLogin() {
 }
 
 func (a *app) connect(ctx context.Context) error {
-	// 断开 joins the session on another goroutine. Building a new session
+	// Disconnect joins the session on another goroutine. Building a new session
 	// before that join finishes would let the old Logout tear it down.
 	if err := a.waitForLogout(ctx); err != nil {
 		return err
@@ -1108,7 +1109,7 @@ func (a *app) onSessionState(state session.State) {
 	a.mu.Unlock()
 
 	// A terminal failure means the session will not come back on its own: the
-	// client is torn down and 连接 is the user's next step. Its listeners would
+	// client is torn down and Connect is the user's next step. Its listeners would
 	// keep the configured ports, so that next connect could not bind them. The
 	// ladder's interim failures carry no Attention and keep the listeners: a
 	// retry that succeeds reuses them, and the app does not restart a proxy
@@ -1235,14 +1236,15 @@ func (a *app) installProxy(server *gotrustproxy.Server, cancel context.CancelFun
 	return true
 }
 
-// isStopping reports whether 断开 or quit is tearing the session down.
+// isStopping reports whether Disconnect or quit is tearing the session down.
 func (a *app) isStopping() bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.stopping
 }
 
-// disconnect stops the session for the UI: 断开, a profile switch and quit all
+// disconnect stops the session for the UI: Disconnect, a profile switch and
+// quit all
 // call it from a frame or a tray callback on the main thread. It releases the
 // prompts, the login attempt and the listeners synchronously, then joins
 // Manager.Logout on another goroutine. Logout waits for the login that the
@@ -1366,7 +1368,7 @@ func (a *app) saveSettings() {
 
 // writeDraft stores the settings draft and makes it the settings in effect. It
 // reports the saved configuration and whether the write happened; a rejected
-// draft keeps its edits and says why, so 保存 and a login that saves first
+// draft keeps its edits and says why, so Save and a login that saves first
 // report the same reason.
 func (a *app) writeDraft(state *gotrustui.SettingsState) (config.Config, bool) {
 	cfg, err := state.Apply()
@@ -1399,7 +1401,7 @@ func (a *app) writeDraft(state *gotrustui.SettingsState) (config.Config, bool) {
 	return cfg, true
 }
 
-// selectProfile switches accounts from the tray or the 多账户 page. One
+// selectProfile switches accounts from the tray or the Accounts page. One
 // live session at a time: the old one disconnects first.
 func (a *app) selectProfile(name string) {
 	cfg := a.currentConfig()
@@ -1662,7 +1664,7 @@ func (a *app) mutableConfig() config.Config {
 	return a.currentConfig().Clone()
 }
 
-// sessionActive reports whether the phase has a session that 断开 must end:
+// sessionActive reports whether the phase has a session that Disconnect must end:
 // connected, logging in, or waiting out an auto-reconnect.
 func sessionActive(phase session.Phase) bool {
 	switch phase {
@@ -1707,7 +1709,7 @@ func (a *app) setStatus(message string, busy bool) {
 	a.mu.Unlock()
 
 	a.invalidate()
-	// The tray disables 连接 while an idle-phase action is still running.
+	// The tray disables Connect while an idle-phase action is still running.
 	a.refreshTray()
 }
 

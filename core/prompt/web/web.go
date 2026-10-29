@@ -54,10 +54,6 @@ type Options struct {
 	Logf func(format string, args ...any)
 	// Timeout bounds one page. Zero uses DefaultTimeout.
 	Timeout time.Duration
-	// Language is the BCP 47 tag the pages are written in, "zh" or "en".
-	// Empty reads the POSIX locale environment, so a terminal's own language
-	// picks the pages' language.
-	Language string
 }
 
 // Prompter serves the login's questions. One value serves every attempt of a
@@ -75,7 +71,7 @@ func New(options Options) *Prompter {
 	if options.Logf == nil {
 		options.Logf = func(string, ...any) {}
 	}
-	return &Prompter{options: options, texts: textsFor(resolveLanguage(options.Language))}
+	return &Prompter{options: options, texts: english}
 }
 
 // Handler returns the prompter for one login attempt. The login goroutine is

@@ -85,8 +85,9 @@ func TestProfileSummaryShowsTheActiveAccount(t *testing.T) {
 	}
 }
 
-// Clicking 连接 must reach the action, and clicking 断开 (or 取消) in a live
-// phase must reach Logout instead. A swapped wiring would lock the user out.
+// Clicking Connect must reach the action, and clicking Disconnect (or Cancel)
+// in a live phase must reach Logout instead. A swapped wiring would lock the
+// user out.
 func TestButtonsCallTheRightAction(t *testing.T) {
 	cases := []struct {
 		phase      session.Phase
@@ -97,7 +98,7 @@ func TestButtonsCallTheRightAction(t *testing.T) {
 		{phase: session.PhaseIdle, button: "连接", wantLogin: true},
 		{phase: session.PhaseFailed, button: "重试", wantLogin: true},
 		{phase: session.PhaseOnline, button: "断开", wantLogout: true},
-		// 取消 is how a login waiting on the network or a prompt is stopped.
+		// Cancel is how a login waiting on the network or a prompt is stopped.
 		{phase: session.PhaseConnecting, button: "取消", wantLogout: true},
 		{phase: session.PhaseReconnecting, button: "取消", wantLogout: true},
 	}
@@ -322,7 +323,7 @@ func TestResourceListRendersAndActs(t *testing.T) {
 
 	var copied string
 	copyTester := ui.NewTester(View(&state, Actions{CopyResource: func(value string) { copied = value }}), 900, 740)
-	// The address rule has no suggested URL, so 打开 is disabled there; the copy
+	// The address rule has no suggested URL, so Open is disabled there; the copy
 	// value is the row's own text.
 	if err := copyTester.Click("192.0.2.10 的操作"); err != nil {
 		t.Fatalf("open the row menu: %v", err)
@@ -544,7 +545,8 @@ func TestTrayMenuStatusProfilesAndToggle(t *testing.T) {
 	if !items[0].Disabled {
 		t.Fatal("the status line is clickable")
 	}
-	// 复制配置 keeps the copy actions; the tray's job is the session, not a
+	// Copy configuration keeps the copy actions; the tray's job is the session,
+	// not a
 	// second wording for every export.
 	for _, item := range items {
 		if strings.HasPrefix(item.ID, "copy") {
@@ -631,7 +633,7 @@ func TestTrayMenuHidesTheAccountSubmenuForOneAccount(t *testing.T) {
 	}
 }
 
-// 打开默认应用 opens the URL the gateway returned for the first granted
+// Open default app opens the URL the gateway returned for the first granted
 // application, through the same action as the resource row (the desktop's
 // default browser).
 func TestTrayMenuOpensTheDefaultApp(t *testing.T) {
@@ -703,7 +705,7 @@ func TestReconnectCountdownIsRendered(t *testing.T) {
 	state := State{
 		Session: session.State{
 			Phase:  session.PhaseReconnecting,
-			Detail: "会话已过期",
+			Detail: "the session expired",
 			Reconnect: session.ReconnectState{
 				Attempt: 2,
 				Max:     5,
@@ -848,7 +850,8 @@ func menuLabels(menu *mygo.Menu) []string {
 	return out
 }
 
-// 打开仪表盘 is the tray's one page shortcut: the tray icon keeps the page the
+// Open Dashboard is the tray's one page shortcut: the tray icon keeps the page
+// the
 // window was reading, so only this item moves it to the session.
 func TestTrayMenuOpensTheDashboard(t *testing.T) {
 	state := State{Session: session.State{Phase: session.PhaseIdle}, Config: config.Default()}
@@ -871,7 +874,7 @@ func TestTrayMenuOpensTheDashboard(t *testing.T) {
 }
 
 // The window answers its own keys: Ctrl+Enter is the state's action, and Esc
-// is the 取消登录 of the panel on screen.
+// is the Cancel login of the panel on screen.
 func TestWindowShortcuts(t *testing.T) {
 	var login, logout int
 	actions := Actions{

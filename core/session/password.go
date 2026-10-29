@@ -76,7 +76,8 @@ func (m *Manager) LiveProfile() string {
 }
 
 // ResetPassword resets the live session's password. It is the voluntary flow
-// (个人信息 → 密码安全): the portal is expected to end other terminals'
+// (Personal information → Password security): the portal is expected to end
+// other terminals'
 // sessions afterwards.
 func (m *Manager) ResetPassword(ctx context.Context, oldPassword, newPassword string) error {
 	m.mu.RLock()

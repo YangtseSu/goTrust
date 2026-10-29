@@ -99,7 +99,7 @@ func TestReconnectLadderStopsOnAChallenge(t *testing.T) {
 	}
 }
 
-// A user who presses 断开 cancels the wait, not just the attempt in flight.
+// A user who presses Disconnect cancels the wait, not just the attempt in flight.
 func TestReconnectLadderStopsWhenCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

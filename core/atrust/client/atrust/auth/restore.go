@@ -17,8 +17,8 @@ var (
 	// has to mint a new one instead of retrying the exchange.
 	ErrStaleTicket = errors.New("aTrust sidTicket was refused; a new one is needed")
 	// ErrRestoreNotConfirmed is the silent no-op the restore path has to guard
-	// against: the gateway answers code 0 成功 and sets no cookies at all when the
-	// cookie jar is empty, leaving the session dead.
+	// against: the gateway answers code 0 (success) and sets no cookies at all
+	// when the cookie jar is empty, leaving the session dead.
 	ErrRestoreNotConfirmed = errors.New("aTrust restore was not confirmed as online")
 )
 

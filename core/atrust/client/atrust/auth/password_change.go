@@ -533,8 +533,8 @@ func (s *Session) changePasswordForm(ctx context.Context, challenge PasswordChan
 }
 
 // ResetPassword changes the password of the live session through
-// /passport/v1/security/modifyPwd (个人信息 → 密码安全 → 重置密码). Both
-// passwords are RSA-encrypted and sent as JSON.
+// /passport/v1/security/modifyPwd (Personal information → Password security →
+// Reset password). Both passwords are RSA-encrypted and sent as JSON.
 func (s *Session) ResetPassword(ctx context.Context, oldPassword, newPassword string) error {
 	log.Println("Perform POST /passport/v1/security/modifyPwd")
 	// The portal's page encrypts both passwords as

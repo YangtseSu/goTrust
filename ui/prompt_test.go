@@ -206,8 +206,8 @@ func TestLoginPanelKeepsHeaderAndGrantedCount(t *testing.T) {
 	}
 }
 
-// 取消登录 is not one more answer: it sits on the left, 提交 on the right, and
-// the secondary answers between them stay plain text.
+// Cancel login is not one more answer: it sits on the left, Submit on the
+// right, and the secondary answers between them stay plain text.
 func TestPanelActionsPutCancelAwayFromSubmit(t *testing.T) {
 	state := State{
 		Config: config.Default(),

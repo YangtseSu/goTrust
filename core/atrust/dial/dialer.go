@@ -234,7 +234,7 @@ func NewDialer(stack stack.Stack, resolver *resolve.Resolver, ipResources []clie
 	} else if strings.HasPrefix(dialDirectProxy, "socks://") {
 		dialSocksProxy = strings.TrimPrefix(dialDirectProxy, "socks://")
 	} else if len(dialDirectProxy) > 0 {
-		log.Println("暂不支持除[http/socks]之外的DialDirectProxy，忽略该配置项")
+		log.Println("DialDirectProxy supports only [http/socks]; ignoring the option")
 	}
 	return &Dialer{
 		stack:                stack,

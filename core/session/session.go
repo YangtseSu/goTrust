@@ -85,7 +85,7 @@ var ErrNotOnline = errors.New("the session is not online")
 // the account.
 type DeviceBindChallenge = auth.DeviceBindChallenge
 
-// Terminal is one row of the portal's 终端管理 lists.
+// Terminal is one row of the portal's Terminals lists.
 type Terminal = auth.TerminalInfo
 
 // Terminals is the trusted and temporary endpoint lists.
@@ -139,7 +139,7 @@ type Options struct {
 	// the list, which is what a headless run should do.
 	ChooseAuth func(ctx context.Context, methods []AuthMethod) (AuthMethod, error)
 	// ChangePassword answers the gateway's forced password change. Like Prompt
-	// it receives the login attempt's context, so 断开 releases the panel. Nil
+	// it receives the login attempt's context, so Disconnect releases the panel. Nil
 	// fails the login with the gateway's message instead of hanging on a
 	// question nobody can see.
 	ChangePassword func(ctx context.Context, challenge PasswordChangeChallenge) (PasswordChangeAnswer, error)
@@ -274,7 +274,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 
 	if err := ctx.Err(); err != nil {
 		// An attempt that was cancelled before it started has nothing to
-		// report: 断开 already published the idle state.
+		// report: Disconnect already published the idle state.
 		return err
 	}
 
@@ -314,7 +314,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	fail := func(stage string, cause error) error {
 		cancel()
 		wrapped := fmt.Errorf("%s: %w", stage, cause)
-		// A cancelled attempt is what 断开 asked for. Publishing a failure
+		// A cancelled attempt is what Disconnect asked for. Publishing a failure
 		// would race the idle state that disconnect publishes and paint an
 		// English "context canceled" over the window.
 		if ctx.Err() == nil {
@@ -509,7 +509,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 // runPacketStack runs the upstream packet loop in the background. The loop
 // panics on a read error unless the upstream module has been told the shutdown
 // is terminal, and that hook lives in an internal package this module cannot
-// import: on 断开 the L3 connection closes, the loop reads EOF, and the
+// import: on Disconnect the L3 connection closes, the loop reads EOF, and the
 // unrecovered panic ended the whole tray app. The stack cannot be restarted, so
 // recover it, log why it stopped, and let the session's keep-alive and state
 // machine observe the dead tunnel.

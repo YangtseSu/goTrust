@@ -272,9 +272,9 @@ func terminalsPage(c *ui.Context, state *State, actions Actions) {
 const LogTailLines = 500
 
 // logsPage is the live tail of the current log: the newest lines, narrowed by
-// the filter, with 复制, 打开目录 and the 详细日志 switch that raises the
+// the filter, with Copy, Open folder and the Verbose log switch that raises the
 // running level. The lines carry no level of their own, so the page has no
-// level filter; 详细日志 is what decides whether the diagnostic lines exist at
+// level filter; Verbose log is what decides whether the diagnostic lines exist at
 // all.
 func logsPage(c *ui.Context, state *State, actions SettingsActions) {
 	settings := state.Settings
@@ -384,7 +384,7 @@ func settingsPage(c *ui.Context, state *State, actions Actions) {
 
 // profilesPage manages the accounts: one row per account for the draft's
 // selection, the selected account's name, and the three list actions. A row is
-// the picker: choosing one edits that account, and 保存 makes the choice the
+// the picker: choosing one edits that account, and Save makes the choice the
 // live account and moves the stored client data after a rename.
 func profilesPage(c *ui.Context, state *State, actions Actions) {
 	settings := state.Settings
@@ -425,7 +425,7 @@ func profilesPage(c *ui.Context, state *State, actions Actions) {
 }
 
 // accountRow is one account in the draft: its name, its gateway and whether the
-// session is already on it. The tint marks the account the form edits, 当前
+// session is already on it. The tint marks the account the form edits, Current
 // marks the live one.
 func accountRow(c *ui.Context, settings *SettingsState, actions Actions, index int) {
 	theme := c.Theme()

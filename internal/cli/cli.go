@@ -145,6 +145,8 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 	failures := make(chan string, 1)
 	// The URL goes to stderr, not to the log file: it is the one line a person
 	// on a host without a display has to read, and it stays out of the history.
+	// The headless front-end reads in terminals and logs, so its pages are
+	// English only, like the rest of its output.
 	promptOptions := web.Options{
 		Print: func(link string) { fmt.Fprintf(stderr, "prompt: %s\n", link) },
 		Logf:  logf,

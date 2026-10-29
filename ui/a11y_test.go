@@ -80,7 +80,7 @@ func TestBusyStateDisablesConnect(t *testing.T) {
 }
 
 // A login in flight is a session to end: the same control shows the spinner
-// and stays usable, because 取消 is the only way out of a pending login.
+// and stays usable, because Cancel is the only way out of a pending login.
 func TestBusyStateKeepsDisconnect(t *testing.T) {
 	var logouts int
 	state := State{
@@ -182,8 +182,8 @@ func TestSidebarTabEntersAtTheChosenPage(t *testing.T) {
 	t.Fatal("Tab did not enter the sidebar at 设置")
 }
 
-// The save bar is the last stop of the window: Tab reaches 放弃 and then
-// 保存, whatever the page's form contains. Both are absent while the draft
+// The save bar is the last stop of the window: Tab reaches Discard and then
+// Save, whatever the page's form contains. Both are absent while the draft
 // matches the file, so the draft is edited first.
 func TestSettingsTabOrderReachesTheSaveBar(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")

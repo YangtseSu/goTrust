@@ -92,7 +92,7 @@ func (m *Manager) observeSessionState(source *atrust.Client, state atrust.Sessio
 		}
 		m.setTransition(State{
 			Phase:     PhaseReconnecting,
-			Detail:    "正在恢复会话",
+			Detail:    "restoring the session",
 			ClientIP:  m.tunnelIP(),
 			Resources: m.resources(),
 			Reconnect: ReconnectState{Max: len(reconnectDelays)},
@@ -125,11 +125,11 @@ func (m *Manager) onSessionLost(reason string) {
 	cfg := m.settings()
 	profile := cfg.Active()
 	if !cfg.App.AutoReconnect {
-		m.expire("会话已过期，需要重新登录")
+		m.expire("the session expired; sign in again")
 		return
 	}
 	if !hasStoredPassword(profile) {
-		m.expire("会话已过期，且没有保存的密码，请手动重新登录")
+		m.expire("the session expired and no password is saved; sign in again")
 		return
 	}
 	m.startReconnect(reason)
@@ -186,10 +186,10 @@ func (m *Manager) runReconnect(ctx context.Context, reason string) {
 	case reconnectChallenge:
 		// A retry cannot answer a captcha, a one-time code or an SSO callback.
 		// The prompt is on screen; stop and let the person finish.
-		m.set(failureState("自动重连已停止：登录需要你完成验证", true, resources))
+		m.set(failureState("auto-reconnect stopped: the login needs your verification", true, resources))
 	case reconnectExhausted:
 		m.set(failureState(
-			fmt.Sprintf("自动重连 %d 次后仍失败: %v", attempts, lastErr),
+			fmt.Sprintf("auto-reconnect failed after %d attempt(s): %v", attempts, lastErr),
 			true, resources))
 	}
 }

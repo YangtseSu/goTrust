@@ -104,7 +104,7 @@ type Actions struct {
 	TrayLogin func()
 	Logout    func()
 	// ShowPage selects the page the window shows, then shows and focuses the
-	// window. The sidebar and the tray's 打开仪表盘 use it; the tray icon shows
+	// window. The sidebar and the tray's Open Dashboard use it; the tray icon shows
 	// the window without changing the page.
 	ShowPage func(Page)
 	Quit     func()
@@ -358,7 +358,7 @@ func panelBody(c *ui.Context, state *State, actions Actions) {
 }
 
 // saveBar is the window's bottom bar: it appears while the draft differs from
-// the settings file, so 保存 and 放弃 are reachable from every page.
+// the settings file, so Save and Discard are reachable from every page.
 func saveBar(c *ui.Context, settings *SettingsState, actions SettingsActions) {
 	ui.Divider(c)
 	ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
@@ -389,7 +389,7 @@ const TitleBarHeight = 44
 func windowShortcuts(c *ui.Context, state *State, actions Actions, searchFocus *uint64) {
 	switch {
 	case panelOpen(state):
-		// The panel's own foot has 取消登录; Esc does the same.
+		// The panel's own foot has Cancel login; Esc does the same.
 		if cancel := panelCancel(state, actions); cancel != nil {
 			c.OnShortcut(0, ui.KeyEscape, cancel)
 		}
@@ -591,9 +591,9 @@ func sessionLine(c *ui.Context, state *State) {
 // phaseText is the phase as the window's headline: a pill with the state's
 // colour on its dot and on its tint, and the label in the theme's text colour,
 // so the colour never has to carry the words. The reconnect ladder is the
-// phase there: "重连中 (2/5，4 秒后)" says both that the session is gone and
-// what the app is doing about it. The status role makes assistive technology
-// announce the change.
+// phase there: "Reconnecting (2/5, in 4 s)" says both that the session is
+// gone and what the app is doing about it. The status role makes assistive
+// technology announce the change.
 func phaseText(c *ui.Context, state *State) {
 	theme := c.Theme()
 	label := phaseLabel(state.Session)
@@ -815,7 +815,8 @@ func phaseLabel(s session.State) string {
 }
 
 // reconnectLabel is the ladder position the state and the tray both show:
-// "重连中 (2/5，4 秒后)" while it waits, "重连中 (2/5)" while an attempt runs.
+// "Reconnecting (2/5, in 4 s)" while it waits, "Reconnecting (2/5)" while an
+// attempt runs.
 func reconnectLabel(reconnect session.ReconnectState) string {
 	wait := reconnectWait(reconnect.NextAt)
 	if wait == "" {
@@ -825,7 +826,7 @@ func reconnectLabel(reconnect session.ReconnectState) string {
 }
 
 // reconnectWait renders the time left before the next attempt, rounded up so a
-// countdown never shows "0 秒后" while the attempt has not started.
+// countdown never shows "in 0 s" while the attempt has not started.
 func reconnectWait(next time.Time) string {
 	if next.IsZero() {
 		return ""
@@ -918,7 +919,7 @@ func captchaPanel(c *ui.Context, state *State, actions Actions) {
 	})
 }
 
-// phaseActive reports whether the phase has a session that 断开 must end.
+// phaseActive reports whether the phase has a session that Disconnect must end.
 func phaseActive(phase session.Phase) bool {
 	switch phase {
 	case session.PhaseOnline, session.PhaseConnecting, session.PhaseReconnecting:
@@ -961,7 +962,7 @@ var resourceKinds = []struct {
 }
 
 // resourceKindStyle is a kind's heading and glyph. A kind this build does not
-// know still gets rows, under 其他, so a newer gateway adds data the window can
+// know still gets rows, under Other, so a newer gateway adds data the window can
 // show instead of data it drops.
 func resourceKindStyle(kind session.ResourceKind) (label string, glyph *ui.SVG) {
 	for _, style := range resourceKinds {
@@ -1021,9 +1022,9 @@ func matchesResource(entry session.ResourceEntry, filter string) bool {
 }
 
 // resources lists what the gateway granted this account, one group per kind,
-// in the dashboard's second card. The header carries the count and 打开默认应用,
-// the shortcut to the first portal application's launch address; searchFocus is
-// the window's focus request for the filter.
+// in the dashboard's second card. The header carries the count and Open
+// default app, the shortcut to the first portal application's launch address;
+// searchFocus is the window's focus request for the filter.
 func resources(c *ui.Context, state *State, actions Actions, searchFocus *uint64) {
 	granted := state.Session.Resources
 
@@ -1071,10 +1072,10 @@ func resources(c *ui.Context, state *State, actions Actions, searchFocus *uint64
 	})
 }
 
-// resourceSearch is the filter in the resource card's header. What the user types belongs to
-// the field, not to the app state: no other part of the window reads it, and a
-// new login can replace the rows without carrying a stale query. The field
-// follows focus, which is how the window's / reaches it.
+// resourceSearch is the filter in the resource card's header. What the user
+// types belongs to the field, not to the app state: no other part of the window
+// reads it, and a new login can replace the rows without carrying a stale query.
+// The field follows focus, which is how the window's / reaches it.
 func resourceSearch(c *ui.Context, focus *uint64) string {
 	row := ui.Row(c).AlignItems(ui.Center)
 	query := ui.Local(row, "resource-query", func() string { return "" })
@@ -1102,7 +1103,7 @@ func resourceGroupHeading(c *ui.Context, group resourceGroup, first bool) {
 }
 
 // resourceRow is one granted entry: the kind's glyph, the title, its detail at
-// the right, and the menu with 打开 and 复制. The actions sit in the menu
+// the right, and the menu with Open and Copy. The actions sit in the menu
 // because two buttons on every row of a long list outshout the rows.
 func resourceRow(c *ui.Context, entry session.ResourceEntry, actions Actions) {
 	_, glyph := resourceKindStyle(entry.Kind)
@@ -1181,7 +1182,7 @@ func truncate(text string, limit int) string {
 // TrayMenu builds the tray menu for the current state: the status line, the
 // two shortcuts into the window, the connect toggle, the account submenu while
 // there is more than one account, and quit. Copying a PAC or a Clash rendering
-// belongs to 代理 alone: one owner per action, one wording, and a tray menu
+// belongs to Proxy alone: one owner per action, one wording, and a tray menu
 // that does not repeat the window's exports. A separator sits only between the
 // groups that exist, so a one-account menu has no empty group.
 func TrayMenu(state *State, actions Actions) *mygo.Menu {
@@ -1212,7 +1213,7 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		}
 	}
 
-	// 切换账户 appears only when there is a choice to make: one account has
+	// Switch account appears only when there is a choice to make: one account has
 	// nothing to switch to, and an item that can only ever show itself is
 	// noise in a menu that exists for the session.
 	accounts := make([]*mygo.MenuItem, 0, len(state.Config.Profiles))
@@ -1231,7 +1232,7 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		})
 	}
 
-	// 打开仪表盘 is the one page shortcut the tray needs: the tray icon itself
+	// Open Dashboard is the one page shortcut the tray needs: the tray icon itself
 	// keeps the page the window was reading, so only an explicit request moves
 	// it to the session.
 	dashboard := &mygo.MenuItem{ID: "dashboard", Label: locales.TrayDashboard(), Click: func(*mygo.MenuItem, *mygo.Window) {
@@ -1240,7 +1241,7 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 		}
 	}}
 
-	// 打开默认应用 opens the first portal application that has a launch
+	// Open default app opens the first portal application that has a launch
 	// address with the desktop's default browser. The main window lists the
 	// same URL on its resource row; the tray item is the shortcut for a user
 	// who does not want to open the window first.
