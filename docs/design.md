@@ -14,10 +14,12 @@ an entry in its decisions table.
 * The window surface is transparent and the content is clipped to a 12 DIP
   radius, so all four corners are round. GTK keeps the shadow, the resize
   edges and the desktop's window controls.
-* The title strip spans the window: the shield mark, the brand and the live
-  account (`goTrust · 账户 默认`), and the appearance switch at its right.
-  The desktop's own window controls live in it; a close hides the window to
-  the tray, and quitting stays in the tray menu.
+* The title strip is 44 DIPs and spans the window: the shield mark, `goTrust`
+  and, at the right, the appearance switch and the window's own minimize,
+  maximize and close controls. The frame's buttons are hidden
+  (`HideWindowButtons`), so the strip draws them while GTK keeps the shadow,
+  the rounded corners and the resize edges. A close hides the window to the
+  tray; quitting stays in the tray menu.
 * A card is the grouped face of one thing (the session, the resources, a
   settings group, the account's 连接 or 安全 section, the account list): the
   mockup's surface colour, a 12 DIP radius and a 1 DIP border.
@@ -129,16 +131,24 @@ an entry in its decisions table.
   (`Theme.Space`), so a compact or roomy theme stays consistent. The shell
   adds the fixed 24 DIP window padding, a 16 DIP gap between groups and an
   8 DIP gap inside one group.
+* A field stacks its label above the control (`formColumn`, `formField`), as
+  the mockup draws every form; the label is muted and caption-sized.
 * A row whose label can outgrow the line wraps instead of clipping; a long
   account name ellipsizes in the sidebar tag instead of squeezing 多账户.
 * A switch row is one target: the whole label toggles, as the mockup's label
   wraps its switch. The track is the mockup's 34×20 pill, accent when on and
   `switchOff` when off; the startup, keep-alive and 详细日志 settings use it.
 * 设置's rows fill their card: 数据文件, 设备标识, the language segment and
-  the About rows. 项目主页 and 许可证 are rows, not rows with a button: the
-  row itself opens the page, with the arrow at its right. 日志's header has
-  the 详细日志 switch, 清除 and 打开目录; 清除 truncates the file and drops
-  its rotations. The account list keeps no footer hint.
+  the About rows. The language segment is content-sized, not stretched. The
+  About card shows the shield and `goTrust <version>` centered, then
+  项目主页 and 许可证 as rows, not rows with a button: the row itself opens
+  the page, with the arrow at its right. 日志's block (toolbar, pane and
+  footer) is one card, so its border closes on every side; its header has the
+  详细日志 switch, 清除 and 打开目录, and 清除 truncates the file and drops
+  its rotations. 代理's PAC and Clash/Mihomo rows carry their 复制 at the
+  card's right edge. 终端管理 keeps its summary line, its 刷新 in the page
+  heading and its two cards before a session exists, with 0 counts and the
+  offline placeholder. The account list keeps no footer hint.
 
 ## A draft, a save bar and a toast
 
