@@ -13,12 +13,13 @@ separate chip.
 
 ## Next Step
 
-Phase 5: the page contents approved in the mockup. The dashboard is two cards
-with the stateful control, and the tray is the frequency-ordered menu.
+Phase 6: verification and documentation. The interface is complete; the
+remaining work is the real-window pass, `docs/design.md`,
+`docs/configuration.md`, `docs/agent-ui-testing.md` and the README notes.
 
 ## Current Phase
 
-Phase 4 complete; Phase 5 pending.
+Phase 5 complete; Phase 6 pending.
 
 ## Decisions already made
 
@@ -305,36 +306,96 @@ Notes:
 
 ### Phase 5: Page contents approved in the mockup
 
-- [ ] **代理**: keep the two listener fields; add a copy card with the PAC
+- [x] **代理**: keep the two listener fields; add a copy card with the PAC
       address (复制, disabled when empty) and a Clash/Mihomo row (format picker
       for Clash, Clash Script, Clash configuration; 复制). The wording is
       复制代理配置. The dashboard no longer owns either action.
-- [ ] **日志**: a new page with a read-only tail of the current log. The gui
+- [x] **日志**: a new page with a read-only tail of the current log. The gui
       owns a tailer that reads `logging.Logger.Path()`, polls once a second,
       keeps the last 500 lines and stops on quit; it reopens after rotation or
       truncation. The page has a level filter, a search field, 自动滚动, 复制,
       打开目录 and the 详细日志 switch. The switch applies through `SetVerbose`
       and is part of the saved settings. No credentials are rendered; the log
       layer already redacts them.
-- [ ] **设置**: language (moved out of 启动), 本机数据 (the data file field with
+- [x] **设置**: language (moved out of 启动), 本机数据 (the data file field with
       the resolved default path as its placeholder, the device ID and 打开配置
       文件), and 关于 (版本, 项目主页, 许可证). The version comes from
       `internal/version.Version`; the project and license buttons open
       `github.com/YangtseSu/goTrust` and its `LICENSE` through the browser.
       Remove the log, memory and verbose cards from this page.
-- [ ] **终端管理**: show the portal's user-facing fields per endpoint — name,
+- [x] **终端管理**: show the portal's user-facing fields per endpoint — name,
       current/online/offline, client/browser type, OS and version, browser,
       last login time, login address (LAN as 内网) and IP, network zones, and
       device ID. Add the summary (trusted count and limit, temporary count,
       self trust state) and keep the trust/untrust action.
-- [ ] **启动**: keep only 开机启动, 自动连接, 启动时隐藏窗口 and 断线自动重连;
+- [x] **启动**: keep only 开机启动, 自动连接, 启动时隐藏窗口 and 断线自动重连;
       language moves to 设置.
-- [ ] Add the locale keys for the new labels and remove the strings that no
+- [x] Add the locale keys for the new labels and remove the strings that no
       page uses; keep zh as the source and regenerate the catalog.
-- [ ] Render cases: dashboard online/offline/connecting/reconnecting/failed,
+- [x] Render cases: dashboard online/offline/connecting/reconnecting/failed,
       every page at 900×740 and at the minimum, light and dark, plus the save
       bar and the log page.
-- **Status:** pending.
+- **Status:** complete.
+
+Notes:
+
+- 代理: `proxyCopySection` follows the listener form with the PAC address and
+  a 复制 that is disabled while `State.PACURL` is empty, then a
+  Clash/Mihomo select (Clash 片段, Verge 脚本, Clash 完整配置) and its 复制.
+  `SettingsState.ClashFormat` keeps the choice; `clashLabel`/`clashFormat` map
+  between the picker text and the `ClashFormat` the action takes. Both buttons
+  read 复制, so their accessible labels are 复制 PAC 地址 and 复制 Clash 配置;
+  the section heading is `copyConfig`, now 复制代理配置.
+- 日志: `internal/gui/logtail.go` owns the tail. `logTail.run` polls once a
+  second, reads only what was appended, holds a partial line until its
+  newline, seeks to the last 256 KiB on the first read of a longer file and
+  drops that window's partial first line, and restarts on a rotation
+  (`os.SameFile`) or a shrunk file. It keeps `ui.LogTailLines` (500) lines and
+  hands out a copy; `setLogLines` applies it through `mygo.RunOnMain`, so the
+  page never reads a slice the tailer is replacing. `SettingsState.LogPath`
+  is the file, `LogLines` the tail, `LogFilter` and `LogAutoScroll` the page
+  state. The page has 详细日志 (the saved `SetVerbose` switch), 打开目录, a
+  search field, 自动滚动, 复制 (disabled with no visible line) and a
+  monospace pane; the footer names the file and 最后 500 行.
+- The page has no level filter. `core/logging` writes the standard
+  `log.LstdFlags` prefix and the protocol layer adds no level, so a
+  INFO/WARN/ERROR picker would classify nothing; 详细日志 is the only level
+  control, and a filtered tail is the search field. This is the one planned
+  item not shipped as written.
+- Auto-scroll reveals the last line only when the visible count changed, so a
+  user can read further up while the switch stays on; the next new line
+  returns to the end.
+- 设置: language, 本机数据 and 关于. The data file placeholder is
+  `ClientDataPathFor` through `shortPath` (`~` for the home directory); the
+  device id sits beside 打开配置文件. 关于 shows `internal/version.Version`
+  (`v` prefixed unless `devel`), `github.com/YangtseSu/goTrust` and
+  AGPL-3.0-or-later · © 2026 Yangtse Su; both buttons open their page through
+  `Actions.OpenURL`, which reuses the http/https guard of a resource.
+  `identitySummary`, 客户端标识, the log directory and 详细日志 left 设置.
+- 启动 is the four toggles only; the language picker moved to 设置.
+- 终端管理: the summary reads 授信终端 n/limit · 临时终端 m · 本机已信任 or
+  未信任 (the limit is omitted when the portal sends 0). Each list is a card
+  headed by `n 台`; an endpoint is its name and 当前设备/在线/离线, then a
+  grid of 类型, 系统, 浏览器, 最近登录, 登录地址 (LAN as 内网（ip）), 网络区域
+  and 设备 ID (`DevDBID`, `ID` as the fallback). A field the portal omitted is
+  an em dash. Three cells fit the 900 window, two the 720 minimum.
+- Catalog: 27 keys added, 25 dead ones removed (the old section titles, the
+  chip/footer strings, `quit`, `pacURL`, `terminalCount`, `browserSuffix` and
+  the identity keys); both catalogs hold the same 324 keys and no generated
+  accessor is unused.
+- Tests: `TestProxyPageCopiesTheProxyConfig`,
+  `TestLogPageFiltersCopiesAndToggles`, `TestSettingsPageShowsLocalDataAndAbout`,
+  `TestShortPathKeepsTheHomeShort`, the tailer tests (append, partial line,
+  rotation, truncation, limit, window) and `TestOpenURLAllowsOnlyHTTP`; the
+  shell, sidebar, language and trust tests follow the moved pages and the
+  portal fields.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint` pass. `GOTRUST_RENDER_DIR` wrote 98 images:
+  both languages, the five dashboard phases, every page at 900×740, 720×560
+  and in dark mode, plus the save bar and the log page. The binary ran under
+  headless mutter and exited 0 with the tailer running (PAC port 1082 was
+  already held by another process, as in phase 4). Interactive clicks remain
+  phase 6.
 
 ### Phase 6: Verification and documentation
 

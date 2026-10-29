@@ -193,3 +193,34 @@ status
   approved phases until Phase 7 is confirmed.
 - The mockup's search, filters and theme switch are HTML-only; the app uses
   mygo widgets and the desktop theme.
+
+## Phase 5 facts
+
+- **No level in a log line.** `core/logging` decorates every line with the
+  standard logger's `log.LstdFlags` and the message; the protocol layer adds no
+  level, and `SetVerbose`/`SetProtocolDebug` decide whether the debug lines
+  exist at all. A 全部/信息/警告/错误 filter therefore has nothing to classify;
+  the page uses the search field as its filter and 详细日志 as the level
+  control. A real level filter needs a level source in `core/logging` first.
+- **SearchField's placeholder is fixed.** `ui.SearchField` builds its own
+  input with the catalog's generic 搜索/ Search placeholder and ignores a
+  later `.Placeholder`; the filter's name is its accessible label
+  (`Filter the log`), which is what a screen reader announces.
+- **The Tester cannot see an input's placeholder.** `Texts()` lists labels and
+  drawn strings, not placeholder text, so the data-file default path is checked
+  on the rendered image and `shortPath` is unit-tested instead.
+- **Rotation and truncation are two signals.** `os.SameFile` separates the
+  rotated file from its replacement even when the new file is already longer
+  than the old offset; a smaller size is the truncation signal. A truncation
+  that regrows past the old offset between two polls is not distinguishable
+  from an append, but the logger rotates by rename, so only a manual truncation
+  can hit it.
+- **The tail hands over on the main loop.** Rendering and the assignment of
+  `SettingsState.LogLines` both run through `mygo.RunOnMain`, so the page never
+  reads a slice header the tailer is replacing.
+- **A closed Select shows its choice.** The Clash format picker draws the
+  chosen option's text, so the copy test can assert the format without opening
+  the menu.
+- **The summary line needs an explicit separator.** The trusted/temporary
+  counts are one locale string; the self-trust state is a second node, so the
+  page prefixes it with `· ` rather than relying on the row gap.

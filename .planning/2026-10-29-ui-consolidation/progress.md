@@ -184,7 +184,44 @@ The review settled these points:
 
 ### Phase 5: Page contents approved in the mockup
 
-- **Status:** pending
+- **Status:** complete
+- 代理 owns the copy actions again: the PAC address with a 复制 disabled while
+  `State.PACURL` is empty, and a Clash/Mihomo select (Clash 片段, Verge 脚本,
+  Clash 完整配置) with its own 复制. `SettingsState.ClashFormat` keeps the
+  choice; the buttons read 复制 with 复制 PAC 地址 and 复制 Clash 配置 as
+  accessible names.
+- 日志 tails the current file: `internal/gui/logtail.go` polls once a second,
+  reads only appended bytes, holds a partial line until its newline, restarts
+  after a rotation or truncation, and keeps 500 lines. The hand-off to the page
+  runs on the main loop, so the render never reads a slice being replaced. The
+  page has 详细日志, 打开目录, a case-insensitive filter, 自动滚动, 复制 and a
+  monospace pane with the file and 最后 500 行 under it. A level filter was
+  planned but not shipped: the log lines carry no level, so it would filter
+  nothing; 详细日志 is the level control and the search field is the filter.
+- 设置 holds the language (moved off 启动), 本机数据 (the data file with the
+  resolved default path as its placeholder, the device id and 打开配置文件)
+  and 关于 (version, project home, license); both 关于 buttons open their pages
+  through the same http/https guard as a granted resource. The client identity
+  line and the verbose/log cards are gone.
+- 启动 is the four toggles only.
+- 终端管理 shows the portal's endpoint fields: type, OS, browser, last login,
+  login address (LAN as 内网), network zones and device id, in a wrapping grid;
+  the summary counts trusted endpoints against the device limit and names the
+  self trust state.
+- Catalog: 27 keys added, 25 dead ones removed; both catalogs hold 324 keys and
+  the build carries no unused accessor.
+- Tests: the proxy copy actions, the log filter/copy/verbose/open-dir, the
+  settings sections and both links, the four-toggle 启动 page, the endpoint
+  fields and the tailer (append, partial line, rotation, truncation, limit,
+  long-file window); the shell, sidebar, language and trust tests follow the
+  moved pages.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint` pass. The render pass wrote 98 PNGs across both
+  languages, all five dashboard phases, every page at 900×740 and 720×560,
+  dark mode, the save bar and the log page. The binary ran under headless
+  mutter with the tailer and exited 0; the PAC port 1082 was already held by
+  another process, as in phase 4. Interactive clicks and tray behaviour remain
+  phase 6.
 
 ### Phase 6: Verification and documentation
 
