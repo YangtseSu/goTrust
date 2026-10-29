@@ -87,8 +87,8 @@ an entry in its decisions table.
   dialogs and never windows of their own.
 * A panel is a card with the page's fields: the heading, the controls with
   their labels above, and the foot inside the card (取消登录 on the left, the
-  answer on the right). The captcha image is capped at 400 DIPs so the card
-  still fits the 720 DIP window.
+  answer on the right). The captcha image is capped at 400 DIPs and centered
+  in the card, so it still fits the 720 DIP window.
 * A panel owns the content wherever the sidebar points, and the sidebar dims
   and disables while it is up. Esc is its cancel; the selected page returns
   when the panel closes.
