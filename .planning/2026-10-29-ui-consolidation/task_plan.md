@@ -13,13 +13,13 @@ separate chip.
 
 ## Next Step
 
-Phase 3: demote profiles. The account page is the login form now; the 多账户
-page, the bottom sidebar entry, the tray's 切换账户 submenu and the 账户 wording
-are next.
+Phase 4: the stateful play/stop control and the tray. 账户 is the first-run
+form, 多账户 is the bottom page with rows, and the tray's account submenu is
+the only switcher left.
 
 ## Current Phase
 
-Phase 2 complete; Phase 3 pending.
+Phase 3 complete; Phase 4 pending.
 
 ## Decisions already made
 
@@ -164,22 +164,59 @@ Notes:
 
 ### Phase 3: Demote profiles
 
-- [ ] Remove `profileBar` and the profile name from the 账户 page.
-- [ ] Add the 多账户 page: one row per account (name, gateway, active mark),
+- [x] Remove `profileBar` and the profile name from the 账户 page.
+- [x] Add the 多账户 page: one row per account (name, gateway, active mark),
       the name field for the selected draft profile, and 新建/复制/删除. The
       draft selection stays inside `SettingsState`; saving applies the rename
       and moves the client data file through the existing `ClientDataChanges`.
-- [ ] Add the subdued 多账户 item at the bottom of the sidebar with the live
+- [x] Add the subdued 多账户 item at the bottom of the sidebar with the live
       account name as a tag.
-- [ ] Tray: replace the 配置 submenu with 切换账户 and render it only when the
+- [x] Tray: replace the 配置 submenu with 切换账户 and render it only when the
       configuration has more than one account; radio marks the active one.
-- [ ] Rename the user-facing profile wording to 账户: `ProfileName`,
+- [x] Rename the user-facing profile wording to 账户: `ProfileName`,
       `CurrentProfile`, `NameField`, the default profile name and the title
       strip. The `config.Profile` type and file keys stay.
-- [ ] Tests: 账户 has no name/profile bar; a single-account tray has no account
+- [x] Tests: 账户 has no name/profile bar; a single-account tray has no account
       item; a rename still moves the client data; the bottom item tags the live
       account.
-- **Status:** pending.
+- **Status:** complete.
+
+Notes:
+
+- `profileBar` was already deleted with the two-window shell, and the account
+  page lost its 名称 field in phase 2; the render `account-fresh` is the proof
+  that 账户 is now only the login form.
+- 多账户 is a radio group of rows: mygo's `Avatar` (initials), the account name,
+  its gateway from the draft buffer (`尚未填写网关` when empty) and `当前` on the
+  live account (`SettingsState.ActiveAtOpen`). The accent tint marks the draft's
+  selection; a click only moves that selection, and 保存 is what switches the
+  live account and moves the client data. 新建/复制/删除 sit under the name
+  field, outside the form's label column.
+- The dropdown is gone: `SettingsState.SelectText` and `profilePickerWidth` are
+  deleted. `NameText` remains the single rename buffer, so a name typed for one
+  account is discarded when another row is selected (documented on `Select`).
+- The sidebar row is a subdued variant of `navItem` (`navRow` with `subdued`):
+  it keeps the muted ink while its page is on screen and is the only row with a
+  tag. The tag is capped at 76 DIP so a long account name ellipsizes instead of
+  squeezing 多账户; the title strip is single-lined for the same reason.
+- Tray: the account submenu is `切换账户` and exists only with more than one
+  account; its items are radios checked on `ActiveProfile` (IDs `accounts` and
+  `account:<name>`). Phase 4 owns the rest of the tray order.
+- Wording: every user-facing 配置 that meant a profile is now 账户, including
+  the auto-connect and TOTP hints that still pointed at 设置. New accounts are
+  named 账户 1, 账户 2, … (`profileBaseName`/`profileBaseNameN`), and the toast
+  reads 已新建 {name}. `config.DefaultProfileName` stays `默认`: it is a stored
+  value and the name the v1 `client_data.json` maps to. The `config.Profile`
+  type and the TOML keys are unchanged.
+- Tests added: the row list shows names, gateways and the live mark and selects
+  on a click; a single-account tray has no account item; the sidebar tag is the
+  live account name and lives inside the sidebar; `TestViewRendersEveryPhase`
+  now looks for the account name instead of the word 配置.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint` pass. `GOTRUST_RENDER_DIR` rendered
+  `settings-accounts` in both languages plus the 720×560 page; a throwaway test
+  checked that a 14-character account name ellipsizes in the tag without
+  squeezing the label. Interactive clicks in the real window remain phase 6.
 
 ### Phase 4: Stateful play/stop control and tray
 

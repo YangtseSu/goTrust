@@ -98,7 +98,43 @@ The review settled these points:
 
 ### Phase 3: Demote profiles
 
-- **Status:** pending
+- **Status:** complete
+- 账户 is only the login form: `profileBar` went with the two-window shell, the
+  名称 field went in phase 2, and the page has no picker. `account-fresh` shows
+  it.
+- 多账户 is a radio group of rows: `ui.Avatar` initials, the account name, its
+  gateway from the draft buffer (`尚未填写网关` when empty), and `当前` on the
+  live account (`SettingsState.ActiveAtOpen`). The accent tint marks the draft's
+  selection; a click calls the settings' `SelectProfile`, which only moves that
+  selection. The name field edits `NameText`, and 新建/复制/删除 sit under it,
+  outside the form's label column. Saving still applies the rename and moves the
+  client data through `ClientDataChanges`.
+- The dropdown is gone with `SettingsState.SelectText` and
+  `profilePickerWidth`. `NameText` is still the single rename buffer, so a name
+  typed for one account is discarded when another row is selected (as the old
+  dropdown did; documented on `Select`).
+- The sidebar's bottom row is `navAccount`: `navRow` with `subdued`, which keeps
+  the muted ink while its page is on screen. Its tag is capped at 76 DIP, so a
+  long account name ellipsizes instead of squeezing 多账户; the title strip is
+  single-lined for the same reason.
+- Tray: the submenu is 切换账户 (`traySwitchAccount`) and appears only with more
+  than one account; items are radios checked on `ActiveProfile` (IDs `accounts`
+  and `account:<name>`). The full tray order stays phase 4.
+- Wording: every user-facing 配置 that meant a profile is 账户, including the
+  auto-connect and TOTP hints that still pointed at 设置. New accounts are named
+  账户 1, 账户 2, … and the toast reads 已新建 {name}. `config.DefaultProfileName`
+  stays `默认` (stored value, and the name the v1 `client_data.json` maps to);
+  the `config.Profile` type and the TOML keys are unchanged. `CurrentProfile`
+  became `profileCurrent` (当前), `NameField` is 账户名称.
+- Tests: `TestAccountsPageRowsMarkTheLiveAccountAndSelect` (names, gateways,
+  当前, click selects), `TestTrayMenuHidesTheAccountSubmenuForOneAccount`,
+  `TestSidebarTagsTheLiveAccount` (the bare name, inside the sidebar), and
+  `TestViewRendersEveryPhase` now looks for the account name instead of 配置.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint` pass. `GOTRUST_RENDER_DIR` rendered
+  `settings-accounts` in both languages and at 720×560; a throwaway test
+  checked a 14-character account name in the sidebar. Interactive clicks in the
+  real window remain phase 6.
 
 ### Phase 4: Stateful play/stop control and tray
 
