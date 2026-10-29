@@ -226,10 +226,11 @@ an entry in its decisions table. The layout they describe is
   still carries Chinese, and placeholders that name different arguments.
 * Counts and durations are ICU messages with placeholders, so a translation can
   move the number. `zh` is the source language and the fallback.
-* The window is bilingual. The headless front-end and the login pages it
-  serves are English only, like its output; `core/*` stays English too, so
-  library errors and the session detail are read as written in terminals and
-  logs.
+* The window is bilingual. The headless front-end's terminal output and logs
+  are English; the login pages it serves are English by default and follow
+  `--prompt-lang zh` alone, never the environment. `core/*` stays English too,
+  so library errors and the session detail are read as written in terminals
+  and logs.
 
 ## mygo owns the toolkit behaviour
 

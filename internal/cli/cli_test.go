@@ -201,6 +201,7 @@ func TestUsageErrors(t *testing.T) {
 		{"unknown flag", []string{"-config", path, "-nope"}},
 		{"two commands", []string{"-config", path, "-status", "-print-resources"}},
 		{"stray argument", []string{"-config", path, "extra"}},
+		{"bad prompt language", []string{"-config", path, "-prompt-lang", "fr"}},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -445,5 +446,18 @@ func TestPrintClashConfig(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "mixed-port:") || !strings.Contains(stdout, "MATCH,DIRECT") {
 		t.Fatalf("standalone config:\n%s", stdout)
+	}
+}
+
+// The prompt language changes only the login pages; an explicit zh is
+// accepted, and another value is a command-line error in English.
+func TestPromptLanguage(t *testing.T) {
+	code, stdout, stderr := run(t, "-prompt-lang", "zh", "-version")
+	if code != ExitOK || !strings.Contains(stdout, "gotrust-cli") {
+		t.Fatalf("zh: exit = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+	code, _, stderr = run(t, "-prompt-lang", "fr", "-version")
+	if code != ExitUsage || !strings.Contains(stderr, "--prompt-lang must be en or zh") {
+		t.Fatalf("fr: exit = %d, stderr = %q", code, stderr)
 	}
 }

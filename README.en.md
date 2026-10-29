@@ -71,8 +71,9 @@ rules are in [`docs/design.md`](docs/design.md).
 The language follows the desktop by default: a Chinese desktop shows Chinese,
 an English one English, and other languages fall back to Chinese. Settings →
 Language offers Follow the system, 中文 and English; the choice applies at once
-and is kept for the next start. All of gotrust-cli's output and its login pages
-are English, because it is read in terminals and logs.
+and is kept for the next start. gotrust-cli's terminal output and logs are
+English; the browser login pages are English by default, and `--prompt-lang zh`
+switches only those pages to Chinese. The environment is not read.
 
 The window supports the keyboard (on macOS, Command instead of Ctrl):
 `Ctrl+Enter` connects or disconnects, `/` jumps to the resource search. While a
@@ -254,6 +255,7 @@ gotrust-cli --print-clash                    # plain Clash/Mihomo fragment
 gotrust-cli --print-clash-script             # Clash Verge Rev global extension script
 gotrust-cli --print-clash-config             # full local Mihomo configuration
 gotrust-cli --json                           # resources and status as JSON
+gotrust-cli --prompt-lang zh                 # Chinese login pages (terminal output stays English)
 gotrust-cli --version
 ```
 

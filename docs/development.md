@@ -216,3 +216,7 @@ the login waits. The URL goes to stderr (and, with `--print-url`, nowhere else);
 the page is not logged, accepts one answer, rejects a request whose `Host` is
 not a loopback name, loads no external assets, and closes with the login
 attempt's context. A page works over SSH port forwarding.
+
+The pages are English by default. `--prompt-lang zh` swaps the page words only;
+the terminal output, the log and the exit codes stay English, and no `LC_*` or
+`LANG` is read.

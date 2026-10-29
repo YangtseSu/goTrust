@@ -54,7 +54,8 @@ yay -S gotrust-cli    # 无界面版，只依赖 glibc
 
 语言默认跟随桌面：系统的语言是中文时显示中文，是英文时显示 English，其他语言回退到
 中文。在“设置 → 语言”里可以选“跟随系统”“中文”或“English”，选择立即生效，并在下次
-启动时保留。`gotrust-cli` 的所有输出和登录提示页都是英文，因为它在终端和日志里阅读。
+启动时保留。`gotrust-cli` 的终端输出和日志是英文，因为它在终端和日志里阅读；
+浏览器里的登录提示页默认英文，`--prompt-lang zh` 只把这些页面换成中文，不读 `LANG`/`LC_*`。
 
 窗口支持键盘操作（macOS 上把 Ctrl 换成 Command）：`Ctrl+Enter` 连接或断开，
 `/` 跳到资源搜索框。登录面板打开时 `Esc` 等于“取消登录”，`Ctrl+Enter` 不会替你
@@ -204,6 +205,7 @@ gotrust-cli --print-clash                    # 普通 Clash/Mihomo 片段
 gotrust-cli --print-clash-script             # Clash Verge Rev 的全局扩展脚本
 gotrust-cli --print-clash-config             # 完整的本地 Mihomo 配置
 gotrust-cli --json                           # 资源与状态以 JSON 输出
+gotrust-cli --prompt-lang zh                 # 登录提示页用中文（终端输出仍为英文）
 gotrust-cli --version
 ```
 

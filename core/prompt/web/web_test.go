@@ -637,3 +637,36 @@ func TestPagesSpeakEnglish(t *testing.T) {
 		t.Fatalf("confirmation = %q, want the English success page", accepted.Body.String())
 	}
 }
+
+// The pages speak Chinese only when asked; the default and any other value
+// stay English, and the environment is never consulted.
+func TestTextsFor(t *testing.T) {
+	cases := map[string]string{
+		"":      "Enter the code",
+		"en":    "Enter the code",
+		"zh":    "输入验证码",
+		"fr":    "Enter the code",
+		"zh-CN": "Enter the code",
+	}
+	for language, want := range cases {
+		if got := textsFor(language).CodeTitle; got != want {
+			t.Errorf("textsFor(%q).CodeTitle = %q, want %q", language, got, want)
+		}
+	}
+}
+
+// The pages speak Chinese when the front-end asks for it, from the heading to
+// the form's own validation.
+func TestPagesSpeakChinese(t *testing.T) {
+	p := newCodePage(authchallenge.CodeChallenge{Kind: authchallenge.CodeSMS}, testToken, chinese)
+	body := getPage(p.mux, "/"+testToken+"/").Body.String()
+	for _, want := range []string{`lang="zh-CN"`, "输入验证码", "提交"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("page = %q, want %q", body, want)
+		}
+	}
+	recorder := postForm(p.mux, "/"+testToken+"/", url.Values{})
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "请输入验证码") {
+		t.Fatalf("empty form = %d %q", recorder.Code, recorder.Body.String())
+	}
+}

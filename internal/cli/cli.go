@@ -63,6 +63,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	asJSON := flags.Bool("json", false, "encode the reported grant and status as JSON")
 	printURL := flags.Bool("print-url", false,
 		"print the URL of an interactive login step instead of opening a browser")
+	promptLang := flags.String("prompt-lang", "en",
+		"language of the interactive login pages: en or zh")
 	showVersion := flags.Bool("version", false, "print the version and exit")
 
 	switch err := flags.Parse(args); {
@@ -73,6 +75,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	if flags.NArg() > 0 {
 		fmt.Fprintf(stderr, "%s: unexpected argument %q\n", program, flags.Arg(0))
+		return ExitUsage
+	}
+	if *promptLang != "en" && *promptLang != "zh" {
+		fmt.Fprintf(stderr, "%s: --prompt-lang must be en or zh\n", program)
 		return ExitUsage
 	}
 	commands := 0
@@ -113,13 +119,13 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	case *printClashConfig:
 		return reportRender(stdout, stderr, cfg, path, "clash-config")
 	default:
-		return runSession(stdout, stderr, cfg, path, *asJSON, *printURL)
+		return runSession(stdout, stderr, cfg, path, *asJSON, *printURL, *promptLang)
 	}
 }
 
 // runSession is the long-running command: log in, publish the listeners, print
 // the grant, and stay up until a signal or a failure that needs a person.
-func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, asJSON, printURL bool) int {
+func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, asJSON, printURL bool, promptLang string) int {
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(stderr, "settings: %v\n", err)
 		return ExitFailure
@@ -145,11 +151,12 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 	failures := make(chan string, 1)
 	// The URL goes to stderr, not to the log file: it is the one line a person
 	// on a host without a display has to read, and it stays out of the history.
-	// The headless front-end reads in terminals and logs, so its pages are
-	// English only, like the rest of its output.
+	// The terminal and the logs stay English. The browser pages follow the
+	// flag alone, never the environment: en by default, zh on request.
 	promptOptions := web.Options{
-		Print: func(link string) { fmt.Fprintf(stderr, "prompt: %s\n", link) },
-		Logf:  logf,
+		Print:    func(link string) { fmt.Fprintf(stderr, "prompt: %s\n", link) },
+		Logf:     logf,
+		Language: promptLang,
 	}
 	if !printURL {
 		promptOptions.Open = web.OpenBrowser

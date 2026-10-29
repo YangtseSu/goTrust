@@ -54,6 +54,9 @@ type Options struct {
 	Logf func(format string, args ...any)
 	// Timeout bounds one page. Zero uses DefaultTimeout.
 	Timeout time.Duration
+	// Language names the pages' words: zh for Chinese, anything else for
+	// English. It never reads the environment; the front-end decides.
+	Language string
 }
 
 // Prompter serves the login's questions. One value serves every attempt of a
@@ -71,7 +74,7 @@ func New(options Options) *Prompter {
 	if options.Logf == nil {
 		options.Logf = func(string, ...any) {}
 	}
-	return &Prompter{options: options, texts: english}
+	return &Prompter{options: options, texts: textsFor(options.Language)}
 }
 
 // Handler returns the prompter for one login attempt. The login goroutine is
