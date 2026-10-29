@@ -348,4 +348,26 @@ The review settled these points:
 
 ### Phase 7 (optional): Traffic card
 
-- **Status:** pending (optional; confirm before starting)
+- **Status:** complete
+- `core/proxy` counts the bytes the client side moves: `trackedConn.Read` is
+  upload, `Write` is download (SOCKS5 and CONNECT share that shape), the
+  CONNECT pipeline buffer is counted where the hijack reads it, and plain HTTP
+  counts its request and response bodies. `Server.Traffic()` reads two
+  atomics.
+- `internal/gui/traffic.go`: a one-second sampler into a 60-point ring,
+  published as `ui.TrafficState`. A new server, or a reading smaller than the
+  previous one (an address reused inside one sample), starts a new minute; an
+  idle app publishes no new point.
+- The dashboard card is the mockup's: 流量, the 下行/上行 legends with 7 DIP
+  dots and the newest rates, 最近 60 秒, and an 80 DIP sparkline with the
+  download's accent area fading to nothing and the upload's success line, both
+  on one scale.
+- The dashboard scrolls like the mockup's view: the resource list lost its own
+  scroll and three-row minimum. The .view-wrap scroll is the page scroll.
+- The counting writer needs `Unwrap()`: embedding `http.ResponseWriter` does
+  not promote `Flush`, and the streamed-response test caught the missing
+  flush.
+- Verification: full checks, 102 renders (both languages, 900 and 720, light
+  and dark), five seconds of the real binary under headless mutter with a
+  clean exit. No live gateway was available; live rates rest on the counter
+  and sampler tests.

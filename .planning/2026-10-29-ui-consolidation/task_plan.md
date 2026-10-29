@@ -13,12 +13,12 @@ separate chip.
 
 ## Next Step
 
-Phase 13 is complete. The traffic card (Phase 7) stays deferred; the log,
-metrics and startup labels keep their current choices.
+Phase 7 (the traffic card) is complete. No phase is open; the log, metrics and
+startup labels keep their current choices.
 
 ## Current Phase
 
-Phase 13 complete; Phase 7 optional and deferred.
+Phase 7 complete; no phase open.
 
 ## Decisions already made
 
@@ -53,7 +53,8 @@ Phase 13 complete; Phase 7 optional and deferred.
   the four toggles.
 - **About:** version from `internal/version`, project URL
   `github.com/YangtseSu/goTrust`, license AGPL-3.0-or-later, copyright.
-- **No memory display.** The traffic card is a separate, optional phase.
+- **No memory display.** The traffic card (Phase 7) is built: the proxy's
+  last minute of up/down throughput, between the session and the resources.
 - **Design references (not repository files):** `/tmp/gotrust-mockup.html` and
   `/tmp/gotrust-status-variants.html`; the agreed card is variant B.
 
@@ -455,16 +456,59 @@ Notes:
 
 ### Phase 7 (optional): Traffic card
 
-The mockup shows a Clash Verge-style traffic card; it is not part of the
-approved 7/8/11/13 work and is not started until asked for.
+The mockup shows a Clash Verge-style traffic card; it was deferred with the
+7/8/11/13 work and built on request, exactly as the mockup draws it.
 
-- [ ] Add byte counters to `core/proxy` (`trackedConn` reads and writes for
-      SOCKS5 and CONNECT; a counting writer for plain HTTP), expose a snapshot,
-      and sample it once a second in the gui into a 60-point ring.
-- [ ] Add the dashboard card with the current up/down rates and two line series;
+- [x] Add byte counters to `core/proxy` (`trackedConn` reads and writes for
+      SOCKS5 and CONNECT; a counting reader for the plain-HTTP request body and
+      a counting writer for its response), expose a snapshot, and sample it
+      once a second in the gui into a 60-point ring.
+- [x] Add the dashboard card with the current up/down rates and two line series;
       use the mygo chart primitives or a small custom sparkline.
-- [ ] Tests for the counters and the ring; smoke the card in the real window.
-- **Status:** pending (optional; confirm before starting).
+- [x] Tests for the counters and the ring; smoke the card in the real window.
+- **Status:** complete.
+
+Notes:
+
+- The counters are `atomic.Uint64` on `Server`, not fields under `mu`: every
+  proxied byte passes them, and `mu` guards the listener list that `Close` and
+  `Listeners` use. `trackedConn.Read` counts up and `Write` counts down, which
+  is the same client-side direction for SOCKS5 and CONNECT; the CONNECT
+  pipeline buffer is counted explicitly because the HTTP server read it before
+  the hijack. Plain HTTP counts the request body (a counting reader, which
+  forwards `Close`) and the response body (a counting writer). `Traffic()`
+  returns both totals; a closed server reports its last ones.
+- The counting writer has to implement `Unwrap() http.ResponseWriter`:
+  embedding `http.ResponseWriter` promotes only Header/Write/WriteHeader, so
+  `http.NewResponseController` found no `Flush` and the streamed-response test
+  failed. The wrapper now exposes the writer and the flush reaches the
+  connection.
+- `internal/gui/traffic.go` owns the sampler: one reading a second, a 60-point
+  ring, and `TrafficState` published under `a.mu` for the window. A different
+  server starts a new minute; a reading smaller than the one before does the
+  same, because an address reused inside one sample looks like the same server
+  with reset counters. A repeated reading of no session publishes nothing, so
+  an idle window is not repainted every second.
+- `ui/traffic.go` is the mockup's card: 流量, the 下行/上行 legends with their
+  7 DIP dots and the newest rates, 最近 60 秒 at the right, and an 80 DIP
+  sparkline whose download is the accent area (22% to 0) under its stroke and
+  whose upload is the success line. Both lines share one scale and sit in a
+  rect inset by 3 DIP so a flat line is not clipped. `trafficRate` prints
+  binary units (B/s, KB/s, MB/s, GB/s, TB/s) with one decimal above a
+  kilobyte.
+- The dashboard now scrolls as the mockup's `.view-wrap` does; with three cards
+  it is taller than a 720×560 window. The resource list lost its own `Scroll`
+  and the three-row minimum (`resourceListMinHeight`, `resourceListMinRows`):
+  the page is the one scroll area. `TestDashboardScrollsAtTheMinimumSize`
+  replaces the old three-rows test, and the row-menu test renders at 900×740.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .`, `go tool mygo vet .` and `reuse lint` pass. `GOTRUST_RENDER_DIR`
+  wrote 102 images; the dashboard at 900×740 and 720×560, light and dark, both
+  languages, was checked on the images. The binary ran under headless mutter
+  for five samples (`goTrust ready`, no GL errors, SIGTERM exit 0). No live
+  gateway was available, so the live rates rest on the counter and sampler
+  tests; the card's build and the sampler's idle loop were the real-window
+  check.
 
 ### Phase 8: Mockup parity
 

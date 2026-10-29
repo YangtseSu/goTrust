@@ -320,3 +320,29 @@ status
   click mapping does not change.
 - **The About hero is one column of three lines.** The tagline is a locale
   string under the name, so the block grows without touching the rows.
+
+## Phase 7 facts
+
+- **A wrapped `http.ResponseWriter` must Unwrap to flush.** `countingWriter`
+  embeds `http.ResponseWriter`, whose method set is only Header/Write/
+  WriteHeader, so `Flush` is not promoted and `http.NewResponseController`
+  answered "not supported": the existing streamed-response test failed with a
+  read timeout. `func (w countingWriter) Unwrap() http.ResponseWriter` is the
+  contract the controller walks; with it, `stream` flushes through the
+  counter again.
+- **Counting is directional on the client connection.** In both SOCKS5 and
+  CONNECT the proxy reads the client conn to upload and writes it to
+  download, so `trackedConn.Read`/`Write` are one rule for both. The CONNECT
+  request line is read by `http.Server` before the hijack, and its pipeline
+  buffer is forwarded separately; those bytes are counted where they are
+  handed to the target. Plain HTTP has no tracked conn: it counts its request
+  and response bodies instead.
+- **A minute of rates needs a session identity.** The gui sampler compares the
+  live `*proxy.Server` and the totals: a new server starts the minute over,
+  and a smaller reading does the same because a freed server's address can be
+  reused by the next one inside a single sample. Without that guard a uint64
+  subtraction underflows into an absurd rate.
+- **Three cards do not fit 720×560.** The dashboard had to scroll; the mockup's
+  `.view-wrap` is the same page scroll. The resource list's own `Scroll` and
+  its three-row minimum only made sense while the dashboard was fixed, so
+  they went with the change.
