@@ -163,13 +163,14 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 	return func(c *ui.Context) {
 		// The frame follows the appearance mygo reports (the desktop's, or the
 		// one the title bar's switcher forced); the views paint it with the
-		// mockup's palette.
-		dark := c.Theme().Dark
-		c.SetTheme(themeFor(dark))
+		// mockup's palette. themeFor copies the followed theme, so the
+		// desktop's text scale and contrast survive the palette.
+		theme := themeFor(c)
+		c.SetTheme(theme)
 		// The window is transparent: the rounded content is what the frame
 		// paints, and the corners outside it show the desktop.
 		c.Root().Background(ui.Transparent)
-		p := paletteFor(dark)
+		p := paletteFor(theme.Dark)
 		if state.Settings != nil {
 			// The profile buffers follow the draft, whichever page changed the
 			// list inside the last frame.

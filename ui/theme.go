@@ -115,13 +115,12 @@ func paletteOf(c *ui.Context) palette { return paletteFor(c.Theme().Dark) }
 
 // themeFor is the mygo theme the frame draws with: the mockup's colours on
 // the toolkit's metrics, so mygo's own widgets (inputs, switches, selects,
-// scrollbars) sit in the same palette as the views.
-func themeFor(dark bool) *ui.Theme {
-	theme := ui.LightTheme()
-	if dark {
-		theme = ui.DarkTheme()
-	}
-	p := paletteFor(dark)
+// scrollbars) sit in the same palette as the views. It starts from the frame's
+// own theme, which has already followed the desktop's text scale and
+// high-contrast settings, and overrides only the palette.
+func themeFor(c *ui.Context) *ui.Theme {
+	theme := *c.Theme()
+	p := paletteFor(theme.Dark)
 	theme.Background = p.content
 	theme.Surface = p.surface
 	theme.SurfaceHover = p.hover
@@ -140,7 +139,14 @@ func themeFor(dark bool) *ui.Theme {
 	theme.Focus = p.accent.Alpha(0.55)
 	theme.Inverse = p.text
 	theme.InverseText = p.content
-	return theme
+	// The palette replaced the colours Theme.follow mixed, so the
+	// high-contrast adjustment is applied again to the final values.
+	if c.Preferences().HighContrast {
+		theme.Border = theme.Border.Mix(theme.Text, 0.45)
+		theme.TextMuted = theme.TextMuted.Mix(theme.Text, 0.4)
+		theme.Focus.A = 255
+	}
+	return &theme
 }
 
 // tone is the meaning of a colour, not the colour itself: the theme decides

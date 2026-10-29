@@ -215,7 +215,9 @@ an entry in its decisions table. The layout they describe is
 
 * The window uses mygo 0.7.3: a hidden title bar keeps the desktop's window
   controls, a hide from the window's own frame is queued by the toolkit, and
-  the transparent surface with `Clip` gives the four rounded corners.
+  the transparent surface with `Clip` gives the four rounded corners. The
+  mockup's palette is applied to a copy of the frame's theme, so the desktop's
+  text scale and high-contrast adjustments survive it.
 * Views are pure functions of `ui.State`; they read no network and keep no
   global state. Widget state that belongs to one field lives in `ui.Local`, app
   state in the state struct. `SettingsState` is the one long-lived draft the
