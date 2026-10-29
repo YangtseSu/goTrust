@@ -225,7 +225,36 @@ The review settled these points:
 
 ### Phase 6: Verification and documentation
 
-- **Status:** pending
+- **Status:** complete
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` and
+  `reuse lint` pass.
+- Real window: a test build renamed `gt-a11y` (its own single-instance lock and
+  tray item; the installed app stayed untouched), a temporary config and
+  ports, the live GNOME Wayland session. AT-SPI drove the interface: every
+  page tab opened its heading; the 账户 gateway edit raised the save bar, 保存
+  wrote `address = "vpn2.example.com"` / `port = 8443` and the toast; a second
+  edit survived 关闭 and the tray's 打开仪表盘, and 放弃修改 restored the stored
+  value. 重试 started a login and 取消 ended it (连接中 → 未连接, toast 已取消);
+  the tray's 连接 started the saved-config login the same way. A throwaway
+  local HTTPS gateway answered `authConfig` with two methods: the choice panel
+  appeared, 密码登录 was answered, and the failure was reported (状态：失败)
+  after the fake returned 500 for `/public/manifest`.
+- The 720×560 minimum: GTK applies the hint to the surface (a 560 hint gave a
+  508 page), and mygo's `Bounds`/`ContentBounds` report no margin on Wayland.
+  `internal/gui` now adds the measured 52 px CSD shadow to the page minimum; a
+  probe build opened at 600×400 was clamped to a 720×560 page.
+- Fixes found by the pass: the gateway port was ICU-formatted (`38,265` for
+  38265) and is now a string (`TestGatewayPortIsNotGrouped`); the chip was
+  restored per the review (`phaseText` draws the tinted pill and its dot).
+- Not exercised: online 断开 (no live gateway) and the tray icon's own click
+  and panel; the shell's icon exposes no action, and the DBusMenu path used
+  above is what a script reaches. Both remain the operator's tray check.
+- Docs: `docs/design.md` rewritten (one window, chip, save bar, minimum);
+  `docs/configuration.md` and `.en.md` (gateway field, page wording);
+  `docs/agent-ui-testing.md` (AT-SPI, DBusMenu, focus, shadow); README
+  first-run, page table, tray and log references.
+- Render: `GOTRUST_RENDER_DIR` wrote 98 images after the chip change; the five
+  dashboard phases, dark mode, the panel and 720×560 were checked.
 
 ### Phase 7 (optional): Traffic card
 

@@ -224,3 +224,31 @@ status
 - **The summary line needs an explicit separator.** The trusted/temporary
   counts are one locale string; the self-trust state is a second node, so the
   page prefixes it with `· ` rather than relying on the row gap.
+
+## Phase 6 facts
+
+- **The minimum hint is a surface size.** GTK 4 applies the geometry hint to
+  the whole CSD surface on Wayland: a 560 hint clamped the frame to 560 and
+  left a 508 page. The shadow measured 26 px on the sides and 23/29 top and
+  bottom (952×792 surface for a 900×740 page). mygo's `Bounds` and
+  `ContentBounds` report no margin on Wayland (`frameExtents()` returns zero),
+  so a page minimum needs the shadow on top of the hint: 720×560 → 772×612,
+  verified with a 600×400 probe.
+- **Focus is not a property a background launch controls.** `gtk_window_present`
+  from a process started outside the session does not activate the window;
+  GNOME's focus stealing prevention leaves the keys with the shell. Alt+Tab
+  from a synthetic keyboard focuses it, after which Ctrl+Enter and Alt+F8
+  arrive.
+- **Synthetic input needs declared codes.** The kernel drops key events for
+  codes not set with `UI_SET_KEYBIT` (the first probe declared only Alt/F8, so
+  Ctrl+Enter and Tab vanished). A mouse device with REL axes is classified as
+  a mouse and its ABS axes move nothing; a tablet is rejected without
+  `ABS_X`/`ABS_Y` resolution (`libinput bug: missing tablet capabilities`).
+- **The tray menu is reachable without the shell.** libayatana-appindicator
+  exports `com.canonical.dbusmenu` at
+  `/org/ayatana/NotificationItem/<name>_<pid>_1/Menu` on the app's unique bus
+  name; `GetLayout` and `Event(id, "clicked", …)` drive it. The shell's own
+  indicator button exposes no Action.
+- **ICU groups a port.** `{port, number}` turns 38265 into `38,265`; a port is
+  an identifier and is passed as a string. `TestGatewayPortIsNotGrouped` pins
+  it.

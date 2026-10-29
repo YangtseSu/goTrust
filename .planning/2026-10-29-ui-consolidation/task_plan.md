@@ -13,13 +13,11 @@ separate chip.
 
 ## Next Step
 
-Phase 6: verification and documentation. The interface is complete; the
-remaining work is the real-window pass, `docs/design.md`,
-`docs/configuration.md`, `docs/agent-ui-testing.md` and the README notes.
+Phase 6 is complete. The optional traffic card (Phase 7) has not been started.
 
 ## Current Phase
 
-Phase 5 complete; Phase 6 pending.
+Phase 6 complete; Phase 7 optional and not started.
 
 ## Decisions already made
 
@@ -27,11 +25,20 @@ Phase 5 complete; Phase 6 pending.
   content capped at 680; the title strip spans the window.
 - **Navigation:** 仪表盘; separator; 账户, 代理, 保活, 启动, 终端管理, 日志,
   设置; a spacer; separator; 多账户 at the bottom.
-- **Dashboard:** status card with a 60 DIP stateful play/stop button at the
-  right of its first row; text left: phase, then
-  `网关地址 <host:port> · 已保持 <duration>`; a four-cell metrics row
-  (已分配地址, SOCKS5, HTTP, 保活); resources card with 打开默认应用 in its
-  header; no footer and no copy/overflow menu.
+- **Dashboard:** status card with a tone-tinted phase chip (dot + label) at
+  the left of its first row and a 60 DIP stateful play/stop button at the
+  right; one meta line `网关地址 <host:port> · 已保持 <duration>`; a four-cell
+  metrics row (已分配地址, SOCKS5, HTTP, 保活); resources card with
+  打开默认应用 in its header; no footer and no copy/overflow menu. The chip is
+  a mark, not a control: the button alone is the session control. This
+  reverses the earlier "no separate chip" decision after review; the tinted
+  background and the leading dot stay.
+- **Window minimum:** 720×560 is the page area. GTK applies the minimum hint to
+  the whole surface, its CSD shadow included, and on Wayland neither `Bounds`
+  nor `ContentBounds` reports that margin, so the hint carries a measured 52×52
+  shadow (`windowShadowWidth`/`windowShadowHeight` in `internal/gui`).
+- **Gateway port:** printed as text, never through ICU's `{port, number}`,
+  which groups a five-digit port as `38,265`.
 - **Account order:** 网关 (one field), 用户名, 密码 + 保存密码 on one row,
   认证方式, 登录域名, 修改密码, TOTP. No 名称 field on this page.
 - **Profiles:** the 多账户 page owns select/rename/new/duplicate/delete; the
@@ -399,17 +406,51 @@ Notes:
 
 ### Phase 6: Verification and documentation
 
-- [ ] `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .`,
+- [x] `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .`,
       `reuse lint`.
-- [ ] Run the real window at 900×740 and at 720×560: switch every page, edit
+- [x] Run the real window at 900×740 and at 720×560: switch every page, edit
       and save the gateway, hide and reopen with a dirty draft, connect and
       disconnect from the button and the tray, and answer at least one login
       panel. Follow `docs/agent-ui-testing.md`.
-- [ ] Rewrite `docs/design.md` for the one-window/left-navigation rules and the
+- [x] Rewrite `docs/design.md` for the one-window/left-navigation rules and the
       stateful button. Update `docs/configuration.md` for the accepted gateway
       input. Update `docs/agent-ui-testing.md` and the README first-run notes
       that still mention the settings window or the setup panel.
-- **Status:** pending.
+- **Status:** complete.
+
+Notes:
+
+- The checks pass: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint`.
+- Real window: a test build renamed `gt-a11y` (so it gets its own
+  single-instance lock and tray item), a temporary config and ports, the live
+  GNOME Wayland session. Its accessibility tree drove every page, the save
+  bar, the gateway edit and save, and the dirty draft across a hide (关闭 hides
+  the window; the tray's 打开仪表盘 reopens it on the same draft). The power
+  control and the tray (DBusMenu `Event`) both started a login and 取消 ended
+  it. A throwaway local HTTPS gateway offering two methods produced the choice
+  panel; 密码登录 was answered in the window, and the failed login reported its
+  reason. The 720×560 page was verified with a probe build opened at 600×400:
+  the compensated hint clamped it to a 720×560 page.
+- Not exercised: a real online session (no gateway was available), so 断开
+  while online and the tray's 切换账户 variants rest on the tests and the
+  render pass; the tray icon's own click and panel remain the operator's
+  check. The accessibility route is described in `docs/agent-ui-testing.md`.
+- Two fixes came out of the pass. The gateway port was printed through ICU
+  `{port, number}`, so a five-digit port read `38,265`; it is a string now, with
+  `TestGatewayPortIsNotGrouped`. The minimum hint is a surface size on
+  Wayland, and neither `Bounds` nor `ContentBounds` reports the CSD margin, so
+  `internal/gui` now adds the measured 52 px shadow to the page minimum;
+  the 600×400 probe confirmed the 720×560 page.
+- The chip is back by request: `phaseText` draws the phase as a tone-tinted
+  pill with a leading dot. `GOTRUST_RENDER_DIR` rendered all 98 states after
+  the change; the five phases, dark mode, the panel and 720×560 were checked
+  on the images.
+- Docs: `docs/design.md` rewritten for one window, the chip and the save bar;
+  `docs/configuration.md` and its English copy describe the gateway field and
+  the page-based wording; `docs/agent-ui-testing.md` documents the AT-SPI and
+  DBusMenu paths, the focus rule and the shadow margin; the README's first-run,
+  page and tray text follow the one window.
 
 ### Phase 7 (optional): Traffic card
 
