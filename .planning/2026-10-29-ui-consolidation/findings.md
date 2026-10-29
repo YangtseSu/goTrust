@@ -1,9 +1,9 @@
 # Findings: one window, left navigation
 
-Everything here is read from the repository or measured in the two local
-mockups. The mockups are design references, not repository files:
-`/tmp/gotrust-mockup.html` (the full layout) and
-`/tmp/gotrust-status-variants.html` (the status/button study).
+Everything here is read from the repository or measured in the design mockup.
+The full layout is kept in the tree as `docs/mockup.html`; the status/button
+study that chose the stateful control was `/tmp/gotrust-status-variants.html`
+(variant B), and its outcome is recorded below.
 
 ## Why the architecture changed
 

@@ -2,7 +2,8 @@
 
 The rules the window follows, and the reasons they exist. They are decisions,
 not preferences: a change that breaks one of them needs a phase in the plan and
-an entry in its decisions table.
+an entry in its decisions table. The layout they describe is
+[`docs/mockup.html`](mockup.html), the HTML the window is built against.
 
 ## One window, one page at a time
 

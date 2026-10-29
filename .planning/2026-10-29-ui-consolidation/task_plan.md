@@ -55,8 +55,10 @@ Phase 7 complete; no phase open.
   `github.com/YangtseSu/goTrust`, license AGPL-3.0-or-later, copyright.
 - **No memory display.** The traffic card (Phase 7) is built: the proxy's
   last minute of up/down throughput, between the session and the resources.
-- **Design references (not repository files):** `/tmp/gotrust-mockup.html` and
-  `/tmp/gotrust-status-variants.html`; the agreed card is variant B.
+- **Design reference:** `docs/mockup.html`, the layout the views follow. The
+  status/button study that chose the stateful control was
+  `/tmp/gotrust-status-variants.html` (variant B); its outcome is recorded in
+  this plan and in `docs/design.md`.
 
 ## Phases
 

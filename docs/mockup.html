@@ -1,0 +1,912 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>goTrust · 布局草案</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: #e9ebef;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app[data-theme="light"] {
+    color-scheme: light;
+    --content: #fbfbfc;
+    --surface: #ffffff;
+    --surface-2: #f4f5f7;
+    --sidebar: #f1f3f6;
+    --hover: #eceef2;
+    --border: #e2e5ea;
+    --text: #1f2328;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-weak: #e8effe;
+    --accent-ring: #dbe7fd;
+    --success: #15803d;
+    --success-weak: #e8f5ec;
+    --warning: #b45309;
+    --warning-weak: #fdf3e3;
+    --danger: #b42318;
+    --switch-off: #d3d7de;
+    --log-bg: #f7f8fa;
+  }
+  .app[data-theme="dark"] {
+    color-scheme: dark;
+    --content: #1e2025;
+    --surface: #23262c;
+    --surface-2: #282b32;
+    --sidebar: #1a1c21;
+    --hover: #2b2f37;
+    --border: #32363f;
+    --text: #e7e9ee;
+    --muted: #9aa1ad;
+    --accent: #77a8fb;
+    --accent-weak: #1f2b41;
+    --accent-ring: #22324d;
+    --success: #5cc98a;
+    --success-weak: #1c2f24;
+    --warning: #e5a54b;
+    --warning-weak: #332819;
+    --danger: #f0736a;
+    --switch-off: #3a3f49;
+    --log-bg: #15171b;
+  }
+  .app {
+    width: 900px;
+    height: 740px;
+    background: var(--content);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 18px 50px rgba(15, 23, 42, .18);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  /* title bar */
+  .titlebar {
+    flex: none;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 10px 0 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 13px; letter-spacing: .2px; }
+  .brand svg { width: 18px; height: 18px; color: var(--accent); }
+  .titlebar .spacer { flex: 1; }
+  .wincontrol {
+    width: 26px; height: 26px; border: 0; background: transparent; color: var(--muted);
+    border-radius: 6px; display: grid; place-items: center; font-size: 12px; cursor: default;
+  }
+  .wincontrol:hover { background: var(--hover); color: var(--text); }
+  /* shell */
+  .shell { flex: 1; display: flex; min-height: 0; }
+  .sidebar {
+    flex: none; width: 208px; padding: 12px 10px 10px;
+    background: var(--sidebar); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .nav {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; height: 36px; padding: 0 10px;
+    border: 0; border-radius: 8px; background: transparent;
+    color: var(--muted); font: inherit; font-size: 13px;
+    text-align: left; cursor: pointer;
+  }
+  .nav svg { width: 18px; height: 18px; flex: none; }
+  .nav:hover { background: var(--hover); color: var(--text); }
+  .nav.active { background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+  .nav-sep { height: 1px; background: var(--border); margin: 8px 8px; }
+  .nav .tag {
+    margin-left: auto; font-size: 11px; font-weight: 400; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; line-height: 17px;
+  }
+  .sidebar .push { flex: 1; }
+  .nav.subdued { color: var(--muted); font-weight: 400; }
+  .nav.subdued:hover { color: var(--text); }
+  .side-foot {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px 2px; color: var(--muted); font-size: 11px;
+  }
+  .side-foot .spacer { flex: 1; }
+  /* content */
+  .content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .view-wrap { flex: 1; overflow: auto; padding: 24px 28px 10px; }
+  .view { display: none; max-width: 680px; margin: 0 auto; }
+  .view.active { display: block; }
+  .page-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+  .page-head h1 { margin: 0 0 3px; font-size: 20px; font-weight: 650; letter-spacing: -.2px; }
+  .page-head p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .head-actions { margin-left: auto; display: flex; gap: 8px; }
+  /* controls */
+  .btn {
+    height: 32px; padding: 0 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    font: inherit; font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px;
+    cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.05); }
+  .btn.danger { color: var(--danger); border-color: var(--border); }
+  .btn.danger:hover { background: var(--hover); }
+  .btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
+  .icon-btn {
+    width: 28px; height: 28px; flex: none; border: 0; border-radius: 6px;
+    background: transparent; color: var(--muted); font: inherit; cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--hover); color: var(--text); }
+  .power {
+    width: 42px; height: 42px; flex: none; border: 0; border-radius: 50%;
+    background: var(--accent); color: #fff; display: grid; place-items: center;
+    cursor: pointer; box-shadow: 0 3px 10px var(--accent-ring);
+    transition: background .15s, transform .15s;
+  }
+  .power svg { width: 20px; height: 20px; }
+  .power.on { background: #16a34a; }
+  .power.wait { background: #d97706; }
+  .power.fail { background: #dc2626; }
+  .power:hover { background: var(--danger); transform: scale(1.04); }
+  .power:active { transform: scale(.97); }
+  .power.big { width: 60px; height: 60px; }
+  .power.big svg { width: 24px; height: 24px; }
+  /* cards */
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 14px;
+  }
+  .card h2 { margin: 0 0 14px; font-size: 13.5px; font-weight: 600; }
+  .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .card-head h2 { margin: 0; }
+  /* status */
+  .status-hero { display: flex; align-items: center; gap: 16px; }
+  .status-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .phase { font-size: 16px; font-weight: 650; letter-spacing: -.1px; }
+  .meta { display: flex; align-items: baseline; gap: 7px; color: var(--muted); font-size: 12px; min-width: 0; }
+  .meta .endpoint { color: var(--text); }
+  .meta-sep { color: var(--muted); }
+  .status-top { display: flex; align-items: center; gap: 10px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px;
+    border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .chip.success { color: var(--success); background: var(--success-weak); }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .endpoint { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 12.5px; }
+  .metrics {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border);
+  }
+  .metric-label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .metric-value { font-size: 13px; }
+  .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 12.5px; }
+  .ok { color: var(--success); }
+  .muted { color: var(--muted); }
+  .small { font-size: 11.5px; }
+  /* resource list */
+  .search {
+    margin-left: auto; display: flex; align-items: center; gap: 6px;
+    height: 30px; padding: 0 9px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--surface-2); color: var(--muted);
+  }
+  .search svg { width: 14px; height: 14px; flex: none; }
+  .search input {
+    width: 150px; border: 0; outline: none; background: transparent;
+    color: var(--text); font: inherit; font-size: 12px;
+  }
+  .group-label {
+    display: flex; gap: 6px; margin: 12px 0 2px;
+    font-size: 11.5px; color: var(--muted);
+  }
+  .resource-row {
+    display: flex; align-items: center; gap: 12px;
+    margin: 0 -8px; padding: 8px; border-radius: 8px;
+  }
+  .resource-row:hover { background: var(--hover); }
+  .res-icon { width: 18px; height: 18px; flex: none; color: var(--muted); }
+  .res-main { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 12px; }
+  .res-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .res-detail {
+    margin-left: auto; color: var(--muted); font-size: 11.5px;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .footline { margin: 4px 2px 0; color: var(--muted); font-size: 11.5px; }
+  /* form */
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field > label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px; }
+  .input, select, textarea {
+    width: 100%; height: 36px; padding: 0 10px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface-2); color: var(--text);
+    font: inherit; font-size: 13px; outline: none;
+  }
+  .input:focus, select:focus, textarea:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring);
+  }
+  textarea { height: 72px; padding: 8px 10px; resize: vertical; }
+  .pw-row { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 14px; }
+  .pw-row .field { flex: 1; margin-bottom: 0; }
+  .check { display: inline-flex; align-items: center; gap: 7px; height: 36px; font-size: 12.5px; white-space: nowrap; cursor: pointer; }
+  input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); margin: 0; }
+  .inline { display: flex; align-items: center; gap: 8px; }
+  .inline select { flex: 1; }
+  /* rows */
+  .line { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); }
+  .line:first-of-type { border-top: 0; padding-top: 0; }
+  .line .grow { flex: 1; min-width: 0; }
+  .line-title { font-size: 13px; }
+  .line-sub { margin-top: 2px; color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
+  /* switches */
+  .toggle-row {
+    display: flex; align-items: center; gap: 12px; padding: 11px 0;
+    border-top: 1px solid var(--border);
+  }
+  .toggle-row:first-child { border-top: 0; padding-top: 0; }
+  .toggle-row .grow { flex: 1; }
+  .switch { position: relative; width: 34px; height: 20px; flex: none; }
+  .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .switch .track {
+    position: absolute; inset: 0; border-radius: 999px;
+    background: var(--switch-off); transition: background .15s;
+  }
+  .switch .track::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    transition: transform .15s;
+  }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track::after { transform: translateX(14px); }
+  /* language */
+  .segmented {
+    display: inline-flex; padding: 2px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--surface-2);
+  }
+  .segmented button {
+    border: 0; border-radius: 6px; padding: 5px 11px;
+    background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .segmented button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+  /* accounts */
+  .account-row {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin: 0 -12px;
+    border-radius: 8px; cursor: default;
+  }
+  .account-row:hover { background: var(--hover); }
+  .account-row.active { background: var(--accent-weak); }
+  .avatar {
+    width: 28px; height: 28px; flex: none; border-radius: 50%;
+    display: grid; place-items: center; font-size: 12px; font-weight: 650;
+    background: var(--accent-weak); color: var(--accent);
+  }
+  .account-row.active .avatar { background: var(--accent); color: #fff; }
+  /* traffic */
+  .push { flex: 1; }
+  .legend { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11.5px; }
+  .legend i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .traffic-card .spark { display: block; width: 100%; height: 80px; margin-top: 4px; }
+  .line select { width: 160px; height: 32px; flex: none; }
+  /* terminals */
+  .term-summary {
+    display: flex; align-items: center; gap: 10px;
+    margin: 0 2px 14px; color: var(--muted); font-size: 12px;
+  }
+  .term-summary strong { color: var(--text); font-weight: 600; }
+  .term-summary .grow { flex: 1; }
+  .term-row { padding: 14px 0; border-top: 1px solid var(--border); }
+  .term-row:first-of-type { border-top: 0; padding-top: 2px; }
+  .term-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .term-facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 16px; margin: 0; }
+  .term-facts dt { margin-bottom: 2px; color: var(--muted); font-size: 11px; }
+  .term-facts dd { margin: 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip.online { color: var(--success); background: var(--success-weak); }
+  .chip.offline { color: var(--muted); background: var(--surface-2); }
+  /* logs */
+  .switch-label { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); }
+  .logbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .logbar select { width: 130px; height: 32px; flex: none; }
+  .logbar .check { height: 32px; }
+  .search.logsearch { margin-left: 0; flex: 1; max-width: 240px; }
+  .search.logsearch input { width: 100%; }
+  .logpane {
+    height: 420px; overflow: auto; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--log-bg);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 11.5px; line-height: 1.75; color: var(--text);
+  }
+  .logpane .ts { color: var(--muted); }
+  .logpane .lv { font-weight: 600; }
+  .logpane .lv.inf { color: var(--accent); }
+  .logpane .lv.wrn { color: var(--warning); }
+  .logpane .lv.err { color: var(--danger); }
+  .logfoot { margin-top: 8px; color: var(--muted); font-size: 11px; }
+  /* save bar */
+  .savebar {
+    flex: none; display: flex; align-items: center; gap: 10px;
+    padding: 10px 28px; border-top: 1px solid var(--border);
+    background: var(--content);
+  }
+  .savebar[hidden] { display: none; }
+  .savebar .grow { flex: 1; }
+  .save-hint { color: var(--warning); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="app" data-theme="light">
+  <header class="titlebar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3 19 6v5.5c0 4.4-2.9 7.6-7 9.5-4.1-1.9-7-5.1-7-9.5V6l7-3Z"/>
+        <path d="m9 12 2 2 4-4"/>
+      </svg>
+      <span>goTrust</span>
+    </div>
+    <span class="spacer"></span>
+    <button class="wincontrol" id="theme-toggle" title="切换预览主题" aria-label="切换预览主题">☾</button>
+    <button class="wincontrol" tabindex="-1" aria-hidden="true">—</button>
+    <button class="wincontrol" tabindex="-1" aria-hidden="true">▢</button>
+    <button class="wincontrol" tabindex="-1" aria-hidden="true">×</button>
+  </header>
+
+  <div class="shell">
+    <nav class="sidebar">
+      <button class="nav active" data-page="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a8 8 0 0 1 16 0"/><path d="M12 14 15 9"/><circle cx="12" cy="14" r="1.6"/></svg>
+        仪表盘
+      </button>
+      <div class="nav-sep"></div>
+      <button class="nav" data-page="account">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c.8-3.4 3.5-5.2 7-5.2s6.2 1.8 7 5.2"/></svg>
+        账户
+      </button>
+      <button class="nav" data-page="proxy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.2 2.2 3.4 4.9 3.4 8s-1.2 5.8-3.4 8c-2.2-2.2-3.4-4.9-3.4-8S9.8 6.2 12 4Z"/></svg>
+        代理
+      </button>
+      <button class="nav" data-page="keepalive">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg>
+        保活
+      </button>
+      <button class="nav" data-page="startup">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M7 6.5a7 7 0 1 0 10 0"/></svg>
+        启动
+      </button>
+      <button class="nav" data-page="terminals">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="13" height="10" rx="1.6"/><path d="M3 18h13"/><rect x="18" y="10" width="3.5" height="7" rx="1"/></svg>
+        终端管理
+      </button>
+      <button class="nav" data-page="logs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M14 3.5V8h4M8 12h7M8 15h7M8 18h4"/></svg>
+        日志
+      </button>
+      <button class="nav" data-page="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+        设置
+      </button>
+
+      <div class="push"></div>
+      <div class="nav-sep"></div>
+      <button class="nav subdued" data-page="profiles">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 19c.7-3.1 3-4.8 6-4.8s5.3 1.7 6 4.8"/><path d="M16 5.2a3 3 0 0 1 0 5.6"/><path d="M18 19c-.2-1.4-.6-2.6-1.3-3.6"/></svg>
+        多账户
+        <span class="tag">账户 A</span>
+      </button>
+    </nav>
+
+    <main class="content">
+      <div class="view-wrap">
+        <!-- 仪表盘 -->
+        <section class="view active" data-view="dashboard">
+          <div class="page-head">
+            <div>
+              <h1>仪表盘</h1>
+            </div>
+          </div>
+
+          <section class="card status-card">
+            <div class="status-hero">
+              <div class="status-main">
+                <div class="phase">已连接</div>
+                <div class="meta">
+                  <span>网关地址</span>
+                  <span class="endpoint">vpn.example.com:443</span>
+                  <span class="meta-sep">·</span>
+                  <span>已保持 42 分钟</span>
+                </div>
+              </div>
+              <span class="push"></span>
+              <button class="power big on" title="断开" aria-label="断开">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7.5" y="7.5" width="9" height="9" rx="1.8" fill="currentColor"/></svg>
+              </button>
+            </div>
+            <div class="metrics">
+              <div><span class="metric-label">已分配地址</span><span class="metric-value mono">192.0.2.2</span></div>
+              <div><span class="metric-label">SOCKS5</span><span class="metric-value mono">127.0.0.1:1080</span></div>
+              <div><span class="metric-label">HTTP</span><span class="metric-value mono">127.0.0.1:1081</span></div>
+              <div><span class="metric-label">保活</span><span class="metric-value ok">12 秒前</span></div>
+            </div>
+          </section>
+
+          <section class="card traffic-card">
+            <div class="card-head">
+              <h2>流量</h2>
+              <span class="legend"><i style="background:var(--accent)"></i>下行 8.4 MB/s</span>
+              <span class="legend"><i style="background:var(--success)"></i>上行 1.2 MB/s</span>
+              <span class="push"></span>
+              <span class="muted small">最近 60 秒</span>
+            </div>
+            <svg class="spark" viewBox="0 0 600 80" preserveAspectRatio="none" aria-label="最近 60 秒上下行流量">
+              <defs>
+                <linearGradient id="downFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" style="stop-color:var(--accent);stop-opacity:.22"/>
+                  <stop offset="100%" style="stop-color:var(--accent);stop-opacity:0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,58 C20,56 34,44 58,48 S104,60 128,54 S172,30 196,34 S240,20 264,26 S308,46 332,40 S376,16 400,20 S444,38 468,34 S512,12 536,18 S576,30 600,24 L600,80 L0,80 Z" fill="url(#downFill)"/>
+              <path d="M0,58 C20,56 34,44 58,48 S104,60 128,54 S172,30 196,34 S240,20 264,26 S308,46 332,40 S376,16 400,20 S444,38 468,34 S512,12 536,18 S576,30 600,24" fill="none" style="stroke:var(--accent)" stroke-width="1.8"/>
+              <path d="M0,70 S60,66 90,68 S150,60 180,63 S240,70 270,67 S330,58 360,61 S420,64 450,62 S510,54 540,57 S580,60 600,58" fill="none" style="stroke:var(--success)" stroke-width="1.6"/>
+            </svg>
+          </section>
+
+          <section class="card">
+            <div class="card-head">
+              <h2>已授权应用</h2>
+              <span class="muted small">10 项</span>
+              <button class="btn sm">打开默认应用</button>
+              <div class="search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+                <input placeholder="搜索应用或地址" aria-label="搜索应用或地址">
+              </div>
+            </div>
+
+            <div class="group-label">应用 <span>3</span></div>
+            <div class="resource-row">
+              <svg class="res-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M3.5 9h17M8 4v5"/></svg>
+              <div class="res-main">
+                <span class="res-title">校内门户</span>
+                <span class="res-detail">https://portal.example.com</span>
+              </div>
+              <button class="icon-btn" aria-label="更多操作">⋯</button>
+            </div>
+            <div class="resource-row">
+              <svg class="res-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M3.5 9h17M8 4v5"/></svg>
+              <div class="res-main">
+                <span class="res-title">图书馆</span>
+                <span class="res-detail">https://library.example.com</span>
+              </div>
+              <button class="icon-btn" aria-label="更多操作">⋯</button>
+            </div>
+
+            <div class="group-label">域名 <span>7</span></div>
+            <div class="resource-row">
+              <svg class="res-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M4 12h16"/></svg>
+              <div class="res-main">
+                <span class="res-title">git.example.com</span>
+                <span class="res-detail">443</span>
+              </div>
+              <button class="icon-btn" aria-label="更多操作">⋯</button>
+            </div>
+          </section>
+        </section>
+
+        <!-- 账户 -->
+        <section class="view" data-view="account" data-draft>
+          <div class="page-head">
+            <div>
+              <h1>账户</h1>
+            </div>
+          </div>
+
+          <section class="card">
+            <h2>连接</h2>
+            <div class="field">
+              <label for="gateway">网关</label>
+              <input class="input" id="gateway" value="vpn.example.com:443">
+            </div>
+            <div class="field">
+              <label for="username">用户名</label>
+              <input class="input" id="username" value="user@example.com">
+            </div>
+            <div class="pw-row">
+              <div class="field">
+                <label for="password">密码</label>
+                <input class="input" id="password" type="password" value="password" placeholder="留空：网关使用二次验证时，登录过程中提示">
+              </div>
+              <label class="check"><input type="checkbox" checked>保存密码</label>
+            </div>
+            <div class="field">
+              <label for="auth">认证方式</label>
+              <div class="inline">
+                <select id="auth">
+                  <option>自动</option>
+                  <option>CAS</option>
+                  <option>OAuth</option>
+                  <option>短信验证码</option>
+                </select>
+                <button class="btn">获取认证方式</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="domain">登录域名</label>
+              <input class="input" id="domain" value="local">
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>安全</h2>
+            <div class="line">
+              <div class="grow">
+                <div class="line-title">修改密码</div>
+                <div class="line-sub">通过网关修改当前账号的密码</div>
+              </div>
+              <button class="btn">修改…</button>
+            </div>
+          </section>
+        </section>
+
+        <!-- 代理 -->
+        <section class="view" data-view="proxy" data-draft>
+          <div class="page-head">
+            <div>
+              <h1>代理</h1>
+            </div>
+          </div>
+
+          <section class="card">
+            <h2>本地监听</h2>
+            <div class="field">
+              <label for="socks">SOCKS5</label>
+              <input class="input" id="socks" value="127.0.0.1:1080">
+            </div>
+            <div class="field">
+              <label for="http">HTTP</label>
+              <input class="input" id="http" value="127.0.0.1:1081">
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>复制配置</h2>
+            <div class="line">
+              <div class="grow">
+                <div class="line-title">PAC 地址</div>
+                <div class="line-sub mono">http://127.0.0.1:7890/pac</div>
+              </div>
+              <button class="btn">复制</button>
+            </div>
+            <div class="line">
+              <div class="grow">
+                <div class="line-title">Clash / Mihomo</div>
+              </div>
+              <select class="format" aria-label="复制格式">
+                <option>Clash</option>
+                <option>Clash Script</option>
+                <option>Clash 配置</option>
+              </select>
+              <button class="btn">复制</button>
+            </div>
+          </section>
+        </section>
+
+        <!-- 保活 -->
+        <section class="view" data-view="keepalive" data-draft>
+          <div class="page-head">
+            <div>
+              <h1>保活</h1>
+            </div>
+          </div>
+
+          <section class="card">
+            <label class="toggle-row">
+              <span class="grow line-title">启用保活</span>
+              <span class="switch"><input type="checkbox" checked><span class="track"></span></span>
+            </label>
+            <div class="field" style="padding-top:14px">
+              <label for="interval">间隔</label>
+              <input class="input" id="interval" value="90s">
+            </div>
+            <div class="field">
+              <label for="targets">探测目标</label>
+              <textarea id="targets">example.com</textarea>
+            </div>
+          </section>
+        </section>
+
+        <!-- 启动 -->
+        <section class="view" data-view="startup" data-draft>
+          <div class="page-head">
+            <div>
+              <h1>启动</h1>
+            </div>
+          </div>
+
+          <section class="card">
+            <label class="toggle-row">
+              <span class="grow line-title">开机启动</span>
+              <span class="switch"><input type="checkbox" checked><span class="track"></span></span>
+            </label>
+            <label class="toggle-row">
+              <span class="grow line-title">自动连接</span>
+              <span class="switch"><input type="checkbox" checked><span class="track"></span></span>
+            </label>
+            <label class="toggle-row">
+              <span class="grow line-title">启动时隐藏窗口</span>
+              <span class="switch"><input type="checkbox"><span class="track"></span></span>
+            </label>
+            <label class="toggle-row">
+              <span class="grow line-title">断线自动重连</span>
+              <span class="switch"><input type="checkbox" checked><span class="track"></span></span>
+            </label>
+          </section>
+        </section>
+
+        <!-- 设置 -->
+        <section class="view" data-view="settings" data-draft>
+          <div class="page-head">
+            <div>
+              <h1>设置</h1>
+            </div>
+          </div>
+
+          <section class="card">
+            <h2>语言</h2>
+            <div class="segmented">
+              <button class="active">跟随系统</button>
+              <button>中文</button>
+              <button>English</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>本机数据</h2>
+            <div class="field">
+              <label for="client-data">数据文件</label>
+              <input class="input" id="client-data" placeholder="~/.config/gotrust/client_data.json">
+            </div>
+            <div class="line">
+              <div class="grow">
+                <div class="line-title">设备标识</div>
+                <div class="line-sub mono">6f1c9a2e4b7d</div>
+              </div>
+              <button class="btn">打开配置文件</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>关于</h2>
+            <div class="line">
+              <div class="grow">
+                <div class="line-title">版本</div>
+              </div>
+              <span class="mono">v0.1.0</span>
+            </div>
+            <div class="line">
+              <div class="grow">
+                <div class="line-title">项目主页</div>
+                <div class="line-sub mono">github.com/YangtseSu/goTrust</div>
+              </div>
+              <button class="btn">打开</button>
+            </div>
+            <div class="line">
+              <div class="grow">
+                <div class="line-title">许可证</div>
+                <div class="line-sub">AGPL-3.0-or-later · © 2026 Yangtse Su</div>
+              </div>
+              <button class="btn">查看</button>
+            </div>
+          </section>
+        </section>
+
+        <!-- 终端管理 -->
+        <section class="view" data-view="terminals">
+          <div class="page-head">
+            <div>
+              <h1>终端管理</h1>
+            </div>
+            <div class="head-actions">
+              <button class="btn">刷新</button>
+            </div>
+          </div>
+
+          <div class="term-summary">
+            <span>授信终端 <strong>2</strong>/5</span>
+            <span>临时终端 <strong>1</strong></span>
+            <span>本机已信任</span>
+            <span class="grow"></span>
+            <button class="btn">取消信任本机</button>
+          </div>
+
+          <section class="card">
+            <div class="card-head"><h2>授信终端</h2><span class="muted small">2 台</span></div>
+            <div class="term-row">
+              <div class="term-head">
+                <span class="line-title">本机</span>
+                <span class="chip success">当前设备</span>
+                <span class="chip online">在线</span>
+              </div>
+              <dl class="term-facts">
+                <div><dt>类型</dt><dd>客户端</dd></div>
+                <div><dt>系统</dt><dd>Linux 6.12</dd></div>
+                <div><dt>浏览器</dt><dd class="muted">—</dd></div>
+                <div><dt>最近登录</dt><dd>2026-10-29 09:12</dd></div>
+                <div><dt>登录地址</dt><dd>内网（192.0.2.2）</dd></div>
+                <div><dt>网络区域</dt><dd>校园网 / 无线</dd></div>
+                <div><dt>设备 ID</dt><dd class="mono">6f1c9a2e4b7d</dd></div>
+              </dl>
+            </div>
+            <div class="term-row">
+              <div class="term-head">
+                <span class="line-title">MacBook Pro</span>
+                <span class="chip offline">离线</span>
+              </div>
+              <dl class="term-facts">
+                <div><dt>类型</dt><dd>浏览器</dd></div>
+                <div><dt>系统</dt><dd>macOS 15.1</dd></div>
+                <div><dt>浏览器</dt><dd>Safari 18</dd></div>
+                <div><dt>最近登录</dt><dd>2026-10-28 21:40</dd></div>
+                <div><dt>登录地址</dt><dd>203.0.113.7</dd></div>
+                <div><dt>网络区域</dt><dd>互联网</dd></div>
+                <div><dt>设备 ID</dt><dd class="mono">2a9d51c0f8e3</dd></div>
+              </dl>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head"><h2>临时终端</h2><span class="muted small">1 台</span></div>
+            <div class="term-row">
+              <div class="term-head">
+                <span class="line-title">Windows 工作站</span>
+                <span class="chip offline">离线</span>
+              </div>
+              <dl class="term-facts">
+                <div><dt>类型</dt><dd>客户端</dd></div>
+                <div><dt>系统</dt><dd>Windows 11 23H2</dd></div>
+                <div><dt>浏览器</dt><dd class="muted">—</dd></div>
+                <div><dt>最近登录</dt><dd>2026-10-28 18:05</dd></div>
+                <div><dt>登录地址</dt><dd>198.51.100.24</dd></div>
+                <div><dt>网络区域</dt><dd>互联网</dd></div>
+                <div><dt>设备 ID</dt><dd class="mono">7c3e0f9a1b62</dd></div>
+              </dl>
+            </div>
+          </section>
+        </section>
+
+        <!-- 日志 -->
+        <section class="view" data-view="logs">
+          <div class="page-head">
+            <div>
+              <h1>日志</h1>
+            </div>
+            <div class="head-actions">
+              <label class="switch-label">
+                <span class="switch"><input type="checkbox"><span class="track"></span></span>
+                详细日志
+              </label>
+              <button class="btn">打开目录</button>
+            </div>
+          </div>
+
+          <section class="card">
+            <div class="logbar">
+              <select aria-label="日志级别">
+                <option>全部级别</option>
+                <option>信息</option>
+                <option>警告</option>
+                <option>错误</option>
+              </select>
+              <div class="search logsearch">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+                <input placeholder="过滤日志" aria-label="过滤日志">
+              </div>
+              <label class="check small"><input type="checkbox" checked>自动滚动</label>
+              <span class="push"></span>
+              <button class="btn">复制</button>
+            </div>
+            <div class="logpane" role="log" aria-label="日志内容">
+              <div><span class="ts">09:12:03.114</span> <span class="lv inf">INF</span> session: connecting to vpn.example.com:443</div>
+              <div><span class="ts">09:12:03.902</span> <span class="lv inf">INF</span> auth: auth type auto, domain local</div>
+              <div><span class="ts">09:12:04.331</span> <span class="lv inf">INF</span> auth: login accepted</div>
+              <div><span class="ts">09:12:04.677</span> <span class="lv inf">INF</span> session: tunnel established, client 192.0.2.2</div>
+              <div><span class="ts">09:12:04.690</span> <span class="lv inf">INF</span> proxy: SOCKS5 listening on 127.0.0.1:1080</div>
+              <div><span class="ts">09:12:04.691</span> <span class="lv inf">INF</span> proxy: HTTP listening on 127.0.0.1:1081</div>
+              <div><span class="ts">09:12:05.002</span> <span class="lv inf">INF</span> keepalive: example.com answered 200</div>
+              <div><span class="ts">09:12:34.120</span> <span class="lv wrn">WRN</span> keepalive: example.com answered 502, retrying</div>
+              <div><span class="ts">09:12:35.211</span> <span class="lv inf">INF</span> keepalive: example.com answered 200</div>
+              <div><span class="ts">09:13:14.002</span> <span class="lv err">ERR</span> proxy: dial intranet.example.com:80: timeout</div>
+              <div><span class="ts">09:13:14.003</span> <span class="lv inf">INF</span> proxy: connection closed by client</div>
+              <div><span class="ts">09:13:30.401</span> <span class="lv inf">INF</span> keepalive: example.com answered 200</div>
+            </div>
+            <div class="logfoot mono">~/.local/state/gotrust/logs/gotrust.log · 最后 500 行</div>
+          </section>
+        </section>
+
+        <!-- 多账户 -->
+        <section class="view" data-view="profiles" data-draft>
+          <div class="page-head">
+            <div>
+              <h1>多账户</h1>
+            </div>
+          </div>
+
+          <section class="card">
+            <h2>账户</h2>
+            <div class="account-row active">
+              <span class="avatar">A</span>
+              <div class="grow">
+                <div class="line-title">账户 A</div>
+                <div class="line-sub mono">vpn.example.com:443</div>
+              </div>
+              <span class="muted small">当前</span>
+            </div>
+            <div class="account-row">
+              <span class="avatar">B</span>
+              <div class="grow">
+                <div class="line-title">账户 B</div>
+                <div class="line-sub mono">vpn2.example.com:443</div>
+              </div>
+            </div>
+
+            <div class="field" style="margin-top:18px">
+              <label for="profile-name">名称</label>
+              <input class="input" id="profile-name" value="账户 A">
+            </div>
+            <div class="inline" style="margin-top:14px">
+              <button class="btn">新建</button>
+              <button class="btn">复制</button>
+              <button class="btn danger">删除</button>
+            </div>
+          </section>
+        </section>
+      </div>
+
+      <div class="savebar" hidden>
+        <span class="save-hint">有未保存修改</span>
+        <span class="grow"></span>
+        <button class="btn discard">放弃</button>
+        <button class="btn primary save">保存</button>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+  const app = document.querySelector('.app');
+  const dark = window.matchMedia('(prefers-color-scheme: dark)');
+  app.dataset.theme = dark.matches ? 'dark' : 'light';
+  const themeButton = document.getElementById('theme-toggle');
+  const syncThemeIcon = () => { themeButton.textContent = app.dataset.theme === 'dark' ? '☀' : '☾'; };
+  syncThemeIcon();
+  themeButton.addEventListener('click', () => {
+    app.dataset.theme = app.dataset.theme === 'dark' ? 'light' : 'dark';
+    syncThemeIcon();
+  });
+
+  const navs = Array.from(document.querySelectorAll('.nav[data-page]'));
+  const views = Array.from(document.querySelectorAll('.view'));
+  navs.forEach(nav => nav.addEventListener('click', () => {
+    navs.forEach(item => item.classList.toggle('active', item === nav));
+    views.forEach(view => view.classList.toggle('active', view.dataset.view === nav.dataset.page));
+    document.querySelector('.view-wrap').scrollTop = 0;
+  }));
+
+  const savebar = document.querySelector('.savebar');
+  document.querySelectorAll('[data-draft]').forEach(page => {
+    page.addEventListener('input', () => { savebar.hidden = false; });
+    page.addEventListener('change', () => { savebar.hidden = false; });
+  });
+  savebar.querySelector('.save').addEventListener('click', () => { savebar.hidden = true; });
+  savebar.querySelector('.discard').addEventListener('click', () => { savebar.hidden = true; });
+</script>
+</body>
+</html>
