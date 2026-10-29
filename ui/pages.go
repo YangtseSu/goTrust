@@ -160,7 +160,6 @@ func proxyCopySection(c *ui.Context, state *State, settings *SettingsState, acti
 	theme := c.Theme()
 	ui.Column(c).Gap(theme.Space(2)).Children(func() {
 		sectionHeading(c, locales.CopyConfig())
-		ui.Divider(c)
 		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 			ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
 				ui.Text(c, locales.PacAddress()).FontSize(theme.FontSize)
@@ -183,7 +182,7 @@ func proxyCopySection(c *ui.Context, state *State, settings *SettingsState, acti
 			ui.Text(c, locales.ClashMihomo()).FontSize(theme.FontSize).Grow(1)
 			options := []string{locales.ClashPlain(), locales.ClashScript(), locales.ClashConfig()}
 			chosen := clashLabel(settings.ClashFormat)
-			if ui.Select(c, &chosen, options).Width(methodPickerWidth).Changed() {
+			if ui.Select(c, &chosen, options).Changed() {
 				settings.ClashFormat = clashFormat(chosen)
 			}
 			if ui.Button(c, locales.CommonCopy()).Label(locales.CopyClashDesc()).
@@ -412,8 +411,9 @@ func profilesPage(c *ui.Context, state *State, actions Actions) {
 				if ui.Button(c, locales.ProfileDuplicate()).Clicked() && actions.Settings.DuplicateProfile != nil {
 					actions.Settings.DuplicateProfile()
 				}
-				if ui.Button(c, locales.ProfileDelete()).Disabled(len(accounts) == 1).Clicked() &&
-					actions.Settings.DeleteProfile != nil {
+				remove := ui.Button(c, locales.ProfileDelete()).Disabled(len(accounts) == 1)
+				remove.TextColor(c.Theme().Danger)
+				if remove.Clicked() && actions.Settings.DeleteProfile != nil {
 					actions.Settings.DeleteProfile()
 				}
 			})

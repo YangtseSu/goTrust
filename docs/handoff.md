@@ -59,8 +59,8 @@ ZeroOmega：
 | `gotrust-cli --print-clash-script` | Clash Verge Rev 的全局扩展脚本（Script） |
 | `gotrust-cli --print-clash-config` | 完整的本地 Mihomo 配置：任何客户端都可作为本地配置导入（只含 goTrust） |
 
-GUI 的托盘“复制 Clash 片段”子菜单和主窗口的 `Clash 片段` / `Verge 脚本` /
-`Clash 完整配置` 按钮等同于上面三项，用的是实时授权，不是缓存。
+GUI 的托盘“复制 Clash 片段”子菜单和主窗口的 `Clash` / `Clash Script` /
+`Clash 配置` 按钮等同于上面三项，用的是实时授权，不是缓存。
 
 三种输出共用一套规则，顺序是：
 

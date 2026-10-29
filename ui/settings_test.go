@@ -321,7 +321,7 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 		t.Fatalf("new profile calls = %d", created)
 	}
 	tester.Frame()
-	if !tester.HasText("未保存的修改") {
+	if !tester.HasText("有未保存修改") {
 		t.Fatalf("the save bar is missing; texts: %v", tester.Texts())
 	}
 	if err := tester.Click("保存"); err != nil {
@@ -330,7 +330,7 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 	if saved != 1 {
 		t.Fatalf("save calls = %d", saved)
 	}
-	if err := tester.Click("放弃修改"); err != nil {
+	if err := tester.Click("放弃"); err != nil {
 		t.Fatalf("click discard: %v", err)
 	}
 	if discarded != 1 {
@@ -346,7 +346,7 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 	}
 
 	openPage(t, tester, "设置")
-	for _, wanted := range []string{"语言", "跟随系统", "本机数据", "设备 ID"} {
+	for _, wanted := range []string{"语言", "跟随系统", "本机数据", "设备标识"} {
 		if !tester.HasText(wanted) {
 			t.Fatalf("%q is missing from 设置; texts: %v", wanted, tester.Texts())
 		}
@@ -444,14 +444,14 @@ func TestSidebarSwitchesPages(t *testing.T) {
 		want  string
 		gone  string
 	}{
-		{"代理", PageProxy, "SOCKS5 监听", "网关地址"},
-		{"保活", PageKeepAlive, "启用保活", "SOCKS5 监听"},
+		{"代理", PageProxy, "SOCKS5", "网关"},
+		{"保活", PageKeepAlive, "启用保活", "SOCKS5"},
 		{"启动", PageStartup, "登录系统时启动", "启用保活"},
 		{"终端管理", PageTerminals, "连接后可读取终端列表", "登录系统时启动"},
 		{"日志", PageLogs, "/tmp/logs", "连接后可读取终端列表"},
 		{"设置", PageSettings, "语言", "/tmp/logs"},
 		{"关于", PageAbout, "项目主页", "语言"},
-		{"多账户", PageProfiles, "账户名称", "项目主页"},
+		{"多账户", PageProfiles, "名称", "项目主页"},
 	}
 	for _, testCase := range pages {
 		openPage(t, tester, testCase.label)
@@ -515,19 +515,19 @@ func TestSettingsSaveAndDiscardFollowTheDraft(t *testing.T) {
 		Discard: func() { state.Reload(config.Default()); discarded++ },
 	}, PageAccount)
 
-	if tester.HasText("未保存的修改") {
+	if tester.HasText("有未保存修改") {
 		t.Fatalf("a clean draft shows the save bar; texts: %v", tester.Texts())
 	}
-	if err := tester.Click("放弃修改"); err == nil {
-		t.Fatal("放弃修改 is on screen with nothing to discard")
+	if err := tester.Click("放弃"); err == nil {
+		t.Fatal("放弃 is on screen with nothing to discard")
 	}
 
 	state.Gateways[0] = "vpn.example.com:8443"
 	tester.Frame()
-	if !tester.HasText("未保存的修改") {
+	if !tester.HasText("有未保存修改") {
 		t.Fatalf("an edited gateway does not show the save bar; texts: %v", tester.Texts())
 	}
-	if err := tester.Click("放弃修改"); err != nil {
+	if err := tester.Click("放弃"); err != nil {
 		t.Fatalf("click discard: %v", err)
 	}
 	if discarded != 1 {
@@ -537,7 +537,7 @@ func TestSettingsSaveAndDiscardFollowTheDraft(t *testing.T) {
 		t.Fatalf("the draft survived the discard: %q", state.Gateways[0])
 	}
 	tester.Frame()
-	if tester.HasText("未保存的修改") {
+	if tester.HasText("有未保存修改") {
 		t.Fatal("the save bar outlived the discard")
 	}
 }
@@ -705,7 +705,7 @@ func TestAccountPageShowsTheAuthPicker(t *testing.T) {
 	_, tester := newShell(t, state, actions, PageAccount)
 	tester.Frame()
 
-	for _, wanted := range []string{"认证方式", "获取认证方式", "网关提供 2 种认证方式", MethodLabel(methods[1])} {
+	for _, wanted := range []string{"认证方式", "获取认证方式", MethodLabel(methods[1])} {
 		if !tester.HasText(wanted) {
 			t.Fatalf("%q is missing from the settings window", wanted)
 		}
@@ -955,19 +955,19 @@ func TestSettingsShowsAndChangesTrust(t *testing.T) {
 
 	_, tester := newShell(t, state, actions, PageTerminals)
 	for _, wanted := range []string{
-		"授信终端 1/3 · 临时终端 1", "本机已信任", "desk-01", "desk-02", "当前设备",
+		"授信终端 1/3 · 临时终端 1", "本机已信任", "desk-01", "desk-02", "当前设备", "在线",
 		"类型", "客户端", "Linux 7.3.0", "Firefox 128", "最近登录", "登录地址",
-		"内网（192.0.2.10）", "网络区域", "校园网 / 无线", "设备 ID", "6f1c9a2e4b7d",
+		"内网（192.0.2.10）", "网络区域", "校园网 / 无线", "设备标识", "6f1c9a2e4b7d",
 	} {
 		if !tester.HasText(wanted) {
 			t.Fatalf("%q is missing from 终端管理", wanted)
 		}
 	}
-	if err := tester.Click("取消信任"); err != nil {
+	if err := tester.Click("取消信任本机"); err != nil {
 		t.Fatalf("click untrust: %v", err)
 	}
 	if changed {
-		t.Fatal("取消信任 asked to trust the device")
+		t.Fatal("取消信任本机 asked to trust the device")
 	}
 
 	state.Online = false

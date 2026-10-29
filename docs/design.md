@@ -151,23 +151,26 @@ an entry in its decisions table.
 * 保活's fields carry no hint lines. A malformed interval, or one shorter
   than the minimum, is refused with the minimum (10s), never with the 90s
   default: `errKeepAliveInvalid`/`errKeepAliveShort` name the shortest
-  accepted cadence.
+  accepted cadence. 代理 carries no caption: the listener fields say
+  nothing until both are empty, when the rule appears as an error line.
 * 日志's block (toolbar, pane and footer) is one card, so its border closes
   on every side; its header has the 详细日志 switch, 清除 and 打开目录, and
   清除 truncates the file and drops its rotations. 代理's PAC and
   Clash/Mihomo rows carry their 复制 at the card's right edge. 终端管理 keeps
   its summary line, its 刷新 in the page heading and its two cards before a
   session exists, with 0 counts and the offline placeholder; it has no
-  caption of its own. The account list keeps no footer hint.
+  caption of its own. An endpoint row carries the current-device and
+  online/offline chips and a four-column fact grid (two at the minimum
+  window width). The account list keeps no footer hint.
 
 ## A draft, a save bar and a toast
 
 * The settings draft is created at startup and kept for the life of the
   process. Hiding the window, switching pages and opening the tray keep the
-  edits; a profile switch, 保存, 放弃修改 and a login that saves the draft
+  edits; a profile switch, 保存, 放弃 and a login that saves the draft
   are what reload it.
 * The save bar appears at the bottom of the content only while the draft
-  differs from the file: 未保存的修改, 放弃修改, 保存. Applying it writes the
+  differs from the file: 有未保存修改, 放弃, 保存. Applying it writes the
   file, moves or removes the stored client data the draft renamed or deleted,
   and reloads the draft from the result.
 * A result is a toast once, not a line that stays: `statusToast` reports

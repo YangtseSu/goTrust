@@ -302,7 +302,7 @@ func TestResourceListRendersAndActs(t *testing.T) {
 
 	rendered := ui.NewTester(View(&state, Actions{}), 720, 560)
 	rendered.Frame()
-	for _, want := range []string{"已获授权的资源", "2 项", "应用 · 1 项", "IP 地址 · 1 项", "Wiki", "Portal · web", "192.0.2.10", "tcp 443"} {
+	for _, want := range []string{"已授权应用", "2 项", "应用 1", "IP 地址 1", "Wiki", "Portal · web", "192.0.2.10", "tcp 443"} {
 		if !rendered.HasText(want) {
 			t.Fatalf("%q is missing from the resource list; texts: %v", want, rendered.Texts())
 		}
@@ -355,7 +355,7 @@ func TestResourceListGroupsUnknownKinds(t *testing.T) {
 
 	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
-	for _, want := range []string{"其他 · 1 项", "DNS · 1 项", "db-tunnel", "db.example.com"} {
+	for _, want := range []string{"其他 1", "DNS 1", "db-tunnel", "db.example.com"} {
 		if !tester.HasText(want) {
 			t.Fatalf("%q is missing from the grouped list; texts: %v", want, tester.Texts())
 		}
@@ -386,20 +386,20 @@ func TestResourceSearchFiltersLongGroups(t *testing.T) {
 
 	tester := ui.NewTester(View(&state, Actions{}), 900, 640)
 	tester.Frame()
-	if !tester.HasText("应用 · 9 项") {
+	if !tester.HasText("应用 9") {
 		t.Fatalf("the app heading is missing; texts: %v", tester.Texts())
 	}
-	if !tester.HasText("搜索资源") {
+	if !tester.HasText("搜索应用或地址") {
 		t.Fatal("a group of nine rows has no filter")
 	}
 
-	if err := tester.Click("搜索资源"); err != nil {
+	if err := tester.Click("搜索应用或地址"); err != nil {
 		t.Fatalf("focus the filter: %v", err)
 	}
 	tester.Type("app 3")
 	tester.Frame()
 
-	if !tester.HasText("应用 · 1 项") || !tester.HasText("App 3") {
+	if !tester.HasText("应用 1") || !tester.HasText("App 3") {
 		t.Fatalf("the filter kept the wrong rows; texts: %v", tester.Texts())
 	}
 	if tester.HasText("App 4") || tester.HasText("IP 地址") {
@@ -422,7 +422,7 @@ func TestResourceSearchAppearsWithEntries(t *testing.T) {
 	}
 	empty := ui.NewTester(View(&state, Actions{}), 900, 640)
 	empty.Frame()
-	if empty.HasText("搜索资源") {
+	if empty.HasText("搜索应用或地址") {
 		t.Fatal("an empty resource card grew a filter")
 	}
 
@@ -431,7 +431,7 @@ func TestResourceSearchAppearsWithEntries(t *testing.T) {
 	}
 	filled := ui.NewTester(View(&state, Actions{}), 900, 640)
 	filled.Frame()
-	if !filled.HasText("搜索资源") {
+	if !filled.HasText("搜索应用或地址") {
 		t.Fatalf("the resource header lost its filter; texts: %v", filled.Texts())
 	}
 }

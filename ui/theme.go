@@ -45,8 +45,10 @@ type palette struct {
 	warning ui.Color
 	danger  ui.Color
 
-	switchOff ui.Color
-	logBG     ui.Color
+	successWeak ui.Color
+	switchOff   ui.Color
+	logBG       ui.Color
+	surface2    ui.Color
 
 	powerOn   ui.Color
 	powerWait ui.Color
@@ -71,8 +73,10 @@ func paletteFor(dark bool) palette {
 			warning: ui.Hex("#e5a54b"),
 			danger:  ui.Hex("#f0736a"),
 
-			switchOff: ui.Hex("#3a3f49"),
-			logBG:     ui.Hex("#15171b"),
+			successWeak: ui.Hex("#1c2f24"),
+			switchOff:   ui.Hex("#3a3f49"),
+			logBG:       ui.Hex("#15171b"),
+			surface2:    ui.Hex("#282b32"),
 
 			powerOn:   ui.Hex("#16a34a"),
 			powerWait: ui.Hex("#d97706"),
@@ -95,8 +99,10 @@ func paletteFor(dark bool) palette {
 		warning: ui.Hex("#b45309"),
 		danger:  ui.Hex("#b42318"),
 
-		switchOff: ui.Hex("#d3d7de"),
-		logBG:     ui.Hex("#f7f8fa"),
+		successWeak: ui.Hex("#e8f5ec"),
+		switchOff:   ui.Hex("#d3d7de"),
+		logBG:       ui.Hex("#f7f8fa"),
+		surface2:    ui.Hex("#f4f5f7"),
 
 		powerOn:   ui.Hex("#16a34a"),
 		powerWait: ui.Hex("#d97706"),

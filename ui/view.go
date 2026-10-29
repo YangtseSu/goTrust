@@ -1107,7 +1107,7 @@ func resourceGroupHeading(c *ui.Context, group resourceGroup, first bool) {
 		heading.Margin(resourceGroupSpacing, 0, resourceHeadingSpace, 0)
 	}
 	heading.Children(func() {
-		sectionHeading(c, locales.ResourceGroupCount(group.label, len(group.entries)))
+		caption(c, locales.ResourceGroupCount(group.label, len(group.entries)))
 	})
 }
 

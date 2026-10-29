@@ -602,15 +602,6 @@ func splitTargets(text string) []string {
 	return targets
 }
 
-// fieldWidth caps a form control: a value does not need the window's whole
-// width, and an input stretched across it reads as a text area. The label
-// column keeps the controls aligned, so the cap is one width for every field.
-const fieldWidth = 360
-
-// methodPickerWidth leaves room for 获取认证方式, which shares the row with the
-// picker instead of sitting under the field.
-const methodPickerWidth = 240
-
 func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActions, profile *config.Profile, index int) {
 	formColumn(c, func() {
 		formField(c, locales.FieldGateway(), func() {
@@ -623,7 +614,7 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 		// value beside it, and the hint about a gateway that asks later is the
 		// placeholder it cannot be if it is a caption under the field.
 		formField(c, locales.FieldPassword(), func() {
-			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			ui.Row(c).AlignItems(ui.End).Gap(rowGap).Children(func() {
 				ui.TextInput(c, &profile.Auth.Password).Password().Grow(1).Shrink(1).
 					Placeholder(locales.PasswordPlaceholder())
 				ui.Checkbox(c, &profile.Auth.StorePass, locales.StorePassword())
@@ -642,7 +633,9 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 					actions.DiscoverAuth()
 				}
 			})
-			caption(c, authMethodHint(state))
+			if hint := authMethodHint(state); hint != "" {
+				caption(c, hint)
+			}
 		})
 		formField(c, locales.LoginDomain(), func() {
 			ui.TextInput(c, &profile.Auth.Domain).Placeholder("local")
@@ -688,7 +681,6 @@ func securitySection(c *ui.Context, state *SettingsState, actions Actions, profi
 }
 
 func proxySection(c *ui.Context, state *SettingsState) {
-	caption(c, locales.SettingsEffectConnect())
 	formColumn(c, func() {
 		formField(c, locales.Socks5Listen(), func() {
 			ui.TextInput(c, &state.Draft.Proxy.SOCKS5Bind).Placeholder("127.0.0.1:1080")
@@ -696,7 +688,10 @@ func proxySection(c *ui.Context, state *SettingsState) {
 		formField(c, locales.HttpListen(), func() {
 			ui.TextInput(c, &state.Draft.Proxy.HTTPBind).Placeholder("127.0.0.1:1081")
 		})
-		caption(c, locales.ProxyHint())
+		if strings.TrimSpace(state.Draft.Proxy.SOCKS5Bind) == "" &&
+			strings.TrimSpace(state.Draft.Proxy.HTTPBind) == "" {
+			captionTone(c, locales.ProxyHint(), toneDanger)
+		}
 	})
 }
 
@@ -705,7 +700,6 @@ func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profi
 		if switchRow(c, enabled, locales.KeepAliveEnable()) {
 			profile.Keep.SetEnabled(*enabled)
 		}
-		ui.Divider(c)
 		formColumn(c, func() {
 			formField(c, locales.KeepAliveInterval(), func() {
 				ui.TextInput(c, &profile.Keep.Interval).Placeholder("90s")
@@ -1008,16 +1002,13 @@ func savedMethodLabel(methods []session.AuthMethod, authType, domain string) str
 	return locales.SavedMethod(authType, domain)
 }
 
-// authMethodHint explains what the picker currently means for the login.
+// authMethodHint reports discovery while it runs; the select's own entries are
+// the result, so the form says nothing once they are known.
 func authMethodHint(state *SettingsState) string {
-	switch {
-	case state.Discovering:
+	if state.Discovering {
 		return locales.MethodsDiscovering()
-	case len(state.Methods) == 0:
-		return locales.MethodsUnknown()
-	default:
-		return locales.MethodsHint(len(state.Methods))
 	}
+	return ""
 }
 
 // terminalSection is the live 终端管理 page: the portal lists trusted
@@ -1082,9 +1073,9 @@ func terminalSummary(terminals *session.Terminals) string {
 	return locales.TerminalCounts(len(terminals.Trusted), len(terminals.Temporary))
 }
 
-// terminalFactWidth is one cell of the facts grid: three cells fit the page at
-// its default width, two at the minimum.
-const terminalFactWidth float32 = 180
+// terminalFactWidth is one cell of the facts grid: four fit the page at its
+// default width, two at the minimum.
+const terminalFactWidth float32 = 135
 
 func terminalList(c *ui.Context, title string, terminals []session.Terminal, selfID string, loaded bool) {
 	card(c).Gap(c.Theme().Space(2)).Children(func() {
@@ -1120,23 +1111,42 @@ func terminalRow(c *ui.Context, terminal session.Terminal, selfID string) {
 	ui.Column(c).Gap(theme.Space(1.5)).PaddingY(theme.Space(1)).Children(func() {
 		ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
 			ui.Text(c, name).FontSize(theme.FontSize).FontWeight(600)
-			ui.Text(c, terminalState(terminal, selfID)).FontSize(textSize(c, captionScale)).
-				TextColor(theme.TextMuted)
+			terminalChips(c, terminal, selfID)
 		})
 		terminalFactsGrid(c, terminal)
 	})
 }
 
-// terminalState uses selfId first, as the portal marks the current device even
-// when the historical row says it is offline.
-func terminalState(terminal session.Terminal, selfID string) string {
-	if terminal.ID != "" && terminal.ID == selfID {
-		return locales.CurrentDevice()
+// terminalChips marks the current device and reports whether it is online; the
+// portal's list says both, and a device that is current is not necessarily
+// online in the historical row.
+func terminalChips(c *ui.Context, terminal session.Terminal, selfID string) {
+	theme := c.Theme()
+	ui.Row(c).AlignItems(ui.Center).Gap(theme.Space(1.5)).Children(func() {
+		if terminal.ID != "" && terminal.ID == selfID {
+			terminalChip(c, locales.CurrentDevice(), true)
+		}
+		if terminal.OnlineStatus {
+			terminalChip(c, locales.Online(), true)
+		} else {
+			terminalChip(c, locales.Offline(), false)
+		}
+	})
+}
+
+// terminalChip is the portal's pill: the success tint for a live fact, the
+// card's quieter face for an inactive one.
+func terminalChip(c *ui.Context, label string, on bool) {
+	theme := c.Theme()
+	pal := paletteOf(c)
+	background, ink := pal.surface2, theme.TextMuted
+	if on {
+		background, ink = pal.successWeak, theme.Success
 	}
-	if terminal.OnlineStatus {
-		return locales.Online()
-	}
-	return locales.Offline()
+	ui.Row(c).AlignItems(ui.Center).Padding(theme.Space(0.5), theme.Space(1.75)).
+		Radius(999).Background(background).Children(func() {
+		ui.Text(c, label).FontSize(textSize(c, captionScale)).TextColor(ink)
+	})
 }
 
 // terminalFact is one labelled field of an endpoint.
@@ -1161,7 +1171,7 @@ func terminalFacts(terminal session.Terminal) []terminalFact {
 
 // terminalFactsGrid lays the fields out in wrapping cells.
 func terminalFactsGrid(c *ui.Context, terminal session.Terminal) {
-	ui.Row(c).Wrap().AlignItems(ui.Start).Gap(c.Theme().Space(2)).Children(func() {
+	ui.Row(c).Wrap().AlignItems(ui.Start).Gap(c.Theme().Space(4)).Children(func() {
 		for _, fact := range terminalFacts(terminal) {
 			ui.Column(c).Gap(2).Width(terminalFactWidth).Shrink(0).Children(func() {
 				caption(c, fact.label)

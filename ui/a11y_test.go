@@ -120,7 +120,7 @@ func TestMainWindowTabOrder(t *testing.T) {
 	}
 }
 
-// The save bar is the last stop of the window: Tab reaches 放弃修改 and then
+// The save bar is the last stop of the window: Tab reaches 放弃 and then
 // 保存, whatever the page's form contains. Both are absent while the draft
 // matches the file, so the draft is edited first.
 func TestSettingsTabOrderReachesTheSaveBar(t *testing.T) {
@@ -132,19 +132,19 @@ func TestSettingsTabOrderReachesTheSaveBar(t *testing.T) {
 	for range 80 {
 		tester.Key(0, ui.KeyTab)
 		tester.Frame()
-		if tester.Focused("放弃修改") {
+		if tester.Focused("放弃") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatal("Tab never reached 放弃修改")
+		t.Fatal("Tab never reached 放弃")
 	}
 
 	tester.Key(0, ui.KeyTab)
 	tester.Frame()
 	if !tester.Focused("保存") {
-		t.Fatal("Tab after 放弃修改 did not reach 保存")
+		t.Fatal("Tab after 放弃 did not reach 保存")
 	}
 }
 
