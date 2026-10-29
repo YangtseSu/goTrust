@@ -51,7 +51,7 @@ func pageBody(c *ui.Context, state *State, actions Actions, searchFocus *uint64)
 	case PageAccount:
 		accountPage(c, state, actions)
 	case PageProxy:
-		proxyPage(c, state)
+		proxyPage(c, state, actions)
 	case PageKeepAlive:
 		keepAlivePage(c, state)
 	case PageStartup:
@@ -126,14 +126,78 @@ func accountPage(c *ui.Context, state *State, actions Actions) {
 	})
 }
 
-func proxyPage(c *ui.Context, state *State) {
+func proxyPage(c *ui.Context, state *State, actions Actions) {
 	if state.Settings == nil {
 		return
 	}
 	pageScroll(c, func() {
 		windowHeading(c, pageLabel(PageProxy))
 		proxySection(c, state.Settings)
+		proxyCopySection(c, state, state.Settings, actions)
 	})
+}
+
+// proxyCopySection is what a browser or a Clash client needs from the session:
+// the PAC address and one of the three renderings of the live grant. The two
+// actions were the dashboard's copy menu before the one-window shell.
+func proxyCopySection(c *ui.Context, state *State, settings *SettingsState, actions Actions) {
+	ui.Column(c).Gap(6).Children(func() {
+		sectionHeading(c, locales.CopyConfig())
+		ui.Form(c, func() {
+			ui.Field(c, locales.PacAddress(), func() {
+				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+					url := strings.TrimSpace(state.PACURL)
+					if url == "" {
+						caption(c, locales.PacOff())
+					} else {
+						ui.Text(c, url).FontSize(c.Theme().FontSize).Font("monospace")
+					}
+					if ui.Button(c, locales.CommonCopy()).Label(locales.CopyPAC()).
+						Disabled(url == "").Clicked() && actions.CopyPAC != nil {
+						actions.CopyPAC()
+					}
+				})
+			})
+			ui.Field(c, locales.ClashMihomo(), func() {
+				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+					options := []string{locales.ClashPlain(), locales.ClashScript(), locales.ClashConfig()}
+					chosen := clashLabel(settings.ClashFormat)
+					if ui.Select(c, &chosen, options).MaxWidth(methodPickerWidth).Changed() {
+						settings.ClashFormat = clashFormat(chosen)
+					}
+					if ui.Button(c, locales.CommonCopy()).Label(locales.CopyClashDesc()).
+						Clicked() && actions.CopyClash != nil {
+						actions.CopyClash(settings.ClashFormat)
+					}
+				})
+			})
+		})
+	})
+}
+
+// clashLabel is the picker's text for one rendering.
+func clashLabel(format ClashFormat) string {
+	switch format {
+	case ClashScript:
+		return locales.ClashScript()
+	case ClashConfig:
+		return locales.ClashConfig()
+	default:
+		return locales.ClashPlain()
+	}
+}
+
+// clashFormat is the rendering the picker's text names; an unknown text keeps
+// the plain fragment, the one the manual documents first.
+func clashFormat(label string) ClashFormat {
+	switch label {
+	case locales.ClashScript():
+		return ClashScript
+	case locales.ClashConfig():
+		return ClashConfig
+	default:
+		return ClashPlain
+	}
 }
 
 func keepAlivePage(c *ui.Context, state *State) {
@@ -175,31 +239,96 @@ func terminalsPage(c *ui.Context, state *State, actions Actions) {
 	})
 }
 
-// logsPage owns the log location until the live tail moves in beside it: the
-// directory and the button that opens it, not a second copy on 设置.
+// LogTailLines is how many lines the window keeps from the log file: the gui's
+// tailer and the page's footer share it.
+const LogTailLines = 500
+
+// logsPage is the live tail of the current log: the newest lines, narrowed by
+// the filter, with 复制, 打开目录 and the 详细日志 switch that raises the
+// running level. The lines carry no level of their own, so the page has no
+// level filter; 详细日志 is what decides whether the diagnostic lines exist at
+// all.
 func logsPage(c *ui.Context, state *State, actions SettingsActions) {
 	settings := state.Settings
 	if settings == nil {
 		return
 	}
-	pageScroll(c, func() {
-		windowHeading(c, pageLabel(PageLogs))
-		ui.Form(c, func() {
-			ui.Field(c, locales.LogDir(), func() {
-				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-					directory := settings.LogDir
-					if directory == "" {
-						directory = locales.LogDirUnavailable()
-					}
-					ui.Text(c, directory).FontSize(c.Theme().FontSize).TextColor(c.Theme().TextMuted)
-					if ui.Button(c, locales.CommonOpen()).Description(locales.OpenLogsDesc()).
-						Disabled(settings.LogDir == "").Clicked() && actions.OpenLogs != nil {
-						actions.OpenLogs()
-					}
-				})
+	lines := settings.visibleLogLines()
+	theme := c.Theme()
+	ui.Column(c).Grow(1).Shrink(1).Gap(sectionGap).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			windowHeading(c, pageLabel(PageLogs)).Grow(1)
+			if ui.Checkbox(c, &settings.Draft.Logging.Verbose, locales.VerboseLog()).Changed() &&
+				actions.SetVerbose != nil {
+				actions.SetVerbose(settings.Draft.Logging.Verbose)
+			}
+			if ui.Button(c, locales.OpenLogsDir()).Description(locales.OpenLogsDesc()).
+				Disabled(settings.LogDir == "").Clicked() && actions.OpenLogs != nil {
+				actions.OpenLogs()
+			}
+		})
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			ui.SearchField(c, &settings.LogFilter).Label(locales.LogFilter()).Grow(1)
+			ui.Checkbox(c, &settings.LogAutoScroll, locales.LogAutoScroll())
+			if ui.Button(c, locales.CommonCopy()).Label(locales.CopyLogsDesc()).
+				Disabled(len(lines) == 0).Clicked() && actions.CopyLogs != nil {
+				actions.CopyLogs(strings.Join(lines, "\n"))
+			}
+		})
+		pane := ui.Scroll(c).Grow(1).Shrink(1).Padding(theme.Space(1.5)).
+			Border(1, theme.Border).Radius(theme.Radius).Background(theme.Surface)
+		pane.Children(func() {
+			ui.Column(c).Gap(0).Children(func() {
+				if len(lines) == 0 {
+					caption(c, locales.LogEmpty())
+				}
+				for _, line := range lines {
+					ui.Text(c, line).Font("monospace").FontSize(textSize(c, captionScale)).
+						SingleLine().TextColor(theme.TextMuted)
+				}
+				// The anchor follows the newest line only when they changed:
+				// re-revealing it every frame would take the scrollbar away
+				// from a user reading further up.
+				anchor := ui.Box(c).Height(1)
+				if settings.LogAutoScroll && settings.logSeen != len(lines) {
+					anchor.ScrollIntoView()
+				}
 			})
 		})
+		settings.logSeen = len(lines)
+		path := settings.logPath()
+		if path == "" {
+			path = locales.LogDirUnavailable()
+		} else {
+			path = shortPath(path)
+		}
+		caption(c, locales.LogTailFooter(path, LogTailLines))
 	})
+}
+
+// logPath is the file the tail follows, or the directory when the app runs
+// without a file log.
+func (s *SettingsState) logPath() string {
+	if s.LogPath != "" {
+		return s.LogPath
+	}
+	return s.LogDir
+}
+
+// visibleLogLines is the tail narrowed by the filter: a case-insensitive
+// substring, as the resource filter is.
+func (s *SettingsState) visibleLogLines() []string {
+	filter := strings.ToLower(strings.TrimSpace(s.LogFilter))
+	if filter == "" {
+		return s.LogLines
+	}
+	lines := make([]string, 0, len(s.LogLines))
+	for _, line := range s.LogLines {
+		if strings.Contains(strings.ToLower(line), filter) {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func settingsPage(c *ui.Context, state *State, actions Actions) {
@@ -214,7 +343,9 @@ func settingsPage(c *ui.Context, state *State, actions Actions) {
 			caption(c, locales.ErrNoProfiles())
 			return
 		}
-		advancedSection(c, settings, profile, actions.Settings)
+		languageSection(c, settings, actions.Settings)
+		localDataSection(c, settings, profile, actions.Settings)
+		aboutSection(c, actions.Settings)
 	})
 }
 

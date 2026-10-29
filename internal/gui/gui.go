@@ -81,6 +81,9 @@ func Run(configPath string) error {
 	// One settings draft lives as long as the window: a page switch or hiding
 	// the window keeps the edits, and the pages render it in place.
 	application.settings = gotrustui.NewSettingsState(cfg, application.logDir)
+	if fileLog != nil {
+		application.settings.LogPath = fileLog.Path()
+	}
 	application.mu.Lock()
 	application.view.Settings = application.settings
 	application.mu.Unlock()
@@ -233,6 +236,13 @@ func (a *app) runUI(ctx context.Context) error {
 		}
 		a.logf("goTrust ready; profile %s", a.cfg.ActiveProfile)
 
+		// 日志 shows the file as it grows; the tailer runs for the life of
+		// the app, so a page opened later already has the lines behind it.
+		if logFile := a.log; logFile != nil {
+			tail := &logTail{path: logFile.Path(), limit: gotrustui.LogTailLines, emit: a.setLogLines}
+			go tail.run(ctx)
+		}
+
 		decision := decideAutoConnect(a.cfg)
 		switch {
 		case decision.Connect:
@@ -378,7 +388,7 @@ func (a *app) actions() gotrustui.Actions {
 			a.cancelDeviceBind(errors.New("device binding cancelled"))
 		},
 
-		OpenResource: a.openResource,
+		OpenResource: a.openURL,
 		CopyResource: a.copyResource,
 		CopyPAC:      a.copyPAC,
 		CopyClash:    a.copyClash,
@@ -433,15 +443,15 @@ func (a *app) copyClash(format gotrustui.ClashFormat) {
 	a.copyResource(text)
 }
 
-// openResource opens a granted application or address in the browser. A
-// failure is reported in the window; the URL is still visible there. Only http
-// and https reach the desktop's URL handler: a portal-supplied file:, smb: or
+// openURL opens an address in the browser: a granted application, the project
+// page or the license. A failure is reported in the window. Only http and
+// https reach the desktop's URL handler: a portal-supplied file:, smb: or
 // custom scheme must not launch a local application.
-func (a *app) openResource(rawURL string) {
+func (a *app) openURL(rawURL string) {
 	parsed, err := neturl.Parse(rawURL)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 		a.setStatusError(locales.OpenUnsupported())
-		a.logf("refuse to open resource %q: only http and https URLs are allowed", rawURL)
+		a.logf("refuse to open %q: only http and https URLs are allowed", rawURL)
 		return
 	}
 	if err := a.openBrowser(rawURL); err != nil {
@@ -459,6 +469,16 @@ func (a *app) copyResource(value string) {
 		return
 	}
 	a.setStatus(locales.Copied(), false)
+}
+
+// copyLogs puts the visible log lines on the clipboard. 日志 disables 复制 when
+// there is nothing to copy, so an empty text here is a stale click.
+func (a *app) copyLogs(text string) {
+	if strings.TrimSpace(text) == "" {
+		a.setStatusError(locales.LogEmpty())
+		return
+	}
+	a.copyResource(text)
 }
 
 // settingsActions are the draft's callbacks.
@@ -498,6 +518,8 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 		SetVerbose:   a.setVerbose,
 		OpenLogs:     a.openLogs,
 		OpenConfig:   a.openConfig,
+		CopyLogs:     a.copyLogs,
+		OpenURL:      a.openURL,
 		DiscoverAuth: a.discoverAuth,
 		SelectAuth: func(index int) {
 			mutate(func(state *gotrustui.SettingsState) { state.SelectAuth(index) })
@@ -958,6 +980,20 @@ func (a *app) releaseProfileLock() {
 	if err := lock.Release(); err != nil {
 		a.logf("release the profile lock: %v", err)
 	}
+}
+
+// setLogLines is the tailer's hand-off: the newest lines, oldest first. The
+// assignment runs on the main loop, the one that renders the page, so the
+// window never reads a slice the tailer is replacing.
+func (a *app) setLogLines(lines []string) {
+	mygo.RunOnMain(func() {
+		a.mu.Lock()
+		if a.settings != nil {
+			a.settings.LogLines = lines
+		}
+		a.mu.Unlock()
+		a.invalidate()
+	})
 }
 
 // onSessionState mirrors the session into the view and refreshes what is on

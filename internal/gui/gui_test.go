@@ -520,9 +520,9 @@ func TestSavingProfileChangesMovesItsClientData(t *testing.T) {
 	}
 }
 
-// The portal supplies the URL, so openResource is the boundary that keeps a
+// The portal supplies the URL, so openURL is the boundary that keeps a
 // file: or custom scheme away from the desktop's URL handler.
-func TestOpenResourceAllowsOnlyHTTP(t *testing.T) {
+func TestOpenURLAllowsOnlyHTTP(t *testing.T) {
 	var opened []string
 	application := &app{
 		cfg:  config.Default(),
@@ -534,17 +534,17 @@ func TestOpenResourceAllowsOnlyHTTP(t *testing.T) {
 	}
 
 	for _, refused := range []string{"file:///etc/passwd", "smb://192.0.2.10/share", "javascript:alert(1)", "http://", "not a url"} {
-		application.openResource(refused)
+		application.openURL(refused)
 		if len(opened) != 0 {
-			t.Fatalf("openResource(%q) reached the browser with %v", refused, opened)
+			t.Fatalf("openURL(%q) reached the browser with %v", refused, opened)
 		}
 		if !application.view.StatusError {
-			t.Fatalf("openResource(%q) did not report the refusal", refused)
+			t.Fatalf("openURL(%q) did not report the refusal", refused)
 		}
 		application.view.StatusError = false
 	}
 
-	application.openResource("http://192.0.2.10/")
+	application.openURL("http://192.0.2.10/")
 	if len(opened) != 1 || opened[0] != "http://192.0.2.10/" {
 		t.Fatalf("opened = %v, want the http URL", opened)
 	}

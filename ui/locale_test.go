@@ -41,7 +41,7 @@ func TestSettingsLanguagePickerCallsSetLocale(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	_, tester := newShell(t, state, SettingsActions{
 		SetLocale: func(tag string) { chosen = append(chosen, tag) },
-	}, PageStartup)
+	}, PageSettings)
 
 	if err := tester.Click("English"); err != nil {
 		t.Fatalf("click English: %v; texts: %v", err, tester.Texts())

@@ -346,19 +346,27 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 	}
 
 	openPage(t, tester, "设置")
+	for _, wanted := range []string{"语言", "跟随系统", "本机数据", "关于", "项目主页", "许可证"} {
+		if !tester.HasText(wanted) {
+			t.Fatalf("%q is missing from 设置; texts: %v", wanted, tester.Texts())
+		}
+	}
+	// The log directory belongs to 日志 now, and so does the level switch.
+	if tester.HasText("/var/log/gotrust") {
+		t.Fatal("the log directory is still on 设置")
+	}
+	if tester.HasText("详细日志") {
+		t.Fatal("详细日志 is still on 设置")
+	}
+	openPage(t, tester, "日志")
+	if !tester.HasText("/var/log/gotrust") {
+		t.Fatal("the log directory is missing from 日志")
+	}
 	if err := tester.Click("详细日志"); err != nil {
 		t.Fatalf("click verbose: %v", err)
 	}
 	if !state.Draft.Logging.Verbose || verbose != 1 {
 		t.Fatalf("verbose = %v calls = %d", state.Draft.Logging.Verbose, verbose)
-	}
-	// The log directory belongs to 日志 now, not to 设置.
-	if tester.HasText("/var/log/gotrust") {
-		t.Fatal("the log directory is still on 设置")
-	}
-	openPage(t, tester, "日志")
-	if !tester.HasText("/var/log/gotrust") {
-		t.Fatal("the log directory is missing from 日志")
 	}
 
 	if tester.HasText("关闭") {
@@ -433,8 +441,8 @@ func TestSidebarSwitchesPages(t *testing.T) {
 		{"启动", PageStartup, "登录系统时启动", "启用保活"},
 		{"终端管理", PageTerminals, "连接后可读取终端列表", "登录系统时启动"},
 		{"日志", PageLogs, "/tmp/logs", "连接后可读取终端列表"},
-		{"设置", PageSettings, "详细日志", "/tmp/logs"},
-		{"多账户", PageProfiles, "账户名称", "详细日志"},
+		{"设置", PageSettings, "关于", "/tmp/logs"},
+		{"多账户", PageProfiles, "账户名称", "关于"},
 	}
 	for _, testCase := range pages {
 		openPage(t, tester, testCase.label)
@@ -870,21 +878,31 @@ func TestSettingsShowsAndChangesTrust(t *testing.T) {
 	state.Trusted = true
 	state.TerminalsKnown = true
 	state.Terminals = &session.Terminals{
-		SelfID: "self",
+		SelfID:         "self",
+		MaxDeviceCount: 3,
 		Trusted: []session.Terminal{{
-			ID:         "trusted-1",
-			DeviceName: "desk-01",
-			OS:         "Linux",
-			OSVersion:  "7.3.0",
+			ID:               "trusted-1",
+			DevDBID:          "6f1c9a2e4b7d",
+			DeviceName:       "desk-01",
+			DeviceType:       "client",
+			OS:               "Linux",
+			OSVersion:        "7.3.0",
+			LastLoginAddress: "LAN",
+			LastLoginIP:      "192.0.2.10",
+			LastLoginTime:    "2026-10-25 13:17:59",
+			NetworkZoneList:  []string{"校园网", "无线"},
 		}},
 		Temporary: []session.Terminal{{
 			ID:               "self",
+			DevDBID:          "2a9d51c0f8e3",
 			DeviceName:       "desk-02",
+			DeviceType:       "browser",
 			OS:               "Linux",
 			OSVersion:        "7.3.0",
+			Browser:          "Firefox 128",
 			OnlineStatus:     true,
 			LastLoginAddress: "Example City",
-			LastLoginIP:      "192.0.2.10",
+			LastLoginIP:      "192.0.2.11",
 			LastLoginTime:    "2026-10-25 13:17:59",
 		}},
 	}
@@ -896,7 +914,11 @@ func TestSettingsShowsAndChangesTrust(t *testing.T) {
 	}
 
 	_, tester := newShell(t, state, actions, PageTerminals)
-	for _, wanted := range []string{"授信终端 1 · 临时终端 1", "desk-01", "desk-02", "当前设备"} {
+	for _, wanted := range []string{
+		"授信终端 1/3 · 临时终端 1", "本机已信任", "desk-01", "desk-02", "当前设备",
+		"类型", "客户端", "Linux 7.3.0", "Firefox 128", "最近登录", "登录地址",
+		"内网（192.0.2.10）", "网络区域", "校园网 / 无线", "设备 ID", "6f1c9a2e4b7d",
+	} {
 		if !tester.HasText(wanted) {
 			t.Fatalf("%q is missing from 终端管理", wanted)
 		}
@@ -918,18 +940,164 @@ func TestSettingsShowsAndChangesTrust(t *testing.T) {
 	}
 }
 
-func TestIdentitySummaryOmitsTheEmptyProcess(t *testing.T) {
-	got := identitySummary(config.IdentityConfig{OSFamily: config.IdentityOSLinux, ClientVersion: "2.5.16.41"})
-	if got != "Linux · 2.5.16.41" {
-		t.Fatalf("summary = %q", got)
+// 代理 owns the two copy actions the dashboard used to hide in its menu: the
+// PAC address and one of the three Clash/Mihomo renderings.
+func TestProxyPageCopiesTheProxyConfig(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	state.ClashFormat = ClashScript
+	view := &State{
+		Settings: state,
+		Config:   state.Draft,
+		Page:     PageProxy,
+		PACURL:   "http://127.0.0.1:1082/pac",
 	}
-	withProcess := identitySummary(config.IdentityConfig{
-		OSFamily:      config.IdentityOSWindows,
-		ClientVersion: "2.5.16.41",
-		ProcessName:   "agent",
-	})
-	if withProcess != "Windows · 2.5.16.41 · agent" {
-		t.Fatalf("summary = %q", withProcess)
+	var pac, clash int
+	var format ClashFormat
+	tester := ui.NewTester(View(view, Actions{
+		CopyPAC:   func() { pac++ },
+		CopyClash: func(chosen ClashFormat) { clash++; format = chosen },
+	}), 900, 1400)
+	tester.Frame()
+
+	if !tester.HasText("http://127.0.0.1:1082/pac") {
+		t.Fatalf("the PAC address is missing; texts: %v", tester.Texts())
+	}
+	if !tester.HasText(locales.ClashScript()) {
+		t.Fatalf("the picker does not show %q; texts: %v", locales.ClashScript(), tester.Texts())
+	}
+	if err := tester.Click(locales.CopyPAC()); err != nil {
+		t.Fatalf("click the PAC copy: %v", err)
+	}
+	if pac != 1 {
+		t.Fatalf("PAC copy calls = %d", pac)
+	}
+	if err := tester.Click(locales.CopyClashDesc()); err != nil {
+		t.Fatalf("click the Clash copy: %v", err)
+	}
+	if clash != 1 || format != ClashScript {
+		t.Fatalf("Clash copy calls = %d format = %q", clash, format)
+	}
+
+	// Without a PAC URL there is nothing to copy, so the button is disabled.
+	view.PACURL = ""
+	tester.Frame()
+	if !tester.HasText(locales.PacOff()) {
+		t.Fatal("the disabled PAC row does not explain itself")
+	}
+	if err := tester.Click(locales.CopyPAC()); err == nil && pac != 1 {
+		t.Fatal("the PAC copy ran without an address")
+	}
+}
+
+// 日志 is a live tail of the file: the filter narrows it, 复制 copies what is
+// shown, and 详细日志 raises the level through the same saved setting.
+func TestLogPageFiltersCopiesAndToggles(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	state.LogPath = "/tmp/logs/gotrust.log"
+	state.LogLines = []string{"09:00 ready", "09:01 error: timeout", "09:02 ready"}
+	state.LogFilter = "READY"
+	var copied string
+	var verbose, opened int
+	actions := SettingsActions{
+		CopyLogs:   func(text string) { copied = text },
+		SetVerbose: func(on bool) { verbose++ },
+		OpenLogs:   func() { opened++ },
+	}
+
+	_, tester := newShell(t, state, actions, PageLogs)
+	if !tester.HasText("09:00 ready") || !tester.HasText("09:02 ready") {
+		t.Fatalf("the filtered lines are missing; texts: %v", tester.Texts())
+	}
+	if tester.HasText("09:01 error") {
+		t.Fatal("the filter let a non-matching line through")
+	}
+	if !tester.HasText("/tmp/logs/gotrust.log") {
+		t.Fatal("the page does not name the file it tails")
+	}
+
+	if err := tester.Click(locales.CopyLogsDesc()); err != nil {
+		t.Fatalf("click the log copy: %v", err)
+	}
+	if want := "09:00 ready\n09:02 ready"; copied != want {
+		t.Fatalf("copied %q, want %q", copied, want)
+	}
+	if err := tester.Click("详细日志"); err != nil {
+		t.Fatalf("click verbose: %v", err)
+	}
+	if verbose != 1 || !state.Draft.Logging.Verbose {
+		t.Fatalf("verbose calls = %d state = %v", verbose, state.Draft.Logging.Verbose)
+	}
+	if err := tester.Click("打开目录"); err != nil {
+		t.Fatalf("open the log directory: %v", err)
+	}
+	if opened != 1 {
+		t.Fatalf("open calls = %d", opened)
+	}
+
+	state.LogFilter = ""
+	tester.Frame()
+	if !tester.HasText("09:01 error: timeout") {
+		t.Fatal("clearing the filter did not restore the line")
+	}
+}
+
+// 设置 is the app's own data and its release: the language, the client data
+// file and identity, and 关于 with the pages the project lives on.
+func TestSettingsPageShowsLocalDataAndAbout(t *testing.T) {
+	cfg := config.Default()
+	cfg.Identity.DeviceID = "6f1c9a2e4b7d"
+	state := NewSettingsState(cfg, "/tmp/logs")
+	var opened []string
+	actions := SettingsActions{
+		OpenURL:  func(url string) { opened = append(opened, url) },
+		OpenLogs: func() {},
+	}
+
+	_, tester := newShell(t, state, actions, PageSettings)
+	for _, wanted := range []string{
+		"语言", "跟随系统", "本机数据", "数据文件", "6f1c9a2e4b7d", "打开配置文件",
+		"关于", "版本", releaseVersion(), "项目主页", projectHost, "许可证", licenseLine,
+	} {
+		if !tester.HasText(wanted) {
+			t.Fatalf("%q is missing from 设置; texts: %v", wanted, tester.Texts())
+		}
+	}
+
+	if err := tester.Click(locales.OpenProjectDesc()); err != nil {
+		t.Fatalf("open the project: %v", err)
+	}
+	if err := tester.Click(locales.ViewLicenseDesc()); err != nil {
+		t.Fatalf("open the license: %v", err)
+	}
+	if want := []string{projectURL, licenseURL}; len(opened) != len(want) ||
+		opened[0] != want[0] || opened[1] != want[1] {
+		t.Fatalf("opened = %v, want %v", opened, want)
+	}
+
+	// The language moved off 启动: the page is the four toggles only.
+	_, startup := newShell(t, state, actions, PageStartup)
+	if startup.HasText("跟随系统") {
+		t.Fatal("the language switch is still on 启动")
+	}
+	for _, wanted := range []string{"登录系统时启动", "启动后自动连接", "启动时隐藏窗口", "断线后自动重连"} {
+		if !startup.HasText(wanted) {
+			t.Fatalf("%q is missing from 启动", wanted)
+		}
+	}
+}
+
+// The data file field shows a home-relative path, as the documentation writes
+// it, while the settings keep the absolute one.
+func TestShortPathKeepsTheHomeShort(t *testing.T) {
+	t.Setenv("HOME", "/home/user")
+	if got := shortPath("/home/user/.config/gotrust/client_data.json"); got != "~/.config/gotrust/client_data.json" {
+		t.Fatalf("shortPath(home) = %q", got)
+	}
+	if got := shortPath("/var/lib/gotrust/client_data.json"); got != "/var/lib/gotrust/client_data.json" {
+		t.Fatalf("shortPath(other) = %q", got)
+	}
+	if got := shortPath("/home/userland/client_data.json"); got != "/home/userland/client_data.json" {
+		t.Fatalf("shortPath(a lookalike) = %q", got)
 	}
 }
 

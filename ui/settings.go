@@ -5,6 +5,7 @@ package ui
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/YangtseSu/goTrust/core/config"
 	"github.com/YangtseSu/goTrust/core/session"
+	buildversion "github.com/YangtseSu/goTrust/internal/version"
 	"github.com/YangtseSu/goTrust/locales"
 )
 
@@ -45,6 +47,22 @@ type SettingsState struct {
 	// confirmation.
 	StatusError bool
 	LogDir      string
+	// LogPath is the file the 日志 page tails, empty when the app runs
+	// without a log file. LogLines is the tail itself, oldest first, and the
+	// gui's tailer replaces it as the file grows.
+	LogPath  string
+	LogLines []string
+	// LogFilter narrows the visible tail to the lines containing it; the
+	// empty string shows every line. LogAutoScroll keeps the pane on the
+	// newest line until the user unticks it.
+	LogFilter     string
+	LogAutoScroll bool
+	// logSeen is how many lines the last frame showed: the pane follows the
+	// newest line only when the count changed.
+	logSeen int
+	// ClashFormat is the 代理 page's copy picker: which Clash/Mihomo rendering
+	// 复制 writes to the clipboard.
+	ClashFormat ClashFormat
 	Busy        bool
 	// Online mirrors the live session: a voluntary password change goes through
 	// the portal session, so it needs a connected client.
@@ -151,6 +169,10 @@ type SettingsActions struct {
 	// OpenConfig opens the settings file so the [identity] section can be
 	// edited by hand; the window never writes it.
 	OpenConfig func()
+	// CopyLogs puts the visible log lines on the clipboard.
+	CopyLogs func(string)
+	// OpenURL opens an http(s) page in the browser, for the 关于 links.
+	OpenURL func(string)
 	// SetLocale shows the app in the tag's language, "" to follow the desktop.
 	SetLocale func(string)
 }
@@ -158,7 +180,13 @@ type SettingsActions struct {
 // NewSettingsState copies cfg into an editable draft and selects the active
 // profile.
 func NewSettingsState(cfg config.Config, logDir string) *SettingsState {
-	state := &SettingsState{Draft: cfg.Clone(), LogDir: logDir, ActiveAtOpen: cfg.ActiveProfile}
+	state := &SettingsState{
+		Draft:         cfg.Clone(),
+		LogDir:        logDir,
+		ActiveAtOpen:  cfg.ActiveProfile,
+		LogAutoScroll: true,
+		ClashFormat:   ClashPlain,
+	}
 	state.baseline = cfg.Clone()
 	state.Selected = state.Draft.ActiveIndex()
 	if state.Selected < 0 {
@@ -676,6 +704,8 @@ func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profi
 	})
 }
 
+// startupSection is 启动: the four things the app does around a session. The
+// language moved to 设置, where the rest of the app-wide settings live.
 func startupSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
 	caption(c, locales.SettingsEffectStartup())
 	ui.Form(c, func() {
@@ -694,39 +724,110 @@ func startupSection(c *ui.Context, state *SettingsState, actions SettingsActions
 			ui.Checkbox(c, &state.Draft.App.AutoReconnect, locales.AutoReconnect())
 		})
 	})
-	languageSection(c, state, actions)
 }
 
-func advancedSection(c *ui.Context, state *SettingsState, profile *config.Profile, actions SettingsActions) {
-	caption(c, locales.SettingsEffectAdvanced())
-	ui.Form(c, func() {
-		ui.Field(c, "", func() {
-			if ui.Checkbox(c, &state.Draft.Logging.Verbose, locales.VerboseLog()).Changed() && actions.SetVerbose != nil {
-				actions.SetVerbose(state.Draft.Logging.Verbose)
-			}
-		})
-		ui.Field(c, locales.ClientData(), func() {
-			ui.TextInput(c, &profile.Debug.ClientData).Placeholder(locales.ClientDataPlaceholder()).MaxWidth(fieldWidth)
-		})
-		// The device identity is hand-edited only: a wrong id is a support
-		// problem, so the window shows the values in effect and opens the file.
-		ui.Field(c, locales.DeviceID(), func() {
-			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(8).Children(func() {
-				deviceID := state.Draft.Identity.DeviceID
-				if deviceID == "" {
-					deviceID = locales.NotGenerated()
-				}
-				ui.Text(c, deviceID).FontSize(c.Theme().FontSize).TextColor(c.Theme().TextMuted)
-				if ui.Button(c, locales.OpenConfig()).Description(locales.OpenConfigDesc()).Clicked() && actions.OpenConfig != nil {
-					actions.OpenConfig()
+// localDataSection is 本机数据: the stored client data file, the device the
+// portal sees, and the settings file the [identity] section lives in. The
+// placeholder is the file the current account would use, so an empty field
+// still says where the account keeps its material.
+func localDataSection(c *ui.Context, state *SettingsState, profile *config.Profile, actions SettingsActions) {
+	ui.Column(c).Gap(6).Children(func() {
+		sectionHeading(c, locales.LocalData())
+		caption(c, locales.SettingsEffectLogin())
+		ui.Form(c, func() {
+			ui.Field(c, locales.ClientData(), func() {
+				input := ui.TextInput(c, &profile.Debug.ClientData).MaxWidth(fieldWidth)
+				if resolved, err := state.Draft.ClientDataPathFor(*profile); err == nil {
+					input.Placeholder(shortPath(resolved))
 				}
 			})
-		})
-		ui.Field(c, locales.ClientIdentity(), func() {
-			ui.Text(c, identitySummary(state.Draft.Identity)).FontSize(c.Theme().FontSize).
-				TextColor(c.Theme().TextMuted)
+			// The device identity is hand-edited only: a wrong id is a support
+			// problem, so the window shows the values in effect and opens the file.
+			ui.Field(c, locales.DeviceID(), func() {
+				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+					deviceID := state.Draft.Identity.DeviceID
+					if deviceID == "" {
+						deviceID = locales.NotGenerated()
+					}
+					ui.Text(c, deviceID).FontSize(c.Theme().FontSize).Font("monospace").TextColor(c.Theme().TextMuted)
+					if ui.Button(c, locales.OpenConfig()).Description(locales.OpenConfigDesc()).Clicked() && actions.OpenConfig != nil {
+						actions.OpenConfig()
+					}
+				})
+			})
 		})
 	})
+}
+
+// aboutSection is 关于: the release, the project and the license. The two
+// buttons open their pages in the browser; the version is the string the
+// release workflow links in.
+func aboutSection(c *ui.Context, actions SettingsActions) {
+	ui.Column(c).Gap(6).Children(func() {
+		sectionHeading(c, locales.AboutSection())
+		ui.Form(c, func() {
+			ui.Field(c, locales.VersionLabel(), func() {
+				ui.Text(c, releaseVersion()).FontSize(c.Theme().FontSize).Font("monospace")
+			})
+			ui.Field(c, locales.ProjectHome(), func() {
+				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+					ui.Text(c, projectHost).FontSize(c.Theme().FontSize).Font("monospace").TextColor(c.Theme().TextMuted)
+					if ui.Button(c, locales.CommonOpen()).Label(locales.OpenProjectDesc()).
+						Clicked() && actions.OpenURL != nil {
+						actions.OpenURL(projectURL)
+					}
+				})
+			})
+			ui.Field(c, locales.LicenseLabel(), func() {
+				ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+					ui.Text(c, licenseLine).FontSize(c.Theme().FontSize).TextColor(c.Theme().TextMuted)
+					if ui.Button(c, locales.CommonOpen()).Label(locales.ViewLicenseDesc()).
+						Clicked() && actions.OpenURL != nil {
+						actions.OpenURL(licenseURL)
+					}
+				})
+			})
+		})
+	})
+}
+
+// The project's public addresses. The host is what the window shows; the
+// buttons open the https pages.
+const (
+	projectHost = "github.com/YangtseSu/goTrust"
+	projectURL  = "https://" + projectHost
+	licenseURL  = projectURL + "/blob/main/LICENSE"
+	licenseLine = "AGPL-3.0-or-later · © 2026 Yangtse Su"
+)
+
+// releaseVersion is the built release with its tag prefix, or the source
+// build's own word.
+func releaseVersion() string {
+	value := strings.TrimSpace(buildversion.Version)
+	switch {
+	case value == "":
+		return "devel"
+	case value == "devel" || strings.HasPrefix(value, "v"):
+		return value
+	default:
+		return "v" + value
+	}
+}
+
+// shortPath replaces the user's home directory with "~", so a long default
+// path reads as the one in the documentation.
+func shortPath(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	if path == home {
+		return "~"
+	}
+	if strings.HasPrefix(path, home+string(os.PathSeparator)) {
+		return "~" + strings.TrimPrefix(path, home)
+	}
+	return path
 }
 
 // languageSection switches the language of the whole app. The picker binds a
@@ -756,28 +857,6 @@ func localeTag(index int) string {
 	default:
 		return ""
 	}
-}
-
-// identitySummary is the one-line description of the identity in effect: the
-// values that change what the portal is told, without the long id or the UA.
-func identitySummary(identity config.IdentityConfig) string {
-	osName := "Linux"
-	switch identity.OSFamily {
-	case config.IdentityOSWindows:
-		osName = "Windows"
-	case config.IdentityOSUOS:
-		osName = "UOS"
-	}
-	parts := make([]string, 0, 3)
-	add := func(value string) {
-		if strings.TrimSpace(value) != "" {
-			parts = append(parts, value)
-		}
-	}
-	add(osName)
-	add(identity.ClientVersion)
-	add(identity.ProcessName)
-	return strings.Join(parts, " · ")
 }
 
 func indexOf(values []string, value string) int {
@@ -845,7 +924,8 @@ func authMethodHint(state *SettingsState) string {
 }
 
 // terminalSection is the live 终端管理 page: the portal lists trusted
-// endpoints separately from the temporary login history. The current device is
+// endpoints separately from the temporary login history. The summary counts
+// both lists against the account's device limit, and the current device is
 // marked by selfId, exactly as the portal does.
 func terminalSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
 	caption(c, locales.SettingsEffectLive())
@@ -855,13 +935,20 @@ func terminalSection(c *ui.Context, state *SettingsState, actions SettingsAction
 			return
 		}
 
-		ui.Row(c).Wrap().AlignItems(ui.Center).Gap(8).Children(func() {
+		ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
 			if state.TerminalsKnown && state.Terminals != nil {
-				ui.Text(c, locales.TerminalCounts(len(state.Terminals.Trusted), len(state.Terminals.Temporary))).
-					FontSize(c.Theme().FontSize)
+				ui.Text(c, terminalSummary(state.Terminals)).FontSize(c.Theme().FontSize)
 			} else {
 				ui.Text(c, locales.TerminalsNotLoaded()).FontSize(c.Theme().FontSize)
 			}
+			if state.TrustKnown {
+				label := locales.TerminalSelfUntrusted()
+				if state.Trusted {
+					label = locales.TerminalSelfTrusted()
+				}
+				caption(c, "· "+label)
+			}
+			ui.Box(c).Grow(1)
 			if ui.Button(c, locales.CommonRefresh()).Description(locales.TerminalsRefreshDesc()).
 				Disabled(state.TrustBusy).Clicked() && actions.RefreshTerminals != nil {
 				actions.RefreshTerminals()
@@ -891,29 +978,54 @@ func terminalSection(c *ui.Context, state *SettingsState, actions SettingsAction
 	})
 }
 
+// terminalSummary counts the two lists, with the device limit when the portal
+// reports one: trust devices are limited per account, temporary logins are not.
+func terminalSummary(terminals *session.Terminals) string {
+	if terminals.MaxDeviceCount > 0 {
+		return locales.TerminalCountsLimit(len(terminals.Trusted), terminals.MaxDeviceCount, len(terminals.Temporary))
+	}
+	return locales.TerminalCounts(len(terminals.Trusted), len(terminals.Temporary))
+}
+
+// terminalFactWidth is one cell of the facts grid: three cells fit the page at
+// its default width, two at the minimum.
+const terminalFactWidth float32 = 180
+
 func terminalList(c *ui.Context, title string, terminals []session.Terminal, selfID string) {
 	if len(terminals) == 0 {
 		caption(c, locales.TerminalNone(title))
 		return
 	}
-	caption(c, locales.TerminalCount(title, len(terminals)))
-	for _, terminal := range terminals {
-		ui.Column(c).Gap(2).PaddingY(4).Children(func() {
-			name := strings.TrimSpace(terminal.DeviceName)
-			if name == "" {
-				name = locales.UnknownDevice()
-			}
-			ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-				ui.Text(c, name).FontSize(c.Theme().FontSize).FontWeight(600)
-				ui.Text(c, terminalState(terminal, selfID)).FontSize(textSize(c, captionScale)).
-					TextColor(c.Theme().TextMuted)
-			})
-			details := terminalDetails(terminal)
-			if details != "" {
-				caption(c, details)
-			}
+	card(c).Gap(c.Theme().Space(2)).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			sectionHeading(c, title)
+			caption(c, locales.TerminalCountTitle(len(terminals)))
 		})
+		for index, terminal := range terminals {
+			if index > 0 {
+				ui.Divider(c)
+			}
+			terminalRow(c, terminal, selfID)
+		}
+	})
+}
+
+// terminalRow is one endpoint: its name and state, then the fields the portal's
+// own page shows, so a support question can be answered from this window.
+func terminalRow(c *ui.Context, terminal session.Terminal, selfID string) {
+	theme := c.Theme()
+	name := strings.TrimSpace(terminal.DeviceName)
+	if name == "" {
+		name = locales.UnknownDevice()
 	}
+	ui.Column(c).Gap(theme.Space(1.5)).PaddingY(theme.Space(1)).Children(func() {
+		ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			ui.Text(c, name).FontSize(theme.FontSize).FontWeight(600)
+			ui.Text(c, terminalState(terminal, selfID)).FontSize(textSize(c, captionScale)).
+				TextColor(theme.TextMuted)
+		})
+		terminalFactsGrid(c, terminal)
+	})
 }
 
 // terminalState uses selfId first, as the portal marks the current device even
@@ -928,36 +1040,82 @@ func terminalState(terminal session.Terminal, selfID string) string {
 	return locales.Offline()
 }
 
-func terminalDetails(terminal session.Terminal) string {
-	parts := make([]string, 0, 3)
-	if device := terminalDevice(terminal); device != "" {
-		parts = append(parts, device)
+// terminalFact is one labelled field of an endpoint.
+type terminalFact struct {
+	label string
+	value string
+}
+
+// terminalFacts are the portal's user-facing fields, in the order its own page
+// reads. A value the portal does not report is a dash, never an empty cell.
+func terminalFacts(terminal session.Terminal) []terminalFact {
+	return []terminalFact{
+		{locales.TerminalType(), terminalKind(terminal)},
+		{locales.TerminalOS(), orDash(strings.TrimSpace(terminal.OS + " " + terminal.OSVersion))},
+		{locales.Browser(), orDash(terminal.Browser)},
+		{locales.TerminalLastLogin(), orDash(terminal.LastLoginTime)},
+		{locales.TerminalLoginAddress(), terminalAddress(terminal)},
+		{locales.TerminalZones(), orDash(strings.Join(terminal.NetworkZoneList, " / "))},
+		{locales.DeviceID(), terminalDeviceID(terminal)},
 	}
+}
+
+// terminalFactsGrid lays the fields out in wrapping cells.
+func terminalFactsGrid(c *ui.Context, terminal session.Terminal) {
+	ui.Row(c).Wrap().AlignItems(ui.Start).Gap(c.Theme().Space(2)).Children(func() {
+		for _, fact := range terminalFacts(terminal) {
+			ui.Column(c).Gap(2).Width(terminalFactWidth).Shrink(0).Children(func() {
+				caption(c, fact.label)
+				ui.Text(c, fact.value).FontSize(c.Theme().FontSize).MaxLines(2)
+			})
+		}
+	})
+}
+
+// terminalKind names the portal's client-or-browser values; an unknown value is
+// shown as the portal sent it.
+func terminalKind(terminal session.Terminal) string {
+	switch terminal.DeviceType {
+	case "browser":
+		return locales.Browser()
+	case "":
+		return "—"
+	case "client":
+		return locales.TerminalClient()
+	default:
+		return terminal.DeviceType
+	}
+}
+
+// terminalAddress is the login location with the address beside it, and 内网
+// for the portal's "LAN".
+func terminalAddress(terminal session.Terminal) string {
 	location := strings.TrimSpace(terminal.LastLoginAddress)
 	if location == "LAN" {
 		location = locales.Intranet()
 	}
-	if location != "" {
-		if terminal.LastLoginIP != "" {
-			location += "（" + terminal.LastLoginIP + "）"
+	if ip := strings.TrimSpace(terminal.LastLoginIP); ip != "" {
+		if location == "" {
+			return ip
 		}
-		parts = append(parts, location)
+		return location + "（" + ip + "）"
 	}
-	if terminal.LastLoginTime != "" {
-		parts = append(parts, terminal.LastLoginTime)
-	}
-	return strings.Join(parts, " · ")
+	return orDash(location)
 }
 
-func terminalDevice(terminal session.Terminal) string {
-	if terminal.DeviceType == "browser" {
-		if terminal.Browser != "" {
-			return locales.BrowserSuffix(terminal.Browser)
-		}
-		return locales.Browser()
+// terminalDeviceID prefers the portal's device database id: it is the value its
+// own page shows, and the row id is the fallback.
+func terminalDeviceID(terminal session.Terminal) string {
+	if id := strings.TrimSpace(terminal.DevDBID); id != "" {
+		return id
 	}
-	if terminal.OS != "" {
-		return strings.TrimSpace(terminal.OS + " " + terminal.OSVersion)
+	return orDash(terminal.ID)
+}
+
+// orDash keeps a cell readable when the portal left the field out.
+func orDash(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "—"
 	}
-	return terminal.DeviceType
+	return value
 }

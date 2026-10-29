@@ -64,16 +64,6 @@ func (msgs Messages) CommonSubmit() string {
 	return Catalog.Format(msgs.locale, "commonSubmit", nil)
 }
 
-// CommonClose says "关闭"
-// in the language the app shows.
-func CommonClose() string { return In(i18n.Locale()).CommonClose() }
-
-// CommonClose says "关闭"
-// in the language of msgs.
-func (msgs Messages) CommonClose() string {
-	return Catalog.Format(msgs.locale, "commonClose", nil)
-}
-
 // CommonSave says "保存"
 // in the language the app shows.
 func CommonSave() string { return In(i18n.Locale()).CommonSave() }
@@ -246,16 +236,6 @@ func (msgs Messages) SessionHeldMinutes(minutes int) string {
 	return Catalog.Format(msgs.locale, "sessionHeldMinutes", map[string]any{"minutes": minutes})
 }
 
-// KeepAliveAgo says "{seconds, plural, other {保活 # 秒前}}"
-// in the language the app shows.
-func KeepAliveAgo(seconds int) string { return In(i18n.Locale()).KeepAliveAgo(seconds) }
-
-// KeepAliveAgo says "{seconds, plural, other {保活 # 秒前}}"
-// in the language of msgs.
-func (msgs Messages) KeepAliveAgo(seconds int) string {
-	return Catalog.Format(msgs.locale, "keepAliveAgo", map[string]any{"seconds": seconds})
-}
-
 // KeepAliveAgoValue says "{seconds, plural, other {# 秒前}}"
 // in the language the app shows.
 func KeepAliveAgoValue(seconds int) string { return In(i18n.Locale()).KeepAliveAgoValue(seconds) }
@@ -314,16 +294,6 @@ func ProfileMissing(name string) string { return In(i18n.Locale()).ProfileMissin
 // in the language of msgs.
 func (msgs Messages) ProfileMissing(name string) string {
 	return Catalog.Format(msgs.locale, "profileMissing", map[string]any{"name": name})
-}
-
-// ProfileChanged says "账户已切换，请重新填写"
-// in the language the app shows.
-func ProfileChanged() string { return In(i18n.Locale()).ProfileChanged() }
-
-// ProfileChanged says "账户已切换，请重新填写"
-// in the language of msgs.
-func (msgs Messages) ProfileChanged() string {
-	return Catalog.Format(msgs.locale, "profileChanged", nil)
 }
 
 // ProblemAddress says "请填写网关地址"
@@ -454,16 +424,6 @@ func (msgs Messages) KeepAliveDNSFailed(target string) string {
 	return Catalog.Format(msgs.locale, "keepAliveDNSFailed", map[string]any{"target": target})
 }
 
-// KeepAliveLine says "保活 {summary}"
-// in the language the app shows.
-func KeepAliveLine(summary string) string { return In(i18n.Locale()).KeepAliveLine(summary) }
-
-// KeepAliveLine says "保活 {summary}"
-// in the language of msgs.
-func (msgs Messages) KeepAliveLine(summary string) string {
-	return Catalog.Format(msgs.locale, "keepAliveLine", map[string]any{"summary": summary})
-}
-
 // CaptchaTitle says "点击图形验证码"
 // in the language the app shows.
 func CaptchaTitle() string { return In(i18n.Locale()).CaptchaTitle() }
@@ -564,16 +524,6 @@ func (msgs Messages) Retry() string {
 	return Catalog.Format(msgs.locale, "retry", nil)
 }
 
-// SettingsAction says "设置"
-// in the language the app shows.
-func SettingsAction() string { return In(i18n.Locale()).SettingsAction() }
-
-// SettingsAction says "设置"
-// in the language of msgs.
-func (msgs Messages) SettingsAction() string {
-	return Catalog.Format(msgs.locale, "settingsAction", nil)
-}
-
 // CopyPAC says "复制 PAC 地址"
 // in the language the app shows.
 func CopyPAC() string { return In(i18n.Locale()).CopyPAC() }
@@ -584,44 +534,14 @@ func (msgs Messages) CopyPAC() string {
 	return Catalog.Format(msgs.locale, "copyPAC", nil)
 }
 
-// CopyConfig says "复制配置"
+// CopyConfig says "复制代理配置"
 // in the language the app shows.
 func CopyConfig() string { return In(i18n.Locale()).CopyConfig() }
 
-// CopyConfig says "复制配置"
+// CopyConfig says "复制代理配置"
 // in the language of msgs.
 func (msgs Messages) CopyConfig() string {
 	return Catalog.Format(msgs.locale, "copyConfig", nil)
-}
-
-// MoreActions says "更多操作"
-// in the language the app shows.
-func MoreActions() string { return In(i18n.Locale()).MoreActions() }
-
-// MoreActions says "更多操作"
-// in the language of msgs.
-func (msgs Messages) MoreActions() string {
-	return Catalog.Format(msgs.locale, "moreActions", nil)
-}
-
-// OpenLogsMenu says "打开日志目录"
-// in the language the app shows.
-func OpenLogsMenu() string { return In(i18n.Locale()).OpenLogsMenu() }
-
-// OpenLogsMenu says "打开日志目录"
-// in the language of msgs.
-func (msgs Messages) OpenLogsMenu() string {
-	return Catalog.Format(msgs.locale, "openLogsMenu", nil)
-}
-
-// Quit says "退出"
-// in the language the app shows.
-func Quit() string { return In(i18n.Locale()).Quit() }
-
-// Quit says "退出"
-// in the language of msgs.
-func (msgs Messages) Quit() string {
-	return Catalog.Format(msgs.locale, "quit", nil)
 }
 
 // ClashPlain says "Clash 片段"
@@ -804,36 +724,6 @@ func ResourceMenu(title string) string { return In(i18n.Locale()).ResourceMenu(t
 // in the language of msgs.
 func (msgs Messages) ResourceMenu(title string) string {
 	return Catalog.Format(msgs.locale, "resourceMenu", map[string]any{"title": title})
-}
-
-// ProxyDisabled says "代理端口尚未开启"
-// in the language the app shows.
-func ProxyDisabled() string { return In(i18n.Locale()).ProxyDisabled() }
-
-// ProxyDisabled says "代理端口尚未开启"
-// in the language of msgs.
-func (msgs Messages) ProxyDisabled() string {
-	return Catalog.Format(msgs.locale, "proxyDisabled", nil)
-}
-
-// ProxyListening says "代理监听 {address}"
-// in the language the app shows.
-func ProxyListening(address string) string { return In(i18n.Locale()).ProxyListening(address) }
-
-// ProxyListening says "代理监听 {address}"
-// in the language of msgs.
-func (msgs Messages) ProxyListening(address string) string {
-	return Catalog.Format(msgs.locale, "proxyListening", map[string]any{"address": address})
-}
-
-// PacURL says "PAC {url}"
-// in the language the app shows.
-func PacURL(url string) string { return In(i18n.Locale()).PacURL(url) }
-
-// PacURL says "PAC {url}"
-// in the language of msgs.
-func (msgs Messages) PacURL(url string) string {
-	return Catalog.Format(msgs.locale, "pacURL", map[string]any{"url": url})
 }
 
 // TrayStatusOnline says "已连接"
@@ -1630,16 +1520,6 @@ func (msgs Messages) RuleHistory(value int) string {
 	return Catalog.Format(msgs.locale, "ruleHistory", map[string]any{"value": value})
 }
 
-// SettingsTitle says "设置"
-// in the language the app shows.
-func SettingsTitle() string { return In(i18n.Locale()).SettingsTitle() }
-
-// SettingsTitle says "设置"
-// in the language of msgs.
-func (msgs Messages) SettingsTitle() string {
-	return Catalog.Format(msgs.locale, "settingsTitle", nil)
-}
-
 // PageDashboard says "仪表盘"
 // in the language the app shows.
 func PageDashboard() string { return In(i18n.Locale()).PageDashboard() }
@@ -1798,16 +1678,6 @@ func SettingsEffectStartup() string { return In(i18n.Locale()).SettingsEffectSta
 // in the language of msgs.
 func (msgs Messages) SettingsEffectStartup() string {
 	return Catalog.Format(msgs.locale, "settingsEffectStartup", nil)
-}
-
-// SettingsEffectAdvanced says "详细日志立即生效；客户端数据下次登录生效"
-// in the language the app shows.
-func SettingsEffectAdvanced() string { return In(i18n.Locale()).SettingsEffectAdvanced() }
-
-// SettingsEffectAdvanced says "详细日志立即生效；客户端数据下次登录生效"
-// in the language of msgs.
-func (msgs Messages) SettingsEffectAdvanced() string {
-	return Catalog.Format(msgs.locale, "settingsEffectAdvanced", nil)
 }
 
 // SettingsEffectLive says "随连接实时读取"
@@ -2020,16 +1890,6 @@ func (msgs Messages) ErrBind(bind string, error string) string {
 	return Catalog.Format(msgs.locale, "errBind", map[string]any{"bind": bind, "error": error})
 }
 
-// ConnectionSection says "连接"
-// in the language the app shows.
-func ConnectionSection() string { return In(i18n.Locale()).ConnectionSection() }
-
-// ConnectionSection says "连接"
-// in the language of msgs.
-func (msgs Messages) ConnectionSection() string {
-	return Catalog.Format(msgs.locale, "connectionSection", nil)
-}
-
 // AuthMethod says "认证方式"
 // in the language the app shows.
 func AuthMethod() string { return In(i18n.Locale()).AuthMethod() }
@@ -2140,16 +2000,6 @@ func (msgs Messages) TotpRemoved() string {
 	return Catalog.Format(msgs.locale, "totpRemoved", nil)
 }
 
-// ProxySection says "代理"
-// in the language the app shows.
-func ProxySection() string { return In(i18n.Locale()).ProxySection() }
-
-// ProxySection says "代理"
-// in the language of msgs.
-func (msgs Messages) ProxySection() string {
-	return Catalog.Format(msgs.locale, "proxySection", nil)
-}
-
 // Socks5Listen says "SOCKS5 监听"
 // in the language the app shows.
 func Socks5Listen() string { return In(i18n.Locale()).Socks5Listen() }
@@ -2178,16 +2028,6 @@ func ProxyHint() string { return In(i18n.Locale()).ProxyHint() }
 // in the language of msgs.
 func (msgs Messages) ProxyHint() string {
 	return Catalog.Format(msgs.locale, "proxyHint", nil)
-}
-
-// KeepAliveSection says "保活"
-// in the language the app shows.
-func KeepAliveSection() string { return In(i18n.Locale()).KeepAliveSection() }
-
-// KeepAliveSection says "保活"
-// in the language of msgs.
-func (msgs Messages) KeepAliveSection() string {
-	return Catalog.Format(msgs.locale, "keepAliveSection", nil)
 }
 
 // KeepAliveEnable says "启用保活"
@@ -2250,16 +2090,6 @@ func (msgs Messages) KeepAliveTargetsHint() string {
 	return Catalog.Format(msgs.locale, "keepAliveTargetsHint", nil)
 }
 
-// StartupSection says "启动"
-// in the language the app shows.
-func StartupSection() string { return In(i18n.Locale()).StartupSection() }
-
-// StartupSection says "启动"
-// in the language of msgs.
-func (msgs Messages) StartupSection() string {
-	return Catalog.Format(msgs.locale, "startupSection", nil)
-}
-
 // Autostart says "登录系统时启动"
 // in the language the app shows.
 func Autostart() string { return In(i18n.Locale()).Autostart() }
@@ -2300,16 +2130,6 @@ func (msgs Messages) AutoReconnect() string {
 	return Catalog.Format(msgs.locale, "autoReconnect", nil)
 }
 
-// AdvancedSection says "高级"
-// in the language the app shows.
-func AdvancedSection() string { return In(i18n.Locale()).AdvancedSection() }
-
-// AdvancedSection says "高级"
-// in the language of msgs.
-func (msgs Messages) AdvancedSection() string {
-	return Catalog.Format(msgs.locale, "advancedSection", nil)
-}
-
 // VerboseLog says "详细日志"
 // in the language the app shows.
 func VerboseLog() string { return In(i18n.Locale()).VerboseLog() }
@@ -2318,16 +2138,6 @@ func VerboseLog() string { return In(i18n.Locale()).VerboseLog() }
 // in the language of msgs.
 func (msgs Messages) VerboseLog() string {
 	return Catalog.Format(msgs.locale, "verboseLog", nil)
-}
-
-// LogDir says "日志目录"
-// in the language the app shows.
-func LogDir() string { return In(i18n.Locale()).LogDir() }
-
-// LogDir says "日志目录"
-// in the language of msgs.
-func (msgs Messages) LogDir() string {
-	return Catalog.Format(msgs.locale, "logDir", nil)
 }
 
 // OpenLogsDesc says "打开日志目录"
@@ -2340,24 +2150,14 @@ func (msgs Messages) OpenLogsDesc() string {
 	return Catalog.Format(msgs.locale, "openLogsDesc", nil)
 }
 
-// ClientData says "客户端数据"
+// ClientData says "数据文件"
 // in the language the app shows.
 func ClientData() string { return In(i18n.Locale()).ClientData() }
 
-// ClientData says "客户端数据"
+// ClientData says "数据文件"
 // in the language of msgs.
 func (msgs Messages) ClientData() string {
 	return Catalog.Format(msgs.locale, "clientData", nil)
-}
-
-// ClientDataPlaceholder says "留空则按账户名存放"
-// in the language the app shows.
-func ClientDataPlaceholder() string { return In(i18n.Locale()).ClientDataPlaceholder() }
-
-// ClientDataPlaceholder says "留空则按账户名存放"
-// in the language of msgs.
-func (msgs Messages) ClientDataPlaceholder() string {
-	return Catalog.Format(msgs.locale, "clientDataPlaceholder", nil)
 }
 
 // NotGenerated says "尚未生成"
@@ -2388,16 +2188,6 @@ func OpenConfigDesc() string { return In(i18n.Locale()).OpenConfigDesc() }
 // in the language of msgs.
 func (msgs Messages) OpenConfigDesc() string {
 	return Catalog.Format(msgs.locale, "openConfigDesc", nil)
-}
-
-// ClientIdentity says "客户端标识"
-// in the language the app shows.
-func ClientIdentity() string { return In(i18n.Locale()).ClientIdentity() }
-
-// ClientIdentity says "客户端标识"
-// in the language of msgs.
-func (msgs Messages) ClientIdentity() string {
-	return Catalog.Format(msgs.locale, "clientIdentity", nil)
 }
 
 // Language says "语言"
@@ -2534,16 +2324,6 @@ func (msgs Messages) MethodsDiscoverFailed(error string) string {
 	return Catalog.Format(msgs.locale, "methodsDiscoverFailed", map[string]any{"error": error})
 }
 
-// TerminalsTab says "终端"
-// in the language the app shows.
-func TerminalsTab() string { return In(i18n.Locale()).TerminalsTab() }
-
-// TerminalsTab says "终端"
-// in the language of msgs.
-func (msgs Messages) TerminalsTab() string {
-	return Catalog.Format(msgs.locale, "terminalsTab", nil)
-}
-
 // TerminalsOffline says "连接后可读取终端列表"
 // in the language the app shows.
 func TerminalsOffline() string { return In(i18n.Locale()).TerminalsOffline() }
@@ -2636,18 +2416,6 @@ func (msgs Messages) TerminalNone(title string) string {
 	return Catalog.Format(msgs.locale, "terminalNone", map[string]any{"title": title})
 }
 
-// TerminalCount says "{title}（{count, number}）"
-// in the language the app shows.
-func TerminalCount(title string, count int) string {
-	return In(i18n.Locale()).TerminalCount(title, count)
-}
-
-// TerminalCount says "{title}（{count, number}）"
-// in the language of msgs.
-func (msgs Messages) TerminalCount(title string, count int) string {
-	return Catalog.Format(msgs.locale, "terminalCount", map[string]any{"title": title, "count": count})
-}
-
 // UnknownDevice says "未知设备"
 // in the language the app shows.
 func UnknownDevice() string { return In(i18n.Locale()).UnknownDevice() }
@@ -2698,16 +2466,6 @@ func (msgs Messages) Intranet() string {
 	return Catalog.Format(msgs.locale, "intranet", nil)
 }
 
-// BrowserSuffix says "{browser} 浏览器"
-// in the language the app shows.
-func BrowserSuffix(browser string) string { return In(i18n.Locale()).BrowserSuffix(browser) }
-
-// BrowserSuffix says "{browser} 浏览器"
-// in the language of msgs.
-func (msgs Messages) BrowserSuffix(browser string) string {
-	return Catalog.Format(msgs.locale, "browserSuffix", map[string]any{"browser": browser})
-}
-
 // Browser says "浏览器"
 // in the language the app shows.
 func Browser() string { return In(i18n.Locale()).Browser() }
@@ -2716,16 +2474,6 @@ func Browser() string { return In(i18n.Locale()).Browser() }
 // in the language of msgs.
 func (msgs Messages) Browser() string {
 	return Catalog.Format(msgs.locale, "browser", nil)
-}
-
-// WindowSettingsTitle says "goTrust 设置"
-// in the language the app shows.
-func WindowSettingsTitle() string { return In(i18n.Locale()).WindowSettingsTitle() }
-
-// WindowSettingsTitle says "goTrust 设置"
-// in the language of msgs.
-func (msgs Messages) WindowSettingsTitle() string {
-	return Catalog.Format(msgs.locale, "windowSettingsTitle", nil)
 }
 
 // PacOff says "PAC 地址尚未开启"
@@ -3276,4 +3024,268 @@ func PasswordSubmitting() string { return In(i18n.Locale()).PasswordSubmitting()
 // in the language of msgs.
 func (msgs Messages) PasswordSubmitting() string {
 	return Catalog.Format(msgs.locale, "passwordSubmitting", nil)
+}
+
+// PacAddress says "PAC 地址"
+// in the language the app shows.
+func PacAddress() string { return In(i18n.Locale()).PacAddress() }
+
+// PacAddress says "PAC 地址"
+// in the language of msgs.
+func (msgs Messages) PacAddress() string {
+	return Catalog.Format(msgs.locale, "pacAddress", nil)
+}
+
+// ClashMihomo says "Clash / Mihomo"
+// in the language the app shows.
+func ClashMihomo() string { return In(i18n.Locale()).ClashMihomo() }
+
+// ClashMihomo says "Clash / Mihomo"
+// in the language of msgs.
+func (msgs Messages) ClashMihomo() string {
+	return Catalog.Format(msgs.locale, "clashMihomo", nil)
+}
+
+// CopyClashDesc says "复制 Clash 配置"
+// in the language the app shows.
+func CopyClashDesc() string { return In(i18n.Locale()).CopyClashDesc() }
+
+// CopyClashDesc says "复制 Clash 配置"
+// in the language of msgs.
+func (msgs Messages) CopyClashDesc() string {
+	return Catalog.Format(msgs.locale, "copyClashDesc", nil)
+}
+
+// TerminalType says "类型"
+// in the language the app shows.
+func TerminalType() string { return In(i18n.Locale()).TerminalType() }
+
+// TerminalType says "类型"
+// in the language of msgs.
+func (msgs Messages) TerminalType() string {
+	return Catalog.Format(msgs.locale, "terminalType", nil)
+}
+
+// TerminalOS says "系统"
+// in the language the app shows.
+func TerminalOS() string { return In(i18n.Locale()).TerminalOS() }
+
+// TerminalOS says "系统"
+// in the language of msgs.
+func (msgs Messages) TerminalOS() string {
+	return Catalog.Format(msgs.locale, "terminalOS", nil)
+}
+
+// TerminalClient says "客户端"
+// in the language the app shows.
+func TerminalClient() string { return In(i18n.Locale()).TerminalClient() }
+
+// TerminalClient says "客户端"
+// in the language of msgs.
+func (msgs Messages) TerminalClient() string {
+	return Catalog.Format(msgs.locale, "terminalClient", nil)
+}
+
+// TerminalLastLogin says "最近登录"
+// in the language the app shows.
+func TerminalLastLogin() string { return In(i18n.Locale()).TerminalLastLogin() }
+
+// TerminalLastLogin says "最近登录"
+// in the language of msgs.
+func (msgs Messages) TerminalLastLogin() string {
+	return Catalog.Format(msgs.locale, "terminalLastLogin", nil)
+}
+
+// TerminalLoginAddress says "登录地址"
+// in the language the app shows.
+func TerminalLoginAddress() string { return In(i18n.Locale()).TerminalLoginAddress() }
+
+// TerminalLoginAddress says "登录地址"
+// in the language of msgs.
+func (msgs Messages) TerminalLoginAddress() string {
+	return Catalog.Format(msgs.locale, "terminalLoginAddress", nil)
+}
+
+// TerminalZones says "网络区域"
+// in the language the app shows.
+func TerminalZones() string { return In(i18n.Locale()).TerminalZones() }
+
+// TerminalZones says "网络区域"
+// in the language of msgs.
+func (msgs Messages) TerminalZones() string {
+	return Catalog.Format(msgs.locale, "terminalZones", nil)
+}
+
+// TerminalCountsLimit says "授信终端 {trusted, number}/{limit, number} · 临时终端 {temporary, number}"
+// in the language the app shows.
+func TerminalCountsLimit(trusted int, limit int, temporary int) string {
+	return In(i18n.Locale()).TerminalCountsLimit(trusted, limit, temporary)
+}
+
+// TerminalCountsLimit says "授信终端 {trusted, number}/{limit, number} · 临时终端 {temporary, number}"
+// in the language of msgs.
+func (msgs Messages) TerminalCountsLimit(trusted int, limit int, temporary int) string {
+	return Catalog.Format(msgs.locale, "terminalCountsLimit", map[string]any{"trusted": trusted, "limit": limit, "temporary": temporary})
+}
+
+// TerminalCountTitle says "{count, number} 台"
+// in the language the app shows.
+func TerminalCountTitle(count int) string { return In(i18n.Locale()).TerminalCountTitle(count) }
+
+// TerminalCountTitle says "{count, number} 台"
+// in the language of msgs.
+func (msgs Messages) TerminalCountTitle(count int) string {
+	return Catalog.Format(msgs.locale, "terminalCountTitle", map[string]any{"count": count})
+}
+
+// TerminalSelfTrusted says "本机已信任"
+// in the language the app shows.
+func TerminalSelfTrusted() string { return In(i18n.Locale()).TerminalSelfTrusted() }
+
+// TerminalSelfTrusted says "本机已信任"
+// in the language of msgs.
+func (msgs Messages) TerminalSelfTrusted() string {
+	return Catalog.Format(msgs.locale, "terminalSelfTrusted", nil)
+}
+
+// TerminalSelfUntrusted says "本机未信任"
+// in the language the app shows.
+func TerminalSelfUntrusted() string { return In(i18n.Locale()).TerminalSelfUntrusted() }
+
+// TerminalSelfUntrusted says "本机未信任"
+// in the language of msgs.
+func (msgs Messages) TerminalSelfUntrusted() string {
+	return Catalog.Format(msgs.locale, "terminalSelfUntrusted", nil)
+}
+
+// LogFilter says "过滤日志"
+// in the language the app shows.
+func LogFilter() string { return In(i18n.Locale()).LogFilter() }
+
+// LogFilter says "过滤日志"
+// in the language of msgs.
+func (msgs Messages) LogFilter() string {
+	return Catalog.Format(msgs.locale, "logFilter", nil)
+}
+
+// LogAutoScroll says "自动滚动"
+// in the language the app shows.
+func LogAutoScroll() string { return In(i18n.Locale()).LogAutoScroll() }
+
+// LogAutoScroll says "自动滚动"
+// in the language of msgs.
+func (msgs Messages) LogAutoScroll() string {
+	return Catalog.Format(msgs.locale, "logAutoScroll", nil)
+}
+
+// LogEmpty says "日志还没有内容"
+// in the language the app shows.
+func LogEmpty() string { return In(i18n.Locale()).LogEmpty() }
+
+// LogEmpty says "日志还没有内容"
+// in the language of msgs.
+func (msgs Messages) LogEmpty() string {
+	return Catalog.Format(msgs.locale, "logEmpty", nil)
+}
+
+// OpenLogsDir says "打开目录"
+// in the language the app shows.
+func OpenLogsDir() string { return In(i18n.Locale()).OpenLogsDir() }
+
+// OpenLogsDir says "打开目录"
+// in the language of msgs.
+func (msgs Messages) OpenLogsDir() string {
+	return Catalog.Format(msgs.locale, "openLogsDir", nil)
+}
+
+// CopyLogsDesc says "复制当前显示的日志"
+// in the language the app shows.
+func CopyLogsDesc() string { return In(i18n.Locale()).CopyLogsDesc() }
+
+// CopyLogsDesc says "复制当前显示的日志"
+// in the language of msgs.
+func (msgs Messages) CopyLogsDesc() string {
+	return Catalog.Format(msgs.locale, "copyLogsDesc", nil)
+}
+
+// LogTailFooter says "{path} · 最后 {count, number} 行"
+// in the language the app shows.
+func LogTailFooter(path string, count int) string {
+	return In(i18n.Locale()).LogTailFooter(path, count)
+}
+
+// LogTailFooter says "{path} · 最后 {count, number} 行"
+// in the language of msgs.
+func (msgs Messages) LogTailFooter(path string, count int) string {
+	return Catalog.Format(msgs.locale, "logTailFooter", map[string]any{"path": path, "count": count})
+}
+
+// LocalData says "本机数据"
+// in the language the app shows.
+func LocalData() string { return In(i18n.Locale()).LocalData() }
+
+// LocalData says "本机数据"
+// in the language of msgs.
+func (msgs Messages) LocalData() string {
+	return Catalog.Format(msgs.locale, "localData", nil)
+}
+
+// AboutSection says "关于"
+// in the language the app shows.
+func AboutSection() string { return In(i18n.Locale()).AboutSection() }
+
+// AboutSection says "关于"
+// in the language of msgs.
+func (msgs Messages) AboutSection() string {
+	return Catalog.Format(msgs.locale, "aboutSection", nil)
+}
+
+// VersionLabel says "版本"
+// in the language the app shows.
+func VersionLabel() string { return In(i18n.Locale()).VersionLabel() }
+
+// VersionLabel says "版本"
+// in the language of msgs.
+func (msgs Messages) VersionLabel() string {
+	return Catalog.Format(msgs.locale, "versionLabel", nil)
+}
+
+// ProjectHome says "项目主页"
+// in the language the app shows.
+func ProjectHome() string { return In(i18n.Locale()).ProjectHome() }
+
+// ProjectHome says "项目主页"
+// in the language of msgs.
+func (msgs Messages) ProjectHome() string {
+	return Catalog.Format(msgs.locale, "projectHome", nil)
+}
+
+// LicenseLabel says "许可证"
+// in the language the app shows.
+func LicenseLabel() string { return In(i18n.Locale()).LicenseLabel() }
+
+// LicenseLabel says "许可证"
+// in the language of msgs.
+func (msgs Messages) LicenseLabel() string {
+	return Catalog.Format(msgs.locale, "licenseLabel", nil)
+}
+
+// OpenProjectDesc says "在浏览器中打开项目主页"
+// in the language the app shows.
+func OpenProjectDesc() string { return In(i18n.Locale()).OpenProjectDesc() }
+
+// OpenProjectDesc says "在浏览器中打开项目主页"
+// in the language of msgs.
+func (msgs Messages) OpenProjectDesc() string {
+	return Catalog.Format(msgs.locale, "openProjectDesc", nil)
+}
+
+// ViewLicenseDesc says "在浏览器中打开许可证"
+// in the language the app shows.
+func ViewLicenseDesc() string { return In(i18n.Locale()).ViewLicenseDesc() }
+
+// ViewLicenseDesc says "在浏览器中打开许可证"
+// in the language of msgs.
+func (msgs Messages) ViewLicenseDesc() string {
+	return Catalog.Format(msgs.locale, "viewLicenseDesc", nil)
 }

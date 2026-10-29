@@ -243,113 +243,113 @@ func renderStates(t *testing.T, dir, lang string) {
 
 	// The window's pages, one at a time: each is rendered, because a page that
 	// does not fit shows its own scroll rather than the next page's fields.
-	pageView := func(name string, chosen Page, mutate func(*SettingsState)) {
+	savePage := func(name string, view *State) {
 		t.Helper()
-		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
-		if mutate != nil {
-			mutate(state)
-		}
-		view := &State{Settings: state, Config: cfg, Page: chosen}
 		save(name, ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 900, 740))
 	}
 
-	t.Run("settings", func(t *testing.T) { pageView("settings", PageAccount, nil) })
-	t.Run("settings-proxy", func(t *testing.T) { pageView("settings-proxy", PageProxy, nil) })
-	t.Run("settings-keepalive", func(t *testing.T) {
-		pageView("settings-keepalive", PageKeepAlive, nil)
-	})
-	t.Run("settings-startup", func(t *testing.T) { pageView("settings-startup", PageStartup, nil) })
-	t.Run("settings-advanced", func(t *testing.T) {
-		pageView("settings-advanced", PageSettings, nil)
-	})
-	t.Run("settings-terminal", func(t *testing.T) {
-		pageView("settings-terminal", PageTerminals, func(state *SettingsState) {
-			state.Online = true
-			state.TrustKnown = true
-			state.Trusted = true
-			state.TerminalsKnown = true
-			state.Terminals = &session.Terminals{
-				SelfID: "self",
-				Trusted: []session.Terminal{{
-					ID: "trusted-1", DeviceName: "desk-01", OS: "Linux", OSVersion: "7.3.0",
-					LastLoginAddress: "LAN", LastLoginIP: "192.0.2.10", LastLoginTime: "2026-10-25 13:17:59",
-				}},
-				Temporary: []session.Terminal{{
-					ID: "self", DeviceName: "desk-02", OS: "Linux", OSVersion: "7.3.0",
-					OnlineStatus: true, LastLoginAddress: "LAN", LastLoginIP: "192.0.2.11",
-					LastLoginTime: "2026-10-25 13:17:59",
-				}},
-			}
-		})
-	})
-	// 多账户: two accounts, the live one and the one the draft edits.
+	t.Run("settings", func(t *testing.T) { savePage("settings", renderPageState(cfg, PageAccount)) })
+	t.Run("settings-proxy", func(t *testing.T) { savePage("settings-proxy", renderPageState(cfg, PageProxy)) })
+	t.Run("settings-keepalive", func(t *testing.T) { savePage("settings-keepalive", renderPageState(cfg, PageKeepAlive)) })
+	t.Run("settings-startup", func(t *testing.T) { savePage("settings-startup", renderPageState(cfg, PageStartup)) })
+	t.Run("settings-terminal", func(t *testing.T) { savePage("settings-terminal", renderPageState(cfg, PageTerminals)) })
+	t.Run("settings-about", func(t *testing.T) { savePage("settings-about", renderPageState(cfg, PageSettings)) })
+	t.Run("settings-logs", func(t *testing.T) { savePage("settings-logs", renderPageState(cfg, PageLogs)) })
 	t.Run("settings-accounts", func(t *testing.T) {
-		pageView("settings-accounts", PageProfiles, func(state *SettingsState) {
-			if _, err := state.Draft.AddProfile("工作"); err != nil {
-				t.Fatalf("add account: %v", err)
-			}
-			state.Draft.Profiles[1].Server.Address = "vpn2.example.com"
-			state.refresh()
-			state.Select(1)
-		})
+		view := renderPageState(cfg, PageProfiles)
+		state := view.Settings
+		if _, err := state.Draft.AddProfile("工作"); err != nil {
+			t.Fatalf("add account: %v", err)
+		}
+		state.Draft.Profiles[1].Server.Address = "vpn2.example.com"
+		view.Config = state.Draft
+		state.refresh()
+		state.Select(1)
+		savePage("settings-accounts", view)
 	})
 	t.Run("settings-unsaved", func(t *testing.T) {
-		pageView("settings-unsaved", PageAccount, func(state *SettingsState) {
-			state.Gateways[0] = "vpn.example.com:8443"
-		})
+		view := renderPageState(cfg, PageAccount)
+		view.Settings.Gateways[0] = "vpn.example.com:8443"
+		savePage("settings-unsaved", view)
 	})
 	// The minimum width the window declares, tall enough for the whole page:
 	// the labels that share a row with a button are the ones that overflow.
 	t.Run("settings-narrow", func(t *testing.T) {
-		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
-		view := &State{Settings: state, Config: cfg, Page: PageAccount}
+		view := renderPageState(cfg, PageAccount)
 		save("settings-narrow", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 720, 560))
 	})
+	t.Run("settings-small", func(t *testing.T) {
+		view := renderPageState(cfg, PageAccount)
+		save("settings-small", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 720, 560))
+	})
+	t.Run("account-fresh", func(t *testing.T) {
+		savePage("account-fresh", renderPageState(fresh, PageAccount))
+	})
+	t.Run("account-fresh-small", func(t *testing.T) {
+		view := renderPageState(fresh, PageAccount)
+		save("account-fresh-small", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 720, 560))
+	})
+	t.Run("settings-password", func(t *testing.T) {
+		view := renderPageState(cfg, PageAccount)
+		view.Settings.Password = &PasswordPrompt{Username: "alice", Strategy: passwordTestStrategy()}
+		savePage("settings-password", view)
+	})
+	t.Run("settings-dark", func(t *testing.T) {
+		view := renderPageState(cfg, PageAccount)
+		tester := ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 900, 740)
+		tester.SetDark(true)
+		save("settings-dark", tester)
+	})
+
+	// Every page at the minimum size and in the dark appearance: the layout
+	// and the forms are what break there, not the strings the other tests
+	// assert.
+	pages := []struct {
+		name string
+		page Page
+	}{
+		{"dashboard", PageDashboard},
+		{"account", PageAccount},
+		{"proxy", PageProxy},
+		{"keepalive", PageKeepAlive},
+		{"startup", PageStartup},
+		{"terminals", PageTerminals},
+		{"logs", PageLogs},
+		{"settings", PageSettings},
+		{"profiles", PageProfiles},
+	}
+	for _, page := range pages {
+		name, chosen := page.name, page.page
+		t.Run("page-"+name+"-small", func(t *testing.T) {
+			view := renderPageState(cfg, chosen)
+			save("page-"+name+"-small", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 720, 560))
+		})
+		t.Run("page-"+name+"-dark", func(t *testing.T) {
+			view := renderPageState(cfg, chosen)
+			tester := ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 900, 740)
+			tester.SetDark(true)
+			save("page-"+name+"-dark", tester)
+		})
+	}
 
 	t.Run("main-online-dark", func(t *testing.T) {
-		state := State{
-			Session:   online,
-			Config:    cfg,
-			Listeners: renderListeners(),
-		}
+		state := State{Session: online, Config: cfg, Listeners: renderListeners()}
 		tester := ui.NewTester(View(&state, Actions{}), 900, 740)
 		tester.SetDark(true)
 		save("main-online-dark", tester)
 	})
-
 	t.Run("main-small", func(t *testing.T) {
-		state := State{
-			Session:   online,
-			Config:    cfg,
-			Listeners: renderListeners(),
-		}
+		state := State{Session: online, Config: cfg, Listeners: renderListeners()}
 		save("main-small", ui.NewTester(View(&state, Actions{}), 720, 560))
 	})
-
 	t.Run("main-resources", func(t *testing.T) {
-		state := State{
-			Session:   longGrant(),
-			Config:    cfg,
-			Listeners: renderListeners(),
-		}
+		state := State{Session: longGrant(), Config: cfg, Listeners: renderListeners()}
 		save("main-resources", ui.NewTester(View(&state, Actions{}), 900, 740))
 	})
-
 	t.Run("main-resources-small", func(t *testing.T) {
-		state := State{
-			Session:   longGrant(),
-			Config:    cfg,
-			Listeners: renderListeners(),
-		}
+		state := State{Session: longGrant(), Config: cfg, Listeners: renderListeners()}
 		save("main-resources-small", ui.NewTester(View(&state, Actions{}), 720, 560))
 	})
-
-	t.Run("settings-small", func(t *testing.T) {
-		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
-		view := &State{Settings: state, Config: cfg, Page: PageAccount}
-		save("settings-small", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 720, 560))
-	})
-
 	t.Run("main-password-small", func(t *testing.T) {
 		state := State{
 			Session: session.State{Phase: session.PhaseConnecting, Detail: "网关要求重置密码"},
@@ -364,34 +364,63 @@ func renderStates(t *testing.T, dir, lang string) {
 		}
 		save("main-password-small", ui.NewTester(View(&state, Actions{}), 720, 560))
 	})
+}
 
-	t.Run("account-fresh", func(t *testing.T) {
-		state := NewSettingsState(fresh, "/home/user/.local/state/gotrust")
-		view := &State{Settings: state, Config: fresh, Page: PageAccount}
-		save("account-fresh", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 900, 740))
-	})
+// renderPageState is one page with a live session behind it: the terminal
+// list, the log tail and the PAC address a user sees after a successful login.
+func renderPageState(cfg config.Config, page Page) *State {
+	state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
+	state.LogPath = "/home/user/.local/state/gotrust/gotrust.log"
+	state.LogLines = renderLogLines()
+	state.Online = true
+	state.TrustKnown = true
+	state.Trusted = true
+	state.TerminalsKnown = true
+	state.Terminals = &session.Terminals{
+		SelfID:         "self",
+		MaxDeviceCount: 5,
+		DeviceTrusted:  true,
+		Trusted: []session.Terminal{
+			{
+				ID: "self", DevDBID: "6f1c9a2e4b7d", DeviceName: "本机", DeviceType: "client",
+				OS: "Linux", OSVersion: "6.12", OnlineStatus: true,
+				LastLoginAddress: "LAN", LastLoginIP: "192.0.2.10",
+				LastLoginTime: "2026-10-29 09:12", NetworkZoneList: []string{"校园网", "无线"},
+			},
+			{
+				ID: "other", DevDBID: "2a9d51c0f8e3", DeviceName: "MacBook Pro", DeviceType: "browser",
+				OS: "macOS", OSVersion: "15.1", Browser: "Safari 18",
+				LastLoginAddress: "203.0.113.7", LastLoginTime: "2026-10-28 21:40",
+				NetworkZoneList: []string{"互联网"},
+			},
+		},
+		Temporary: []session.Terminal{{
+			ID: "temp", DevDBID: "7c3e0f9a1b62", DeviceName: "Windows 工作站", DeviceType: "client",
+			OS: "Windows", OSVersion: "11 23H2", LastLoginAddress: "198.51.100.24",
+			LastLoginTime: "2026-10-28 18:05", NetworkZoneList: []string{"互联网"},
+		}},
+	}
+	return &State{
+		Settings:  state,
+		Config:    cfg,
+		Page:      page,
+		PACURL:    "http://127.0.0.1:1082/pac",
+		Session:   session.State{Phase: session.PhaseOnline, ClientIP: "203.0.113.4", Since: time.Now().Add(-17 * time.Minute)},
+		Listeners: renderListeners(),
+	}
+}
 
-	t.Run("account-fresh-small", func(t *testing.T) {
-		state := NewSettingsState(fresh, "/home/user/.local/state/gotrust")
-		view := &State{Settings: state, Config: fresh, Page: PageAccount}
-		save("account-fresh-small", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 720, 560))
-	})
-
-	t.Run("settings-password", func(t *testing.T) {
-		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
-		state.Online = true
-		state.Password = &PasswordPrompt{Username: "alice", Strategy: passwordTestStrategy()}
-		view := &State{Settings: state, Config: cfg, Page: PageAccount}
-		save("settings-password", ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 900, 740))
-	})
-
-	t.Run("settings-dark", func(t *testing.T) {
-		state := NewSettingsState(cfg, "/home/user/.local/state/gotrust")
-		view := &State{Settings: state, Config: cfg, Page: PageAccount}
-		tester := ui.NewTester(View(view, Actions{Settings: SettingsActions{}}), 900, 740)
-		tester.SetDark(true)
-		save("settings-dark", tester)
-	})
+// renderLogLines is a short tail for the 日志 page: what the app writes after a
+// login, without any account material.
+func renderLogLines() []string {
+	return []string{
+		"2026/10/29 09:12:03 goTrust ready; profile 默认",
+		"2026/10/29 09:12:03 keep-alive: 1 target(s) every 1m30s",
+		"2026/10/29 09:12:04 Perform GET /passport/v1/security/queryDevice status=trust",
+		"2026/10/29 09:12:04 SOCKS5 listening on 127.0.0.1:1080",
+		"2026/10/29 09:12:04 HTTP proxy listening on 127.0.0.1:1081",
+		"2026/10/29 09:12:05 keep-alive: example.com answered 200",
+	}
 }
 
 // renderListeners are the two listeners a session binds by default.
