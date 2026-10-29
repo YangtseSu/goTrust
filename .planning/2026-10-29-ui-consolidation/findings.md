@@ -353,10 +353,11 @@ status
   `State` under `a.mu.RLock` and the view then reads the shared
   `*SettingsState`; meanwhile `onSessionState` (`internal/gui/gui.go:1099`)
   and the terminal/trust/password completions write its fields under `a.mu`
-  from goroutines. A `-race` probe of the same pattern reports
-  `DATA RACE Read at ui/pages.go:261` (`settings.Online`). The docs' rule is
-  `Window.Update` for state changed off the main thread (`ui/views.md:170-175`);
-  `Invalidate` alone is for state the app guards itself.
+  from goroutines. A standalone `-race` probe of the same pattern reports
+  `DATA RACE Read at ui/pages.go:261` (`settings.Online`); the suite's own
+  `-race` run never overlapped the two. The docs' rule is `Window.Update` for
+  state changed off the main thread (`ui/views.md:170-175`); `Invalidate`
+  alone is for state the app guards itself.
 - **`themeFor` drops desktop preferences.** `c.Theme()` is
   `LightTheme()/DarkTheme()` plus `Theme.follow(preferences)`
   (`ui/runtime.go:516-521`, `ui/preferences.go:50-77`), which scales
@@ -379,3 +380,12 @@ status
   `OnClick` listener answers activation, which AppIndicator sends on a double
   click (`docs/menus.md:428-432`). Our pattern matches the documented one;
   the README wording does not.
+
+Revision (2026-10-29, after moving to v0.7.3): `loop.go` and the UI package
+are unchanged from v0.7.2, so every fact above still holds. The Phase 14 sweep
+found one writer the list above missed: `storeChangedPassword` writes
+`Draft.Profiles[].Auth.Password` from the session's password-change callback
+(the login goroutine). `discoverAuth` and `setLogLines` already published on
+the main thread, but through `mygo.RunOnMain` directly; both now use the app's
+`runOnUI` seam. The draft's writes are pinned by a seam test, because the test
+suite alone never overlapped a render with a session callback.

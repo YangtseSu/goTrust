@@ -13,12 +13,12 @@ separate chip.
 
 ## Next Step
 
-Start Phase 14: move the settings draft's writes to the main thread. It is the
-one real bug of the mygo usage audit; Phases 15-19 follow in the order below.
+Start Phase 15: keep the desktop's theme preferences. Phase 14 (the settings
+draft on the main thread) is complete; Phases 16-19 follow in order.
 
 ## Current Phase
 
-Phase 14 pending; Phases 15-19 planned after it.
+Phase 14 complete; Phases 15-19 pending.
 
 ## Decisions already made
 
@@ -56,13 +56,16 @@ Phase 14 pending; Phases 15-19 planned after it.
 - **No memory display.** The traffic card (Phase 7) is built: the proxy's
   last minute of up/down throughput, between the session and the resources.
 - **mygo usage audit (2026-10-29).** All 116 pages under the mygo docs were
-  read and every used API checked against the pinned v0.7.2. The settings
-  draft is main-thread state: background results are delivered through
-  `RunOnMain`, not written under `a.mu` while the frame reads them. The theme
-  starts from `*c.Theme()`, so the desktop's text scale survives. The sidebar
-  is a real tab list (`FocusGroup`). Icon-only controls carry a tooltip and
-  the row action is a menu button. A second launch restores the window. The
-  tray keeps its menu on click, and the docs say so.
+  read and every used API checked against the pinned v0.7.2. After the pin
+  moved to v0.7.3, the used APIs were re-checked against that release: its UI
+  package and `loop.go` are unchanged, so the findings hold. The settings
+  draft is main-thread state: background results are delivered through the
+  app's `runOnUI` seam (`mygo.RunOnMain` in production), not written under
+  `a.mu` while the frame reads them. The theme starts from `*c.Theme()`, so
+  the desktop's text scale survives. The sidebar is a real tab list
+  (`FocusGroup`). Icon-only controls carry a tooltip and the row action is a
+  menu button. A second launch restores the window. The tray keeps its menu on
+  click, and the docs say so.
 - **Design reference:** `docs/mockup.html`, the layout the views follow. The
   status/button study that chose the stateful control was
   `/tmp/gotrust-status-variants.html` (variant B); its outcome is recorded in
@@ -717,34 +720,60 @@ Notes:
 
 ### Phase 14: The settings draft lives on the main thread
 
-The audit found a data race. The GUI publishes `SettingsState` fields from
-session and network goroutines under `a.mu`, while the frame reads the same
-fields without it: `openWindow` copies `State` under `RLock`, then the view
-reads the shared `*SettingsState`. `go test -race` reproduces it with a read
-at `ui/pages.go:261` (`settings.Online`); the writers are `onSessionState`
-(`internal/gui/gui.go:1099`) and the completions of `refreshSettingsTerminals`,
-`setSettingsTrusted` and `submitSettingsPassword`.
+The audit found a structural data race. The GUI published `SettingsState`
+fields from session and network goroutines under `a.mu`, while the frame read
+the same fields without it: `openWindow` copies `State` under `RLock`, then the
+view reads the shared `*SettingsState`. The writers were `onSessionState`
+(`settings.Online`) and the completions of `refreshSettingsTerminals`,
+`setSettingsTrusted` and `submitSettingsPassword`. The sweep also found
+`storeChangedPassword`, which a password change on the login goroutine wrote
+into the draft, and `discoverAuth`/`setLogLines` hopped to `RunOnMain` on their
+own instead of through one seam.
 
-- [ ] Give `app` a `runOnUI func(func())` seam, defaulting to
-      `mygo.RunOnMain`; tests replace it with an inline call. (The seam is
-      required: the GUI tests call `onSessionState` without `App.Run`, where
-      `RunOnMain` would wait for a loop that never starts.)
-- [ ] Publish `settings.Online` through the seam in `onSessionState`.
-- [ ] Publish the three async completions through the seam, as `discoverAuth`
-      already does; the busy flags they set before the goroutine stay on the
-      main thread.
-- [ ] Sweep for other `SettingsState` writes from goroutines; `setLogLines`
-      and `discoverAuth` are already correct.
-- [ ] Test: `onSessionState` runs its settings write through the injected
-      seam; `go test -race ./internal/gui ./ui` is clean.
-- **Status:** pending.
+- [x] Give `app` a `runOnUI func(func())` seam, set to `mygo.RunOnMain` in
+      `Run`; tests replace it with an inline call. (The seam is required: the
+      GUI tests call `onSessionState` without `App.Run`, where `RunOnMain`
+      would wait for a loop that never starts.)
+- [x] Publish `settings.Online` through the seam in `onSessionState`.
+- [x] Publish the async completions of `openSettingsPassword`,
+      `refreshSettingsTerminals`, `setSettingsTrusted` and
+      `submitSettingsPassword` through the seam; the busy flags they set
+      before the goroutine stay on the main thread.
+- [x] Sweep for other `SettingsState` writes from goroutines:
+      `storeChangedPassword` now publishes through the seam, and
+      `discoverAuth` and `setLogLines` use the same seam instead of calling
+      `mygo.RunOnMain` directly.
+- [x] Test: `onSessionState` runs its settings write through the injected
+      seam; the changed-password test asserts the same; `go test -race
+      ./internal/gui ./ui` is clean.
+- **Status:** complete.
 
 Notes:
 
-- Once every writer is on the main thread, `a.mu` no longer guards the draft's
-  fields; it stays for `a.view`, `a.cfg` and the two pointers.
-- The seam's default is `mygo.RunOnMain` (fail-safe: a missed injection blocks
-  in a test instead of hiding the race).
+- mygo moved to v0.7.3 with this phase. Its UI package and `loop.go` are
+  unchanged from v0.7.2 (`RunOnMain` still blocks until the main thread runs
+  the function and drops it after quit), so the audit's findings hold; the
+  plan's version references and `AGENTS.md` now name v0.7.3.
+- The seam is `app.runOnUI`, called through `app.onUI`. `Run` sets it to
+  `mygo.RunOnMain`; the fallback in `onUI` is the same function, so a missed
+  production assignment fails safe. `promptTestApp` installs the inline call;
+  the tests that publish assert the seam ran.
+- `setSettingsTrusted` now starts its follow-up `refreshSettingsTerminals` on
+  the main thread. The old `go a.refreshSettingsTerminals()` wrote the draft
+  from the completion goroutine before starting its own request.
+- Inside the seam closures the draft fields no longer take `a.mu`; the pointer
+  reads around them keep it, as does `a.view` and `a.cfg`. The work the
+  closures do is a handful of field assignments plus `invalidate`.
+- The current test suite did not reproduce the race on its own: `go test -race
+  ./internal/gui ./ui` was already clean before the change, because no test
+  rendered a frame while a session callback wrote. The race is structural and
+  is now pinned by the seam test rather than by a reproduction.
+- Real window: a test build under headless mutter with `auto_connect` and a
+  temporary profile logged `goTrust ready`, started the login, and published
+  its failure through the seam; SIGTERM exited 0. The known Gtk-CRITICAL
+  scale-factor warning from mygo/AppIndicator remains.
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` and
+  `reuse lint` pass.
 
 ### Phase 15: The theme keeps the desktop's preferences
 

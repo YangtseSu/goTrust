@@ -31,6 +31,38 @@ The review settled these points:
   with more than one account), 退出 — no 设置;
 - no memory display; the traffic card is optional.
 
+### Phase 14: The settings draft on the main thread
+
+- **Status:** complete
+- mygo moved to v0.7.3 (`go.mod`, `go.sum`, `AGENTS.md`, `docs/design.md`,
+  `docs/agent-ui-testing.md`); its UI package and `loop.go` match v0.7.2, so
+  the audit's findings and phases 15-19 still hold.
+- `app.runOnUI` is the seam: `Run` sets `mygo.RunOnMain`, `app.onUI` calls it,
+  and tests install an inline call (`promptTestApp`). The fallback without the
+  seam is `mygo.RunOnMain`, so a missed production assignment fails safe.
+- `onSessionState` publishes `settings.Online` through the seam; the
+  completions of `openSettingsPassword`, `refreshSettingsTerminals`,
+  `setSettingsTrusted` and `submitSettingsPassword` do the same. The sweep
+  found `storeChangedPassword` writing the draft's password from the login
+  goroutine; it now publishes through the seam too. `discoverAuth` and
+  `setLogLines` switched from calling `mygo.RunOnMain` directly to the seam.
+- `setSettingsTrusted` now calls `refreshSettingsTerminals` on the main thread
+  when the request succeeds, instead of starting it as a goroutine that would
+  write the draft off-thread.
+- The draft fields no longer take `a.mu` inside those closures; the pointer
+  reads keep it, and `a.mu` still guards `a.view` and `a.cfg`.
+- Tests: `TestSessionStatePublishesOnlineThroughTheUISeam`; the changed
+  password test asserts its draft write goes through the seam. Before the
+  change the suite's `go test -race ./internal/gui ./ui` stayed clean because
+  no test overlapped a render with a session callback; the seam test pins the
+  invariant instead.
+- Real window: a test build under headless mutter with `auto_connect` and a
+  temporary profile logged `goTrust ready`, started the login, published its
+  failure through the seam and exited 0 on SIGTERM (the known Gtk-CRITICAL
+  scale warning only).
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .`,
+  `reuse lint`.
+
 ### Phase 1: Single-window shell and page state
 
 - **Status:** complete
