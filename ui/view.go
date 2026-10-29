@@ -509,7 +509,7 @@ func titleBar(c *ui.Context, actions Actions) {
 func windowControl(c *ui.Context, glyph, label string, click func()) {
 	theme := c.Theme()
 	p := paletteOf(c)
-	button := ui.ButtonBase(c).Size(26, 26).Radius(theme.Radius).Label(label)
+	button := ui.ButtonBase(c).Size(26, 26).Radius(theme.Radius).Label(label).Tooltip(label)
 	ink := p.muted
 	if button.Hovered() {
 		button.Background(p.hover)
@@ -534,7 +534,7 @@ func themeButton(c *ui.Context, actions Actions) {
 		label = locales.ThemeSwitchToLight()
 		glyph = "☀"
 	}
-	button := ui.ButtonBase(c).Size(26, 26).Radius(theme.Radius).Label(label)
+	button := ui.ButtonBase(c).Size(26, 26).Radius(theme.Radius).Label(label).Tooltip(label)
 	ink := p.muted
 	if button.Hovered() {
 		button.Background(p.hover)
@@ -706,8 +706,8 @@ func powerControl(c *ui.Context, state *State, actions Actions) {
 	look := powerAppearance(theme, state.Session.Phase)
 	disabled := !phaseActive(state.Session.Phase) && state.Busy
 	button := ui.ButtonBase(c).Size(powerSize, powerSize).Radius(powerSize / 2).
-		AlignItems(ui.Center).Justify(ui.Center).Label(look.label).Background(look.fill).
-		Disabled(disabled)
+		AlignItems(ui.Center).Justify(ui.Center).Label(look.label).Tooltip(look.label).
+		Background(look.fill).Disabled(disabled)
 	if button.Hovered() && !disabled {
 		// Ending a session turns the button red before the click; starting one
 		// only deepens the accent, because the next step is still a start.
@@ -1114,8 +1114,8 @@ func resourceRow(c *ui.Context, entry session.ResourceEntry, actions Actions) {
 			caption(c, entry.Detail).MaxLines(1).Shrink(0)
 		}
 		menu := ui.Icon(c, iconRowMenu).Size(resourceIconSize, resourceIconSize).Shrink(0).
-			TextColor(c.Theme().TextMuted).Padding(4).
-			Label(locales.ResourceMenu(entry.Title))
+			TextColor(c.Theme().TextMuted).Padding(4).Role(ui.RoleMenuButton).
+			Label(locales.ResourceMenu(entry.Title)).Tooltip(locales.ResourceMenu(entry.Title))
 		menu.Menu(func(menu *ui.Menu) {
 			if menu.Item(locales.CommonOpen()).Disabled(entry.URL == "").Chosen() && actions.OpenResource != nil {
 				actions.OpenResource(entry.URL)

@@ -226,6 +226,10 @@ an entry in its decisions table. The layout they describe is
   views render in place; its fields are written on the toolkit's main thread
   only (background results publish through `app.runOnUI`), because the frame
   reads them without a lock.
+* Icon-only controls name themselves: the window controls, the appearance
+  switch, the power control and a resource row's menu glyph carry their label
+  as the accessible name and show it as a tooltip on hover or keyboard focus.
+  The row glyph is a menu button to assistive technology.
 * The render harness (`TestRenderEveryState`) is the acceptance instrument for a
   layout change; the tester (`ui.NewTester`) proves behaviour. The real-window
   checks and their limits are in `docs/agent-ui-testing.md`.

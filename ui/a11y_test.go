@@ -4,6 +4,7 @@
 package ui
 
 import (
+	"image"
 	"testing"
 	"time"
 
@@ -231,5 +232,92 @@ func TestActionResultsShowAsToasts(t *testing.T) {
 	tester.Frame()
 	if tester.HasText("打开失败: no browser") {
 		t.Fatal("the toast outlived its timeout")
+	}
+}
+
+// changedPixels counts the pixels of before and after that differ inside r.
+func changedPixels(before, after *image.RGBA, r ui.Rect) int {
+	changed := 0
+	for y := int(r.Y); y < int(r.Y+r.H); y++ {
+		for x := int(r.X); x < int(r.X+r.W); x++ {
+			if !image.Pt(x, y).In(before.Bounds()) || !image.Pt(x, y).In(after.Bounds()) {
+				continue
+			}
+			if before.RGBAAt(x, y) != after.RGBAAt(x, y) {
+				changed++
+			}
+		}
+	}
+	return changed
+}
+
+// A focused icon-only control shows its label as a tooltip above itself.
+// Texts() carries accessible labels too, so the tooltip is checked on the
+// frame itself: the band above the power control is painted only when the tip
+// shows, outside the focus ring.
+func TestPowerControlShowsItsTooltipOnFocus(t *testing.T) {
+	state := State{
+		Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
+		Config:  config.Default(),
+	}
+	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
+	tester.Frame()
+	control, ok := tester.Find(locales.Connect())
+	if !ok {
+		t.Fatal("the power control was not found")
+	}
+	before := tester.Image()
+
+	for range 10 {
+		tester.Key(0, ui.KeyTab)
+		tester.Frame()
+		if tester.Focused(locales.Connect()) {
+			break
+		}
+	}
+	if !tester.Focused(locales.Connect()) {
+		t.Fatal("Tab never reached the power control")
+	}
+	after := tester.Image()
+
+	// The tip sits 6 DIP above the control; the band ends above the focus ring.
+	band := ui.Rect{X: control.X - 40, Y: control.Y - 40, W: control.W + 80, H: 30}
+	if changed := changedPixels(before, after, band); changed == 0 {
+		t.Fatal("no tooltip was painted above the focused power control")
+	}
+}
+
+// The row's menu glyph is a menu button: Tab reaches it and Enter opens the
+// menu, as it does for a focused menu button.
+func TestResourceRowMenuIsReachableFromTheKeyboard(t *testing.T) {
+	state := State{
+		Session: session.State{
+			Phase:    session.PhaseOnline,
+			Detail:   "vpn.example.com:443",
+			ClientIP: "192.0.2.10",
+			Resources: session.Resources{Entries: []session.ResourceEntry{
+				{Kind: session.ResourceApp, Title: "Wiki", Detail: "Portal · web", URL: "https://wiki.example.com", Copy: "https://wiki.example.com"},
+			}},
+		},
+		Config: config.Default(),
+	}
+	label := locales.ResourceMenu("Wiki")
+	tester := ui.NewTester(View(&state, Actions{}), 900, 740)
+
+	for range 20 {
+		tester.Key(0, ui.KeyTab)
+		tester.Frame()
+		if tester.Focused(label) {
+			break
+		}
+	}
+	if !tester.Focused(label) {
+		t.Fatal("Tab never reached the row menu")
+	}
+
+	tester.Key(0, ui.KeyEnter)
+	tester.Frame()
+	if got := tester.Menu(); len(got) != 2 || got[0] != locales.CommonOpen() || got[1] != locales.CommonCopy() {
+		t.Fatalf("menu = %v, want 打开 and 复制", got)
 	}
 }
