@@ -13,12 +13,12 @@ separate chip.
 
 ## Next Step
 
-Start Phase 16: make the sidebar a real tab list. Phase 15 (the theme keeping
-the desktop's preferences) is complete; Phases 17-19 follow in order.
+Start Phase 17: give the icon-only controls their names. Phase 16 (the sidebar
+as a real tab list) is complete; Phases 18-19 follow in order.
 
 ## Current Phase
 
-Phase 15 complete; Phases 16-19 pending.
+Phase 16 complete; Phases 17-19 pending.
 
 ## Decisions already made
 
@@ -825,15 +825,39 @@ Notes:
 
 ### Phase 16: The sidebar is a real tab list
 
-`RoleTabList`/`RoleTab` promise a tab list, but every row is its own Tab stop
-and the arrows do not move; mygo's own `Tabs` wraps the list in `FocusGroup`
-(v0.7.2 `ui/base.go`).
+`RoleTabList`/`RoleTab` promised a tab list, but every row was its own Tab
+stop and the arrows did not move; mygo's own `Tabs` wraps the list in
+`FocusGroup` (v0.7.3 `ui/base.go`).
 
-- [ ] Add `.FocusGroup(ui.Vertical)` to the sidebar's tab column.
-- [ ] Update `TestMainWindowTabOrder`: Tab enters the group at the selected
+- [x] Add `.FocusGroup(ui.Vertical)` to the sidebar's tab column.
+- [x] Update `TestMainWindowTabOrder`: Tab enters the group at the selected
       tab and the next Tab leaves it; add a test that Down moves to the next
       tab and Enter activates it.
-- **Status:** pending.
+- **Status:** complete.
+
+Notes:
+
+- v0.7.3's `FocusGroup` makes the focusable descendants one Tab stop: Tab
+  enters at the element that had the focus last, else the first checked
+  `RoleTab`/`RoleRadio` (the page on screen), else the first; Up/Down move
+  among them with wrap, Home/End take the ends, and element handlers that use
+  the arrows keep them. Disabled elements never join. Nested groups are part
+  of the outer one; the sidebar has none.
+- The arrows only move the focus. `groupSelects` is set by the toggle and
+  radio groups alone, so a nav row is not chosen until Enter or Space, which
+  the row's existing shortcuts already handle.
+- Tests: `TestMainWindowTabOrder` now expects the appearance switch, the three
+  window controls, 仪表盘 once, then 连接, proving the group is one stop and
+  that the next Tab leaves it. `TestSidebarArrowsMoveTheFocusAndEnterOpensThePage`
+  moves Down to 账户 without activating anything, then presses Enter and sees
+  `ShowPage(PageAccount)`. `TestSidebarTabEntersAtTheChosenPage` starts on
+  设置 and finds Tab there, which only the checked entry can produce.
+- Real window: the test build under headless mutter logged `goTrust ready` and
+  exited 0 on SIGTERM with the group in place; the keyboard path itself is the
+  tester's engine, which the tests above exercise.
+- `docs/design.md` records the one-stop rule and the arrows.
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` and
+  `reuse lint` pass.
 
 ### Phase 17: Icon-only controls speak for themselves
 

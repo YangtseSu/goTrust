@@ -369,7 +369,9 @@ status
 - **A tab list needs `FocusGroup`.** `ui.Tabs` wraps its `RoleTabList` in
   `FocusGroup(Horizontal)` and marks tabs `Checked` (v0.7.2 `ui/base.go`);
   our sidebar has the roles but no group, so every row is its own Tab stop.
-  `Element.FocusGroup(ui.Vertical)` exists in v0.7.2.
+  `Element.FocusGroup(ui.Vertical)` exists in v0.7.2. Fixed in Phase 16: the
+  sidebar column carries it, and Tab enters at the checked row (the page on
+  screen).
 - **`Element.Menu` does not make an image a menu button.** It sets
   clickable/focusable and promotes only `RoleAuto`/`RoleButton` to
   `RoleMenuButton` (v0.7.2 `ui/menu.go:65-69`); the resource row's icon keeps

@@ -31,6 +31,23 @@ The review settled these points:
   with more than one account), 退出 — no 设置;
 - no memory display; the traffic card is optional.
 
+### Phase 16: The sidebar is a real tab list
+
+- **Status:** complete
+- The tab column now carries `.FocusGroup(ui.Vertical)`. mygo's group makes
+  the rows one Tab stop, enters at the checked `RoleTab` (the page on screen),
+  moves with Up/Down and Home/End, and leaves on the next Tab.
+- Arrows move the focus only; the row's existing Enter/Space shortcuts activate
+  it, because `groupSelects` belongs to toggle and radio groups.
+- Tests: `TestMainWindowTabOrder` (group is one stop, 仪表盘 then 连接),
+  `TestSidebarArrowsMoveTheFocusAndEnterOpensThePage` (Down to 账户, then Enter
+  opens it) and `TestSidebarTabEntersAtTheChosenPage` (设置 is the entry when it
+  is on screen, which only the checked row can produce).
+- Real window: headless mutter build logged `goTrust ready` and exited 0 on
+  SIGTERM with the group in place.
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .`,
+  `reuse lint`.
+
 ### Phase 15: The theme keeps the desktop's preferences
 
 - **Status:** complete
