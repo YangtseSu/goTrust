@@ -221,6 +221,7 @@ func sidebar(c *ui.Context, state *State, actions Actions) {
 		ui.Column(c).Width(sidebarWidth).Shrink(0).
 			Padding(theme.Space(3), theme.Space(2.5), theme.Space(2.5), theme.Space(2.5)).
 			Gap(theme.Space(0.5)).Background(paletteOf(c).sidebar).Role(ui.RoleTabList).
+			FocusGroup(ui.Vertical).
 			Children(func() {
 				navItem(c, state, actions, PageDashboard, disabled)
 				navSeparator(c)

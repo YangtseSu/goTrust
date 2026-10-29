@@ -30,7 +30,9 @@ an entry in its decisions table. The layout they describe is
 * The sidebar is the only navigation: 仪表盘, a separator, 账户, 代理, 保活,
   启动, 终端管理, 日志, 设置, 关于, then a spacer, a separator and 多账户 at
   the bottom. The active page is tinted with the accent; the rows are tabs for
-  assistive technology, and Enter or Space activates them.
+  assistive technology. The tab column is one Tab stop: Tab enters at the page
+  on screen, the Up/Down arrows move among the rows, and Enter or Space
+  activates the focused one.
 * 多账户 is quieter than the pages above it: a subdued row whose tag is the
   live account, so the account list does not read as one more step of the
   settings pages.

@@ -96,8 +96,10 @@ func TestBusyStateKeepsDisconnect(t *testing.T) {
 	}
 }
 
-// Tab reaches the navigation first, then the session control. The nav items
-// are tabs for assistive technology, so this is also the order they expose.
+// The window's Tab order: the appearance switch, the three window controls,
+// the sidebar as one stop (entered at the page on screen), then the
+// dashboard's power control. The nav items are tabs for assistive technology,
+// so this is also the order they expose.
 func TestMainWindowTabOrder(t *testing.T) {
 	state := State{
 		Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
@@ -109,7 +111,7 @@ func TestMainWindowTabOrder(t *testing.T) {
 	for _, want := range []string{
 		locales.ThemeSwitchToDark(),
 		locales.WindowMinimize(), locales.WindowMaximize(), locales.WindowClose(),
-		"仪表盘", "账户", "代理", "保活", "启动", "终端管理", "日志", "设置", "关于", "多账户",
+		"仪表盘",
 		"连接",
 	} {
 		tester.Key(0, ui.KeyTab)
@@ -118,6 +120,65 @@ func TestMainWindowTabOrder(t *testing.T) {
 			t.Fatalf("Tab did not reach %q", want)
 		}
 	}
+}
+
+// The sidebar is a vertical tab list: Tab enters it once, at the page on
+// screen, Down moves the focus among the rows without choosing one, and Enter
+// opens the page under the focus.
+func TestSidebarArrowsMoveTheFocusAndEnterOpensThePage(t *testing.T) {
+	state := State{
+		Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
+		Config:  config.Default(),
+	}
+	var shown *Page
+	tester := ui.NewTester(View(&state, Actions{
+		ShowPage: func(page Page) { shown = &page },
+	}), 720, 560)
+
+	for range 10 {
+		tester.Key(0, ui.KeyTab)
+		tester.Frame()
+		if tester.Focused("仪表盘") {
+			break
+		}
+	}
+	if !tester.Focused("仪表盘") {
+		t.Fatal("Tab never entered the sidebar")
+	}
+
+	tester.Key(0, ui.KeyDown)
+	tester.Frame()
+	if !tester.Focused("账户") {
+		t.Fatal("Down did not move the focus to the next tab")
+	}
+	if shown != nil {
+		t.Fatalf("Down opened %q", pageLabel(*shown))
+	}
+
+	tester.Key(0, ui.KeyEnter)
+	tester.Frame()
+	if shown == nil || *shown != PageAccount {
+		t.Fatalf("Enter opened %v, want 账户", shown)
+	}
+}
+
+// Tab enters the tab list at the chosen page, not at its first row.
+func TestSidebarTabEntersAtTheChosenPage(t *testing.T) {
+	state := State{
+		Session: session.State{Phase: session.PhaseIdle, Detail: "未连接"},
+		Config:  config.Default(),
+		Page:    PageSettings,
+	}
+	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
+
+	for range 10 {
+		tester.Key(0, ui.KeyTab)
+		tester.Frame()
+		if tester.Focused("设置") {
+			return
+		}
+	}
+	t.Fatal("Tab did not enter the sidebar at 设置")
 }
 
 // The save bar is the last stop of the window: Tab reaches 放弃 and then
