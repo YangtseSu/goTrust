@@ -369,8 +369,10 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 		t.Fatalf("verbose = %v calls = %d", state.Draft.Logging.Verbose, verbose)
 	}
 
-	if tester.HasText("关闭") {
-		t.Fatal("the window still offers 关闭")
+	// The title strip's 关闭窗口 hides the window; there is no second window
+	// to close.
+	if !tester.HasText(locales.WindowClose()) {
+		t.Fatal("the title bar lost its close control")
 	}
 }
 
@@ -543,6 +545,22 @@ func TestSettingsKeepAliveSwitchUpdatesTheProfile(t *testing.T) {
 	}
 	if state.Draft.Profiles[0].Keep.IsEnabled() {
 		t.Fatal("clicking the switch did not disable the keep-alive")
+	}
+}
+
+// 终端管理 shows its cards and the zero counts before a session exists, so
+// the page keeps its shape while it waits for the portal.
+func TestTerminalsPageShowsEmptyCardsOffline(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	state.Online = false
+	_, tester := newShell(t, state, SettingsActions{}, PageTerminals)
+	for _, want := range []string{
+		"授信终端 0 · 临时终端 0",
+		"授信终端", "临时终端", "0 台", "连接后可读取终端列表",
+	} {
+		if !tester.HasText(want) {
+			t.Fatalf("%q is missing from the offline 终端管理; texts: %v", want, tester.Texts())
+		}
 	}
 }
 
@@ -1056,7 +1074,7 @@ func TestSettingsPageShowsLocalDataAndAbout(t *testing.T) {
 	_, tester := newShell(t, state, actions, PageSettings)
 	for _, wanted := range []string{
 		"语言", "跟随系统", "本机数据", "数据文件", "6f1c9a2e4b7d", "打开配置文件",
-		"关于", "版本", releaseVersion(), "项目主页", projectHost, "许可证", licenseLine,
+		"关于", "goTrust " + releaseVersion(), "项目主页", projectHost, "许可证", licenseLine,
 	} {
 		if !tester.HasText(wanted) {
 			t.Fatalf("%q is missing from 设置; texts: %v", wanted, tester.Texts())

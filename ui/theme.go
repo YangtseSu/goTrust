@@ -263,6 +263,23 @@ func panelHeading(c *ui.Context, text string) ui.Element {
 	return ui.Text(c, text).FontSize(textSize(c, panelScale)).Bold().Role(ui.RoleHeading).Level(2)
 }
 
+// formColumn lays a card's fields out top to bottom with the mockup's 14 DIP
+// between them.
+func formColumn(c *ui.Context, children func()) {
+	ui.Column(c).Gap(c.Theme().Space(3.5)).Children(children)
+}
+
+// formField is one field of a card: its label above the control, muted and at
+// caption size, as the mockup draws it.
+func formField(c *ui.Context, label string, children func()) {
+	ui.Column(c).Gap(c.Theme().Space(1.5)).Children(func() {
+		if label != "" {
+			ui.Text(c, label).FontSize(textSize(c, captionScale)).TextColor(c.Theme().TextMuted)
+		}
+		children()
+	})
+}
+
 // sectionHeading names a group inside a window.
 func sectionHeading(c *ui.Context, text string) ui.Element {
 	return ui.Text(c, text).FontSize(c.Theme().FontSize).FontWeight(600).Role(ui.RoleHeading).Level(2)

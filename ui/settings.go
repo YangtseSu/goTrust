@@ -612,24 +612,24 @@ const fieldWidth = 360
 const methodPickerWidth = 240
 
 func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActions, profile *config.Profile, index int) {
-	ui.Form(c, func() {
-		ui.Field(c, locales.FieldGateway(), func() {
+	formColumn(c, func() {
+		formField(c, locales.FieldGateway(), func() {
 			ui.TextInput(c, &state.Gateways[index]).Placeholder("vpn.example.com:443")
 		})
-		ui.Field(c, locales.FieldUsername(), func() {
+		formField(c, locales.FieldUsername(), func() {
 			ui.TextInput(c, &profile.Auth.Username)
 		})
 		// The password and 保存密码 are one row: the check box belongs to the
 		// value beside it, and the hint about a gateway that asks later is the
 		// placeholder it cannot be if it is a caption under the field.
-		ui.Field(c, locales.FieldPassword(), func() {
+		formField(c, locales.FieldPassword(), func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 				ui.TextInput(c, &profile.Auth.Password).Password().Grow(1).Shrink(1).
 					Placeholder(locales.PasswordPlaceholder())
 				ui.Checkbox(c, &profile.Auth.StorePass, locales.StorePassword())
 			})
 		})
-		ui.Field(c, locales.AuthMethod(), func() {
+		formField(c, locales.AuthMethod(), func() {
 			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(8).Children(func() {
 				options := methodOptions(state.Methods, profile.Auth.AuthType, profile.Auth.Domain)
 				chosen := methodValue(state.Methods, profile.Auth.AuthType, profile.Auth.Domain)
@@ -644,7 +644,7 @@ func connectionSection(c *ui.Context, state *SettingsState, actions SettingsActi
 			})
 			caption(c, authMethodHint(state))
 		})
-		ui.Field(c, locales.LoginDomain(), func() {
+		formField(c, locales.LoginDomain(), func() {
 			ui.TextInput(c, &profile.Auth.Domain).Placeholder("local")
 		})
 	})
@@ -689,11 +689,11 @@ func securitySection(c *ui.Context, state *SettingsState, actions Actions, profi
 
 func proxySection(c *ui.Context, state *SettingsState) {
 	caption(c, locales.SettingsEffectConnect())
-	ui.Form(c, func() {
-		ui.Field(c, locales.Socks5Listen(), func() {
+	formColumn(c, func() {
+		formField(c, locales.Socks5Listen(), func() {
 			ui.TextInput(c, &state.Draft.Proxy.SOCKS5Bind).Placeholder("127.0.0.1:1080")
 		})
-		ui.Field(c, locales.HttpListen(), func() {
+		formField(c, locales.HttpListen(), func() {
 			ui.TextInput(c, &state.Draft.Proxy.HTTPBind).Placeholder("127.0.0.1:1081")
 		})
 		caption(c, locales.ProxyHint())
@@ -706,12 +706,12 @@ func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profi
 			profile.Keep.SetEnabled(*enabled)
 		}
 		ui.Divider(c)
-		ui.Form(c, func() {
-			ui.Field(c, locales.KeepAliveInterval(), func() {
+		formColumn(c, func() {
+			formField(c, locales.KeepAliveInterval(), func() {
 				ui.TextInput(c, &profile.Keep.Interval).Placeholder("90s")
 				caption(c, locales.KeepAliveIntervalHint())
 			})
-			ui.Field(c, locales.KeepAliveTargets(), func() {
+			formField(c, locales.KeepAliveTargets(), func() {
 				ui.TextArea(c, &state.Targets[index]).Placeholder(locales.KeepAliveTargetsPlaceholder())
 				caption(c, locales.KeepAliveTargetsHint())
 			})
@@ -736,8 +736,8 @@ func startupSection(c *ui.Context, state *SettingsState, actions SettingsActions
 func localDataSection(c *ui.Context, state *SettingsState, profile *config.Profile, actions SettingsActions) {
 	card(c).Gap(rowGap).Children(func() {
 		sectionHeading(c, locales.LocalData())
-		ui.Form(c, func() {
-			ui.Field(c, locales.ClientData(), func() {
+		formColumn(c, func() {
+			formField(c, locales.ClientData(), func() {
 				input := ui.TextInput(c, &profile.Debug.ClientData)
 				if resolved, err := state.Draft.ClientDataPathFor(*profile); err == nil {
 					input.Placeholder(shortPath(resolved))
@@ -759,11 +759,14 @@ func localDataSection(c *ui.Context, state *SettingsState, profile *config.Profi
 
 func aboutSection(c *ui.Context, actions SettingsActions) {
 	theme := c.Theme()
+	p := paletteOf(c)
 	card(c).Gap(rowGap).Children(func() {
 		sectionHeading(c, locales.AboutSection())
-		rowLine(c, locales.VersionLabel(), "", func() {
-			ui.Text(c, releaseVersion()).FontSize(theme.FontSize).Font("monospace").
-				TextColor(paletteOf(c).muted)
+		ui.Column(c).AlignItems(ui.Center).Gap(theme.Space(1.5)).
+			PaddingY(theme.Space(2)).Children(func() {
+			ui.Icon(c, iconBrand).Size(48, 48).TextColor(p.accent)
+			ui.Text(c, "goTrust "+releaseVersion()).FontSize(theme.FontSize + 1).
+				FontWeight(600).TextColor(theme.Text)
 		})
 		ui.Divider(c)
 		linkRow(c, locales.ProjectHome(), projectHost, func() {
@@ -829,7 +832,7 @@ func languageSection(c *ui.Context, state *SettingsState, actions SettingsAction
 			locales.LanguageSystem(),
 			i18n.Autonym("zh"),
 			i18n.Autonym("en"),
-		).Changed() && actions.SetLocale != nil {
+		).AlignSelf(ui.Start).Changed() && actions.SetLocale != nil {
 			actions.SetLocale(localeTag(state.LocaleIndex))
 		}
 		caption(c, locales.LanguageHint())
@@ -1023,53 +1026,52 @@ func authMethodHint(state *SettingsState) string {
 // marked by selfId, exactly as the portal does.
 func terminalSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
 	caption(c, locales.SettingsEffectLive())
-	ui.Column(c).Gap(6).Children(func() {
-		if !state.Online {
-			caption(c, locales.TerminalsOffline())
-			return
+	theme := c.Theme()
+	loaded := state.Online && state.TerminalsKnown && state.Terminals != nil
+	var terminals *session.Terminals
+	if loaded {
+		terminals = state.Terminals
+	}
+
+	ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+		if loaded {
+			ui.Text(c, terminalSummary(terminals)).FontSize(theme.FontSize)
+		} else {
+			ui.Text(c, locales.TerminalCounts(0, 0)).FontSize(theme.FontSize)
 		}
-
-		ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-			if state.TerminalsKnown && state.Terminals != nil {
-				ui.Text(c, terminalSummary(state.Terminals)).FontSize(c.Theme().FontSize)
-			} else {
-				ui.Text(c, locales.TerminalsNotLoaded()).FontSize(c.Theme().FontSize)
+		if state.TrustKnown {
+			label := locales.TerminalSelfUntrusted()
+			if state.Trusted {
+				label = locales.TerminalSelfTrusted()
 			}
-			if state.TrustKnown {
-				label := locales.TerminalSelfUntrusted()
-				if state.Trusted {
-					label = locales.TerminalSelfTrusted()
-				}
-				caption(c, "· "+label)
-			}
-			ui.Box(c).Grow(1)
-			if ui.Button(c, locales.CommonRefresh()).Description(locales.TerminalsRefreshDesc()).
-				Disabled(state.TrustBusy).Clicked() && actions.RefreshTerminals != nil {
-				actions.RefreshTerminals()
-			}
-			if state.TrustKnown {
-				label := locales.Trust()
-				if state.Trusted {
-					label = locales.Untrust()
-				}
-				if ui.Button(c, label).Disabled(state.TrustBusy).Clicked() && actions.SetTrusted != nil {
-					actions.SetTrusted(!state.Trusted)
-				}
-			}
-		})
-
-		if state.TerminalsKnown && state.Terminals != nil {
-			terminalList(c, locales.TrustedTerminals(), state.Terminals.Trusted, state.Terminals.SelfID)
-			terminalList(c, locales.TemporaryTerminals(), state.Terminals.Temporary, state.Terminals.SelfID)
+			caption(c, "· "+label)
 		}
-
-		if state.TrustStatus != "" {
-			line := caption(c, state.TrustStatus)
-			if state.TrustError {
-				line.TextColor(toneInk(c.Theme(), toneDanger))
+		ui.Box(c).Grow(1)
+		if state.TrustKnown {
+			label := locales.Trust()
+			if state.Trusted {
+				label = locales.Untrust()
+			}
+			if ui.Button(c, label).Disabled(state.TrustBusy).Clicked() && actions.SetTrusted != nil {
+				actions.SetTrusted(!state.Trusted)
 			}
 		}
 	})
+
+	var trusted, temporary []session.Terminal
+	var selfID string
+	if loaded {
+		trusted, temporary, selfID = terminals.Trusted, terminals.Temporary, terminals.SelfID
+	}
+	terminalList(c, locales.TrustedTerminals(), trusted, selfID, loaded)
+	terminalList(c, locales.TemporaryTerminals(), temporary, selfID, loaded)
+
+	if state.TrustStatus != "" {
+		line := caption(c, state.TrustStatus)
+		if state.TrustError {
+			line.TextColor(toneInk(c.Theme(), toneDanger))
+		}
+	}
 }
 
 // terminalSummary counts the two lists, with the device limit when the portal
@@ -1085,16 +1087,20 @@ func terminalSummary(terminals *session.Terminals) string {
 // its default width, two at the minimum.
 const terminalFactWidth float32 = 180
 
-func terminalList(c *ui.Context, title string, terminals []session.Terminal, selfID string) {
-	if len(terminals) == 0 {
-		caption(c, locales.TerminalNone(title))
-		return
-	}
+func terminalList(c *ui.Context, title string, terminals []session.Terminal, selfID string, loaded bool) {
 	card(c).Gap(c.Theme().Space(2)).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 			sectionHeading(c, title)
 			caption(c, locales.TerminalCountTitle(len(terminals)))
 		})
+		if len(terminals) == 0 {
+			if loaded {
+				caption(c, locales.TerminalNone(title))
+			} else {
+				caption(c, locales.TerminalsOffline())
+			}
+			return
+		}
 		for index, terminal := range terminals {
 			if index > 0 {
 				ui.Divider(c)

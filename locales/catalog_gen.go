@@ -3329,3 +3329,33 @@ func ProxyListeners() string { return In(i18n.Locale()).ProxyListeners() }
 func (msgs Messages) ProxyListeners() string {
 	return Catalog.Format(msgs.locale, "proxyListeners", nil)
 }
+
+// WindowMinimize says "最小化窗口"
+// in the language the app shows.
+func WindowMinimize() string { return In(i18n.Locale()).WindowMinimize() }
+
+// WindowMinimize says "最小化窗口"
+// in the language of msgs.
+func (msgs Messages) WindowMinimize() string {
+	return Catalog.Format(msgs.locale, "windowMinimize", nil)
+}
+
+// WindowMaximize says "最大化窗口"
+// in the language the app shows.
+func WindowMaximize() string { return In(i18n.Locale()).WindowMaximize() }
+
+// WindowMaximize says "最大化窗口"
+// in the language of msgs.
+func (msgs Messages) WindowMaximize() string {
+	return Catalog.Format(msgs.locale, "windowMaximize", nil)
+}
+
+// WindowClose says "关闭窗口"
+// in the language the app shows.
+func WindowClose() string { return In(i18n.Locale()).WindowClose() }
+
+// WindowClose says "关闭窗口"
+// in the language of msgs.
+func (msgs Messages) WindowClose() string {
+	return Catalog.Format(msgs.locale, "windowClose", nil)
+}

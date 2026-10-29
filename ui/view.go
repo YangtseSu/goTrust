@@ -104,6 +104,12 @@ type Actions struct {
 	// the window without changing the page.
 	ShowPage func(Page)
 	Quit     func()
+	// The title strip draws the window's own controls, so the frame's are
+	// hidden: minimize, maximize or restore, and close, which hides the
+	// window in the tray.
+	MinimizeWindow func()
+	ToggleMaximize func()
+	CloseWindow    func()
 	// Settings are the callbacks the settings pages use on the draft.
 	Settings SettingsActions
 	// SelectProfile switches the active account. The application disconnects
@@ -174,7 +180,7 @@ func View(state *State, actions Actions) func(c *ui.Context) {
 		searchFocus := ui.Local(root, "search-focus", func() uint64 { return 0 })
 		windowShortcuts(c, state, actions, searchFocus)
 		root.Children(func() {
-			titleBar(c, activeProfileName(state.Config), actions)
+			titleBar(c, actions)
 			// A Row centers its children vertically by default; the sidebar and
 			// the content have to fill the window instead.
 			ui.Row(c).Grow(1).Shrink(1).AlignItems(ui.Stretch).Children(func() {
@@ -363,10 +369,10 @@ func saveBar(c *ui.Context, settings *SettingsState, actions SettingsActions) {
 	})
 }
 
-// TitleBarHeight is the strip a window with a hidden frame draws: the room its
-// desktop window controls sit in. The window declares it, so a view drawn in a
-// tester, where no frame reports one, still leaves the same room.
-const TitleBarHeight = 34
+// TitleBarHeight is the strip the window draws for itself now that the frame's
+// controls are hidden: the mockup's 44 DIP, with the brand, the appearance
+// switch and the three window controls.
+const TitleBarHeight = 44
 
 // windowShortcuts are the keys the window answers wherever the focus is: the
 // state's own action (Ctrl+Enter, or Cmd on a platform that has one), the way
@@ -468,33 +474,46 @@ func grantedLine(c *ui.Context, state *State) {
 // titleBar is the window's own title bar: the brand, at caption size and
 // muted, inside the room the desktop's window controls leave. The strip drags
 // the window and holds no control, so a press anywhere on it moves the window.
-func titleBar(c *ui.Context, profile string, actions Actions) {
-	bar := c.TitleBar()
-	height := bar.Height
-	if height <= 0 {
-		// Without a hidden frame there is no room to keep clear of; the strip
-		// still keeps the two windows aligned.
-		height = TitleBarHeight
-	}
+func titleBar(c *ui.Context, actions Actions) {
 	theme := c.Theme()
 	p := paletteOf(c)
+	// With HideWindowButtons the frame reserves no room; the strip is the
+	// whole title bar, from the brand to the close button.
 	ui.Column(c).Shrink(0).Children(func() {
-		ui.Row(c).Height(height).AlignItems(ui.Center).
-			Padding(0, bar.Right+windowPadding/2, 0, bar.Left+windowPadding/2).
+		ui.Row(c).Height(TitleBarHeight).AlignItems(ui.Center).Gap(theme.Space(2.5)).
+			Padding(0, theme.Space(2.5), 0, theme.Space(4)).
 			Background(p.surface).DragWindow().
 			Children(func() {
 				ui.Icon(c, iconBrand).Size(18, 18).Shrink(0).TextColor(p.accent)
-				brand := "goTrust"
-				if profile != "" {
-					brand += " · " + profile
-				}
-				ui.Text(c, brand).FontSize(theme.FontSize - 1).FontWeight(600).
+				ui.Text(c, "goTrust").FontSize(theme.FontSize - 1).FontWeight(600).
 					TextColor(theme.Text).SingleLine()
 				ui.Box(c).Grow(1)
 				themeButton(c, actions)
+				windowControl(c, "—", locales.WindowMinimize(), actions.MinimizeWindow)
+				windowControl(c, "▢", locales.WindowMaximize(), actions.ToggleMaximize)
+				windowControl(c, "×", locales.WindowClose(), actions.CloseWindow)
 			})
 		ui.Divider(c)
 	})
+}
+
+// windowControl is one of the title strip's own window buttons: 26 DIP, the
+// muted glyph, the pointer tinting the face and the glyph.
+func windowControl(c *ui.Context, glyph, label string, click func()) {
+	theme := c.Theme()
+	p := paletteOf(c)
+	button := ui.ButtonBase(c).Size(26, 26).Radius(theme.Radius).Label(label)
+	ink := p.muted
+	if button.Hovered() {
+		button.Background(p.hover)
+		ink = theme.Text
+	}
+	button.Children(func() {
+		ui.Text(c, glyph).FontSize(theme.FontSize + 1).TextColor(ink)
+	})
+	if button.Clicked() && click != nil {
+		click()
+	}
 }
 
 // themeButton flips the light and the dark appearance: the glyph is the one
@@ -509,21 +528,17 @@ func themeButton(c *ui.Context, actions Actions) {
 		glyph = "☀"
 	}
 	button := ui.ButtonBase(c).Size(26, 26).Radius(theme.Radius).Label(label)
+	ink := p.muted
 	if button.Hovered() {
 		button.Background(p.hover)
+		ink = theme.Text
 	}
 	button.Children(func() {
-		ui.Text(c, glyph).FontSize(theme.FontSize + 1).TextColor(p.muted)
+		ui.Text(c, glyph).FontSize(theme.FontSize + 1).TextColor(ink)
 	})
 	if button.Clicked() && actions.ToggleTheme != nil {
 		actions.ToggleTheme()
 	}
-}
-
-// activeProfileName is the account the window is showing, as the title bar
-// names it: the strip is the one place that stays true across every panel.
-func activeProfileName(cfg config.Config) string {
-	return locales.ProfileName(activeAccountName(cfg))
 }
 
 // activeAccountName is the live account's own name, as the sidebar's tag and

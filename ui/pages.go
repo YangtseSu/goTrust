@@ -153,37 +153,41 @@ func proxyPage(c *ui.Context, state *State, actions Actions) {
 // the PAC address and one of the three renderings of the live grant. The two
 // actions were the dashboard's copy menu before the one-window shell.
 func proxyCopySection(c *ui.Context, state *State, settings *SettingsState, actions Actions) {
-	sectionHeading(c, locales.CopyConfig())
-	ui.Form(c, func() {
-		ui.Field(c, locales.PacAddress(), func() {
-			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
+	theme := c.Theme()
+	ui.Column(c).Gap(theme.Space(2)).Children(func() {
+		sectionHeading(c, locales.CopyConfig())
+		ui.Divider(c)
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+				ui.Text(c, locales.PacAddress()).FontSize(theme.FontSize)
 				url := strings.TrimSpace(state.PACURL)
 				if url == "" {
 					caption(c, locales.PacOff())
 				} else {
-					ui.Text(c, url).FontSize(c.Theme().FontSize).Font("monospace")
-				}
-				if ui.Button(c, locales.CommonCopy()).Label(locales.CopyPAC()).
-					Disabled(url == "").Clicked() && actions.CopyPAC != nil {
-					actions.CopyPAC()
+					ui.Text(c, url).Font("monospace").FontSize(textSize(c, captionScale)).
+						TextColor(theme.TextMuted).SingleLine()
 				}
 			})
+			url := strings.TrimSpace(state.PACURL)
+			if ui.Button(c, locales.CommonCopy()).Label(locales.CopyPAC()).
+				Disabled(url == "").Clicked() && actions.CopyPAC != nil {
+				actions.CopyPAC()
+			}
 		})
-		ui.Field(c, locales.ClashMihomo(), func() {
-			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-				options := []string{locales.ClashPlain(), locales.ClashScript(), locales.ClashConfig()}
-				chosen := clashLabel(settings.ClashFormat)
-				if ui.Select(c, &chosen, options).MaxWidth(methodPickerWidth).Changed() {
-					settings.ClashFormat = clashFormat(chosen)
-				}
-				if ui.Button(c, locales.CommonCopy()).Label(locales.CopyClashDesc()).
-					Clicked() && actions.CopyClash != nil {
-					actions.CopyClash(settings.ClashFormat)
-				}
-			})
+		ui.Divider(c)
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			ui.Text(c, locales.ClashMihomo()).FontSize(theme.FontSize).Grow(1)
+			options := []string{locales.ClashPlain(), locales.ClashScript(), locales.ClashConfig()}
+			chosen := clashLabel(settings.ClashFormat)
+			if ui.Select(c, &chosen, options).Width(methodPickerWidth).Changed() {
+				settings.ClashFormat = clashFormat(chosen)
+			}
+			if ui.Button(c, locales.CommonCopy()).Label(locales.CopyClashDesc()).
+				Clicked() && actions.CopyClash != nil {
+				actions.CopyClash(settings.ClashFormat)
+			}
 		})
 	})
-
 }
 
 // clashLabel is the picker's text for one rendering.
@@ -245,7 +249,14 @@ func terminalsPage(c *ui.Context, state *State, actions Actions) {
 		return
 	}
 	pageScroll(c, func() {
-		windowHeading(c, pageLabel(PageTerminals))
+		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+			windowHeading(c, pageLabel(PageTerminals)).Grow(1)
+			if ui.Button(c, locales.CommonRefresh()).Description(locales.TerminalsRefreshDesc()).
+				Disabled(!settings.Online || settings.TrustBusy).Clicked() &&
+				actions.Settings.RefreshTerminals != nil {
+				actions.Settings.RefreshTerminals()
+			}
+		})
 		terminalSection(c, settings, actions.Settings)
 	})
 }
@@ -282,42 +293,44 @@ func logsPage(c *ui.Context, state *State, actions SettingsActions) {
 				actions.OpenLogs()
 			}
 		})
-		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
-			ui.SearchField(c, &settings.LogFilter).Label(locales.LogFilter()).Grow(1)
-			ui.Checkbox(c, &settings.LogAutoScroll, locales.LogAutoScroll())
-			if ui.Button(c, locales.CommonCopy()).Label(locales.CopyLogsDesc()).
-				Disabled(len(lines) == 0).Clicked() && actions.CopyLogs != nil {
-				actions.CopyLogs(strings.Join(lines, "\n"))
-			}
-		})
-		pane := ui.Scroll(c).Grow(1).Shrink(1).Padding(theme.Space(1.5)).
-			Border(1, p.border).Radius(theme.Radius).Background(p.logBG)
-		pane.Children(func() {
-			ui.Column(c).Gap(0).Children(func() {
-				if len(lines) == 0 {
-					caption(c, locales.LogEmpty())
-				}
-				for _, line := range lines {
-					ui.Text(c, line).Font("monospace").FontSize(textSize(c, captionScale)).
-						SingleLine().TextColor(theme.TextMuted)
-				}
-				// The anchor follows the newest line only when they changed:
-				// re-revealing it every frame would take the scrollbar away
-				// from a user reading further up.
-				anchor := ui.Box(c).Height(1)
-				if settings.LogAutoScroll && settings.logSeen != len(lines) {
-					anchor.ScrollIntoView()
+		card(c).Grow(1).Shrink(1).Gap(rowGap).Children(func() {
+			ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
+				ui.SearchField(c, &settings.LogFilter).Label(locales.LogFilter()).Grow(1)
+				ui.Checkbox(c, &settings.LogAutoScroll, locales.LogAutoScroll())
+				if ui.Button(c, locales.CommonCopy()).Label(locales.CopyLogsDesc()).
+					Disabled(len(lines) == 0).Clicked() && actions.CopyLogs != nil {
+					actions.CopyLogs(strings.Join(lines, "\n"))
 				}
 			})
+			pane := ui.Scroll(c).Grow(1).Shrink(1).Padding(theme.Space(1.5)).
+				Border(1, p.border).Radius(theme.Radius).Background(p.logBG)
+			pane.Children(func() {
+				ui.Column(c).Gap(0).Children(func() {
+					if len(lines) == 0 {
+						caption(c, locales.LogEmpty())
+					}
+					for _, line := range lines {
+						ui.Text(c, line).Font("monospace").FontSize(textSize(c, captionScale)).
+							SingleLine().TextColor(theme.TextMuted)
+					}
+					// The anchor follows the newest line only when they changed:
+					// re-revealing it every frame would take the scrollbar away
+					// from a user reading further up.
+					anchor := ui.Box(c).Height(1)
+					if settings.LogAutoScroll && settings.logSeen != len(lines) {
+						anchor.ScrollIntoView()
+					}
+				})
+			})
+			settings.logSeen = len(lines)
+			path := settings.logPath()
+			if path == "" {
+				path = locales.LogDirUnavailable()
+			} else {
+				path = shortPath(path)
+			}
+			caption(c, locales.LogTailFooter(path, LogTailLines))
 		})
-		settings.logSeen = len(lines)
-		path := settings.logPath()
-		if path == "" {
-			path = locales.LogDirUnavailable()
-		} else {
-			path = shortPath(path)
-		}
-		caption(c, locales.LogTailFooter(path, LogTailLines))
 	})
 }
 
@@ -384,8 +397,8 @@ func profilesPage(c *ui.Context, state *State, actions Actions) {
 					accountRow(c, settings, actions, index)
 				}
 			})
-			ui.Form(c, func() {
-				ui.Field(c, locales.NameField(), func() {
+			formColumn(c, func() {
+				formField(c, locales.NameField(), func() {
 					ui.TextInput(c, &settings.NameText)
 				})
 			})

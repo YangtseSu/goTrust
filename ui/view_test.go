@@ -74,7 +74,7 @@ func TestProfileSummaryShowsTheActiveAccount(t *testing.T) {
 	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 
-	if !tester.HasText("goTrust · 账户 默认") {
+	if !tester.HasText("goTrust") {
 		t.Fatalf("the active account is missing from the title bar; texts: %v", tester.Texts())
 	}
 	if !tester.HasText("vpn.example.com:443") {

@@ -326,5 +326,8 @@
   "clearLogs": "清除",
   "logsCleared": "日志已清除",
   "logClearFailed": "清除日志失败: {error}",
-  "proxyListeners": "本地监听"
+  "proxyListeners": "本地监听",
+  "windowMinimize": "最小化窗口",
+  "windowMaximize": "最大化窗口",
+  "windowClose": "关闭窗口"
 }

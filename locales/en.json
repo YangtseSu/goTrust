@@ -326,5 +326,8 @@
   "clearLogs": "Clear",
   "logsCleared": "Log cleared",
   "logClearFailed": "Failed to clear the log: {error}",
-  "proxyListeners": "Local listeners"
+  "proxyListeners": "Local listeners",
+  "windowMinimize": "Minimize window",
+  "windowMaximize": "Maximize window",
+  "windowClose": "Close window"
 }

@@ -293,15 +293,16 @@ func (a *app) openWindow(hidden bool) {
 		return
 	}
 	window := mygo.NewWindow(mygo.WindowOptions{
-		Title:          "goTrust",
-		Width:          windowWidth,
-		Height:         windowHeight,
-		MinWidth:       windowMinWidth + windowShadowWidth,
-		MinHeight:      windowMinHeight + windowShadowHeight,
-		TitleBarStyle:  mygo.TitleBarHidden,
-		TitleBarHeight: gotrustui.TitleBarHeight,
-		Transparent:    true,
-		Hidden:         hidden,
+		Title:             "goTrust",
+		Width:             windowWidth,
+		Height:            windowHeight,
+		MinWidth:          windowMinWidth + windowShadowWidth,
+		MinHeight:         windowMinHeight + windowShadowHeight,
+		TitleBarStyle:     mygo.TitleBarHidden,
+		TitleBarHeight:    gotrustui.TitleBarHeight,
+		HideWindowButtons: true,
+		Transparent:       true,
+		Hidden:            hidden,
 		Content: ui.View(func(c *ui.Context) {
 			a.mu.RLock()
 			state := a.view
@@ -356,6 +357,32 @@ func (a *app) toggleTheme() {
 	a.invalidate()
 }
 
+// minimizeWindow and toggleMaximize drive the frame from the title strip's own
+// controls; closeWindow goes through OnClose, which hides the window.
+func (a *app) minimizeWindow() {
+	if window := a.window.Load(); window != nil {
+		window.Minimize()
+	}
+}
+
+func (a *app) toggleMaximize() {
+	window := a.window.Load()
+	if window == nil {
+		return
+	}
+	if window.IsMaximized() {
+		window.Unmaximize()
+		return
+	}
+	window.Maximize()
+}
+
+func (a *app) closeWindow() {
+	if window := a.window.Load(); window != nil {
+		window.Close()
+	}
+}
+
 // showWindow reveals the window on the page it already shows. The tray icon
 // uses it, so a click never loses the page the user was reading.
 func (a *app) showWindow() {
@@ -404,14 +431,17 @@ func (a *app) openTray() bool {
 // actions are the callbacks the main window and the tray share.
 func (a *app) actions() gotrustui.Actions {
 	return gotrustui.Actions{
-		Login:         a.startLogin,
-		TrayLogin:     a.startSavedLogin,
-		Logout:        a.disconnect,
-		ShowPage:      a.showPage,
-		ToggleTheme:   a.toggleTheme,
-		SelectProfile: a.selectProfile,
-		Quit:          func() { mygo.App.Quit() },
-		Settings:      a.settingsActions(),
+		Login:          a.startLogin,
+		TrayLogin:      a.startSavedLogin,
+		Logout:         a.disconnect,
+		ShowPage:       a.showPage,
+		MinimizeWindow: a.minimizeWindow,
+		ToggleMaximize: a.toggleMaximize,
+		CloseWindow:    a.closeWindow,
+		ToggleTheme:    a.toggleTheme,
+		SelectProfile:  a.selectProfile,
+		Quit:           func() { mygo.App.Quit() },
+		Settings:       a.settingsActions(),
 
 		AddCaptchaPoint: a.addCaptchaPoint,
 		UndoCaptcha:     a.undoCaptchaPoint,
