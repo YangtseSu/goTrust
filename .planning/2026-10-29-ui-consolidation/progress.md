@@ -256,6 +256,23 @@ The review settled these points:
 - Render: `GOTRUST_RENDER_DIR` wrote 98 images after the chip change; the five
   dashboard phases, dark mode, the panel and 720×560 were checked.
 
+### Phase 13: Copy and structure parity audit
+
+- **Status:** complete
+- Compared every page, the title strip and the sidebar with the mockup.
+- Fixed: 已授权应用 and muted group counts; 搜索应用或地址 in the accessible
+  filter name; 网关; the password placeholder; 自动 without a permanent hint;
+  复制配置, SOCKS5/HTTP, Clash / Clash Script / Clash 配置, and no proxy
+  caption (the two-empty rule is an error line); the keep-alive divider;
+  当前设备/在线 chips and the four-column fact grid; 名称; danger 删除;
+  设备标识; 取消信任本机; 有未保存修改 / 放弃; the check box's baseline; the
+  dead `fieldWidth`; the English `{# device}` plural.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .`, `reuse lint`; 102 renders at 900/720, light/dark, zh/en.
+- Decisions: the traffic card stays deferred (Phase 7); the log stays a
+  plain-text tail; the toolkit metrics stay; the startup labels keep their
+  accurate wording.
+
 ### Phase 12: Captcha centering and About tagline
 
 - **Status:** complete

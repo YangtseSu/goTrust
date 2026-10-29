@@ -13,11 +13,12 @@ separate chip.
 
 ## Next Step
 
-Phase 12 is complete. The optional traffic card (Phase 7) has not been started.
+Phase 13 is complete. The traffic card (Phase 7) stays deferred; the log,
+metrics and startup labels keep their current choices.
 
 ## Current Phase
 
-Phase 12 complete; Phase 7 optional and not started.
+Phase 13 complete; Phase 7 optional and deferred.
 
 ## Decisions already made
 
@@ -615,6 +616,50 @@ Notes:
 - The About hero's padding rose to 56 DIP above and below, and the tagline
   (`aboutTagline`) sits under `goTrust <version>` in the muted ink. The
   project and license rows follow unchanged.
+
+### Phase 13: Copy and structure parity audit
+
+Every page, the title strip and the sidebar were compared again with the
+mockup; the copy and structure gaps it found are fixed.
+
+- [x] 仪表盘's resource card is 已授权应用, its group headings are a muted
+      `group count`, and the filter reads 搜索应用或地址.
+- [x] 账户's gateway label is 网关, the password placeholder is the mockup's
+      sentence, 自动 is the automatic entry, and the form carries no permanent
+      auth hint (only the discovering line).
+- [x] 代理: 复制配置, SOCKS5/HTTP labels, Clash / Clash Script / Clash 配置,
+      no caption; the two-empty rule appears as an error line only then.
+- [x] 保活: no divider between the switch row and its fields.
+- [x] 终端管理: 当前设备 and 在线/离线 chips, a four-column fact grid (two at
+      720), and 取消信任本机.
+- [x] 多账户: 名称; the delete action keeps the danger ink.
+- [x] 设置: 设备标识.
+- [x] Save bar: 有未保存修改, 放弃, 保存.
+- [x] Password row: the check box sits on the input's baseline.
+- [x] Removed the dead `fieldWidth`; the English device count is pluralized.
+- **Status:** complete.
+
+Notes:
+
+- `terminalChip` draws the mockup's pill with `successWeak`/`surface2`; the
+  current device and its online state are two chips, so a self row that the
+  portal lists offline still says 离线.
+- The render set at 900 and 720, light and dark, both languages, checked the
+  changed pages; the resource group headings, chips, four-column grid, red
+  delete, compact Clash picker and the copy card's single divider were
+  checked on the images.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint` pass. The tests pin the new copy.
+- Open, not changed: the traffic card (Phase 7); the log level picker and the
+  level column (the logger writes no level); the toolkit's 14 px body, 32 px
+  inputs and 6 px control radius against the mockup's 13/36/8; the startup
+  labels stay 登录系统时启动 / 启动后自动连接 / 断线后自动重连（最多 5 次）
+  because they describe the actual behaviour; the resource filter's visible
+  placeholder stays mygo's 搜索 because `SearchField` fixes it (the accessible
+  name is 搜索应用或地址).
+- Decisions after the audit: traffic card stays deferred (Phase 7); the log
+  keeps its plain-text tail; the toolkit metrics stay; the startup labels
+  stay the accurate ones.
 
 ## Out of scope
 
