@@ -256,6 +256,28 @@ The review settled these points:
 - Render: `GOTRUST_RENDER_DIR` wrote 98 images after the chip change; the five
   dashboard phases, dark mode, the panel and 720×560 were checked.
 
+### Phase 8: Mockup parity
+
+- **Status:** complete
+- Title bar: the shield mark, the brand and the appearance switch. The switch
+  calls `mygo.Theme.SetSource`; `themeFor` paints mygo's widgets with the
+  mockup's palette.
+- Dashboard: the resource search moved into the card header, one line at
+  900 and wrapping only when it must; it exists as soon as there is a row.
+- 账户 is two cards (连接, 安全); 设置's cards and rows fill their width; 启动,
+  保活 and 日志 use switch rows; 日志 gained 清除; 多账户 lost its footer hint;
+  项目主页/许可证 are link rows with the arrow and no button.
+- The dark palette is the mockup's (`#1e2025` content, `#23262c` cards,
+  `#1a1c21` sidebar, `#77a8fb` accent, `#5cc98a` success ...); the power
+  control uses the fixed `#16a34a/#d97706/#dc2626` fills.
+- The window is transparent and the root column clips its children to a
+  12 DIP radius; render corners are alpha and the real window starts cleanly.
+- `logging.Logger.Clear` truncates and removes rotations;
+  `TestClearTruncatesAndRemovesRotations` covers it.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint`; 98 renders; the real window's toggle and
+  clear were exercised.
+
 ### Phase 7 (optional): Traffic card
 
 - **Status:** pending (optional; confirm before starting)

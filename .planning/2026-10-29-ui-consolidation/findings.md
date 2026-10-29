@@ -252,3 +252,25 @@ status
 - **ICU groups a port.** `{port, number}` turns 38265 into `38,265`; a port is
   an identifier and is passed as a string. `TestGatewayPortIsNotGrouped` pins
   it.
+
+## Phase 8 facts
+
+- **The appearance switch is a mygo source.** `mygo.Theme.SetSource` accepts
+  `ThemeLight`/`ThemeDark`/`ThemeSystem` and changes the whole application,
+  including GTK and mygo's own palette. The app still has to call
+  `Context.SetTheme(themeFor(dark))` to paint the mockup's colours.
+- **Transparent + Clip gives four rounded corners.** GTK rounds a CSD window's
+  top only. A window created with `Transparent: true`, a frame root set to
+  `ui.Transparent` and one column with `.Radius(12).Border(…).Clip()` leaves
+  the corners transparent while GTK keeps the shadow and the window controls.
+  The render PNG's corner pixels are `srgba(0,0,0,0)`.
+- **A tester click finds the label first.** With a separate text label and a
+  `ui.Switch` sharing a name, `Tester.Click` clicks the text and nothing
+  happens. A row-level button (role switch, checked state, drawn 34×20 track)
+  is both testable and what the mockup's label-wrapped switch does.
+- **The mockup's power fills are not its tone colours.** The semantic colours
+  are text marks (`#15803d`/`#5cc98a`), while the power button uses fixed
+  `#16a34a`, `#d97706` and `#dc2626` in both appearances.
+- **The chip's mix survives the palette change.** `toneInk` still walks the
+  fill toward the far end until it clears 4.8:1 on the chip's tint; the new
+  accent/success/warning/danger values keep `TestToneInkPassesAA` green.

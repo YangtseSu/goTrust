@@ -13,11 +13,11 @@ separate chip.
 
 ## Next Step
 
-Phase 6 is complete. The optional traffic card (Phase 7) has not been started.
+Phase 8 is complete. The optional traffic card (Phase 7) has not been started.
 
 ## Current Phase
 
-Phase 6 complete; Phase 7 optional and not started.
+Phase 8 complete; Phase 7 optional and not started.
 
 ## Decisions already made
 
@@ -464,6 +464,57 @@ approved 7/8/11/13 work and is not started until asked for.
       use the mygo chart primitives or a small custom sparkline.
 - [ ] Tests for the counters and the ring; smoke the card in the real window.
 - **Status:** pending (optional; confirm before starting).
+
+### Phase 8: Mockup parity
+
+The packaged build, compared with `/tmp/gotrust-mockup.html`, missed eleven
+details. This phase adds them.
+
+- [x] Title bar: the shield mark left of the brand.
+- [x] Title bar: the light/dark switch at the right (`mygo.Theme.SetSource`).
+- [x] Dashboard: the resource card's search sits in its header as soon as the
+      card holds a row.
+- [x] 账户: two cards, 连接 and 安全.
+- [x] 设置: rows fill their card instead of stopping at a narrow column.
+- [x] 启动, 保活 and 日志: switch rows, the whole label the target.
+- [x] 日志: 清除 empties the file and its rotations.
+- [x] 多账户: drop the footer hint the mockup does not have.
+- [x] 设置: 项目主页 and 许可证 are clickable rows, not rows with a button.
+- [x] Palette: the mockup's colours in both appearances, and the power
+      control's fixed fills.
+- [x] Window: transparent surface, content clipped to a 12 DIP radius.
+- **Status:** complete.
+
+Notes:
+
+- `themeFor` rebuilds mygo's theme from the mockup's palette (`paletteFor`),
+  so inputs, switches, selects and scrollbars follow the views. The title bar
+  switch forces mygo's source and lasts for the run; it is not a config field.
+- The window is created with `Transparent: true`; the view sets the frame root
+  transparent and paints one column with `.Radius(12).Border(1, …).Clip()`, so
+  the four corners are round while GTK keeps its shadow, resize edges and
+  window controls. The render PNGs carry transparent corners; the real window
+  starts without GL errors.
+- Switch rows are one target: the row is the control and the track is drawn
+  (34×20, 16 px knob). `ui.Switch` could not be reached by the tester's label
+  lookup because its label text is a separate element; the row-level control
+  also matches the mockup's label-wrapped switch.
+- 日志's 清除 calls `logging.Logger.Clear`, which truncates under the logger's
+  mutex and removes the rotations; the tailer restarts on the shrink and the
+  page's tail is cleared at once. `TestClearTruncatesAndRemovesRotations`
+  covers the file.
+- The palette also moved the power fills to the mockup's `#16a34a`, `#d97706`
+  and `#dc2626`; the chip keeps the semantic tints.
+- Tests: the tab order now starts with the appearance switch, the account
+  form asserts 连接/安全, the password button reads 修改…, the keep-alive
+  test clicks the switch row, the About test clicks the rows, and the resource
+  search test asserts the filter with any entry and none when empty.
+  `go test ./...`, `go vet ./...`, `gofmt -l .` and `reuse lint` pass.
+- Renders: 98 images again; the light and dark dashboard, account, settings,
+  startup, logs and profiles were checked, including the 720×560 variants.
+- Real window: the appearance switch flips its label (切换到浅色主题 →
+  切换到深色主题), 清除 left the log at 0 bytes, and the account page reported
+  the 连接/安全 headings.
 
 ## Out of scope
 
