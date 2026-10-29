@@ -213,13 +213,15 @@ an entry in its decisions table. The layout they describe is
 
 ## mygo owns the toolkit behaviour
 
-* The window uses mygo 0.7.2: a hidden title bar keeps the desktop's window
+* The window uses mygo 0.7.3: a hidden title bar keeps the desktop's window
   controls, a hide from the window's own frame is queued by the toolkit, and
   the transparent surface with `Clip` gives the four rounded corners.
 * Views are pure functions of `ui.State`; they read no network and keep no
   global state. Widget state that belongs to one field lives in `ui.Local`, app
   state in the state struct. `SettingsState` is the one long-lived draft the
-  views render in place.
+  views render in place; its fields are written on the toolkit's main thread
+  only (background results publish through `app.runOnUI`), because the frame
+  reads them without a lock.
 * The render harness (`TestRenderEveryState`) is the acceptance instrument for a
   layout change; the tester (`ui.NewTester`) proves behaviour. The real-window
   checks and their limits are in `docs/agent-ui-testing.md`.

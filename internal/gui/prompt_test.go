@@ -26,6 +26,8 @@ import (
 func promptTestApp() *app {
 	testApp := &app{logger: log.New(io.Discard, "", 0)}
 	testApp.logf = testApp.logger.Printf
+	// The test process has no event loop, so a published function runs inline.
+	testApp.runOnUI = func(fn func()) { fn() }
 	return testApp
 }
 

@@ -350,15 +350,15 @@ func (a *app) storeChangedPassword(profileName, newPassword string) {
 	}
 	a.applyConfig(cfg)
 
-	a.mu.Lock()
-	if state := a.settings; state != nil {
-		for profile := range state.Draft.Profiles {
-			if state.Draft.Profiles[profile].Name == name {
-				state.Draft.Profiles[profile].Auth.Password = newPassword
+	a.onUI(func() {
+		if state := a.settings; state != nil {
+			for profile := range state.Draft.Profiles {
+				if state.Draft.Profiles[profile].Name == name {
+					state.Draft.Profiles[profile].Auth.Password = newPassword
+				}
 			}
 		}
-	}
-	a.mu.Unlock()
+	})
 	a.invalidate()
 	a.logf("stored the changed password for profile %s", name)
 }

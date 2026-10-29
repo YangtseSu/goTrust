@@ -53,6 +53,7 @@ func Run(configPath string) error {
 		cfg:        cfg,
 		configPath: path,
 		view:       gotrustui.State{Config: cfg},
+		runOnUI:    mygo.RunOnMain,
 	}
 
 	fileLog, logErr := logging.New(logging.Options{
@@ -141,8 +142,14 @@ type app struct {
 	// settings is the window's settings draft. It is created at startup and
 	// kept for the life of the process, so hiding the window or switching a
 	// page keeps the edits; only 保存, 放弃, a profile switch and a login that
-	// saves the draft reload it.
+	// saves the draft reload it. The frame reads it without a lock, so every
+	// field is written on the toolkit's main thread: Run sets runOnUI to
+	// mygo.RunOnMain, and background work publishes through it.
 	settings *gotrustui.SettingsState
+	// runOnUI runs fn on the toolkit's main thread. Tests replace it with a
+	// direct call: they never start the event loop, and a posted function
+	// would wait forever. It is set once before any goroutine starts.
+	runOnUI func(func())
 
 	proxy *gotrustproxy.Server
 	// profileLock is the live login's claim on its profile. The CLI takes the
@@ -696,19 +703,19 @@ func (a *app) openSettingsPassword() {
 		defer cancel()
 		strategy, err := a.manager.PasswordStrategy(ctx)
 
-		a.mu.Lock()
-		if current := a.settings; current != nil && current.Password != nil {
-			current.PasswordBusy = false
-			if err != nil {
-				current.PasswordStatus = locales.RulesFailed(err.Error())
-				current.PasswordError = true
-			} else {
-				current.Password.Strategy = strategy
-				current.PasswordStatus = ""
+		a.onUI(func() {
+			if current := a.settings; current != nil && current.Password != nil {
+				current.PasswordBusy = false
+				if err != nil {
+					current.PasswordStatus = locales.RulesFailed(err.Error())
+					current.PasswordError = true
+				} else {
+					current.Password.Strategy = strategy
+					current.PasswordStatus = ""
+				}
 			}
-		}
-		a.mu.Unlock()
-		a.invalidate()
+			a.invalidate()
+		})
 	}()
 }
 
@@ -733,23 +740,23 @@ func (a *app) refreshSettingsTerminals() {
 		defer cancel()
 		terminals, err := a.manager.Terminals(ctx)
 
-		a.mu.Lock()
-		if current := a.settings; current != nil {
-			current.TrustBusy = false
-			if err != nil {
-				current.TrustStatus = locales.TerminalsFailed(err.Error())
-				current.TrustError = true
-			} else {
-				current.Terminals = terminals
-				current.TerminalsKnown = true
-				current.TrustKnown = true
-				current.Trusted = terminals.DeviceTrusted
-				current.TrustStatus = ""
-				current.TrustError = false
+		a.onUI(func() {
+			if current := a.settings; current != nil {
+				current.TrustBusy = false
+				if err != nil {
+					current.TrustStatus = locales.TerminalsFailed(err.Error())
+					current.TrustError = true
+				} else {
+					current.Terminals = terminals
+					current.TerminalsKnown = true
+					current.TrustKnown = true
+					current.Trusted = terminals.DeviceTrusted
+					current.TrustStatus = ""
+					current.TrustError = false
+				}
 			}
-		}
-		a.mu.Unlock()
-		a.invalidate()
+			a.invalidate()
+		})
 	}()
 }
 
@@ -780,28 +787,30 @@ func (a *app) setSettingsTrusted(trusted bool) {
 		defer cancel()
 		err := a.manager.SetTrusted(ctx, trusted)
 
-		a.mu.Lock()
-		if current := a.settings; current != nil {
-			current.TrustBusy = false
-			if err != nil {
-				current.TrustStatus = locales.TrustFailed(err.Error())
-				current.TrustError = true
-			} else {
-				current.TrustKnown = true
-				current.Trusted = trusted
-				if trusted {
-					current.TrustStatus = locales.Trusted()
+		a.onUI(func() {
+			if current := a.settings; current != nil {
+				current.TrustBusy = false
+				if err != nil {
+					current.TrustStatus = locales.TrustFailed(err.Error())
+					current.TrustError = true
 				} else {
-					current.TrustStatus = locales.Untrusted()
+					current.TrustKnown = true
+					current.Trusted = trusted
+					if trusted {
+						current.TrustStatus = locales.Trusted()
+					} else {
+						current.TrustStatus = locales.Untrusted()
+					}
+					current.TrustError = false
 				}
-				current.TrustError = false
 			}
-		}
-		a.mu.Unlock()
-		a.invalidate()
-		if err == nil {
-			go a.refreshSettingsTerminals()
-		}
+			a.invalidate()
+			if err == nil {
+				// The new trust state changes both endpoint lists; the refresh
+				// starts on this thread too, because it writes the draft.
+				a.refreshSettingsTerminals()
+			}
+		})
 	}()
 }
 
@@ -851,20 +860,20 @@ func (a *app) submitSettingsPassword() {
 		defer cancel()
 		err := a.changePasswordOnline(ctx, answer.OldPassword, answer.NewPassword)
 
-		a.mu.Lock()
-		if current := a.settings; current != nil && current.Password != nil {
-			current.PasswordBusy = false
-			if err != nil {
-				current.PasswordStatus = locales.ResetFailed(err.Error())
-				current.PasswordError = true
-			} else {
-				current.Password = nil
-				current.Status = locales.PasswordResetDone()
-				current.StatusError = false
+		a.onUI(func() {
+			if current := a.settings; current != nil && current.Password != nil {
+				current.PasswordBusy = false
+				if err != nil {
+					current.PasswordStatus = locales.ResetFailed(err.Error())
+					current.PasswordError = true
+				} else {
+					current.Password = nil
+					current.Status = locales.PasswordResetDone()
+					current.StatusError = false
+				}
 			}
-		}
-		a.mu.Unlock()
-		a.invalidate()
+			a.invalidate()
+		})
 	}()
 }
 
@@ -1065,12 +1074,10 @@ func (a *app) releaseProfileLock() {
 // assignment runs on the main loop, the one that renders the page, so the
 // window never reads a slice the tailer is replacing.
 func (a *app) setLogLines(lines []string) {
-	mygo.RunOnMain(func() {
-		a.mu.Lock()
+	a.onUI(func() {
 		if a.settings != nil {
 			a.settings.LogLines = lines
 		}
-		a.mu.Unlock()
 		a.invalidate()
 	})
 }
@@ -1094,11 +1101,11 @@ func (a *app) onSessionState(state session.State) {
 		a.releaseProfileLock()
 	}
 
-	a.mu.Lock()
-	if a.settings != nil {
-		a.settings.Online = state.Phase == session.PhaseOnline
+	// The draft is the frame's, and the frame reads it without a lock; the
+	// session goroutine publishes through the main thread.
+	if settings := a.settings; settings != nil {
+		a.onUI(func() { settings.Online = state.Phase == session.PhaseOnline })
 	}
-	a.mu.Unlock()
 	a.invalidate()
 
 	if window := a.window.Load(); window != nil {
@@ -1582,7 +1589,7 @@ func (a *app) discoverAuth() {
 		defer cancel()
 		methods, discoverErr := session.DiscoverAuthMethods(ctx, target)
 
-		mygo.RunOnMain(func() {
+		a.onUI(func() {
 			a.mu.RLock()
 			current := a.settings
 			a.mu.RUnlock()
@@ -1705,6 +1712,19 @@ func (a *app) invalidate() {
 	if window := a.window.Load(); window != nil {
 		window.Invalidate()
 	}
+}
+
+// onUI runs fn on the toolkit's main thread. The settings draft belongs to
+// that thread: the frame reads it without a lock, so a session or background
+// goroutine publishes every write through here. RunOnMain blocks until the
+// frame has run the function, which is what makes the write visible to the
+// next render.
+func (a *app) onUI(fn func()) {
+	if a.runOnUI != nil {
+		a.runOnUI(fn)
+		return
+	}
+	mygo.RunOnMain(fn)
 }
 
 func (a *app) refreshTray() {

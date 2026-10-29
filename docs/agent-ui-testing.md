@@ -161,7 +161,8 @@ wait "$pid"               # expect 0
 
 ## mygo window rules
 
-Measured on 0.6.3, 0.6.4, 0.7.1 and 0.7.2:
+Measured on 0.6.3, 0.6.4, 0.7.1 and 0.7.2; the same rules hold on the current
+pin, 0.7.3, whose UI package is unchanged.
 
 - `NewWindow` inside a frame is safe from 0.6.4 on. In 0.6.3 it made the new
   window's GtkGLArea fail (`OpenGL 0.0 is too old`, then `native UI shows
@@ -187,7 +188,7 @@ A window's build runs inside mygo's frame, so an action that runs while the
 view builds runs there too. What each operation does from there, measured in
 the headless Wayland session and on the operator's GNOME session, with a second
 window carrying a `Scroll`. The last column is 0.7.2, which carries the
-`linux-hide-in-frame` fix:
+`linux-hide-in-frame` fix; 0.7.3 carries it too:
 
 | Operation, from | Where | 0.6.3 | 0.6.4 | 0.7.1 | 0.7.2 |
 |---|---|---|---|---|---|

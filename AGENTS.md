@@ -60,7 +60,7 @@ each release are in `docs/development.md`.
 - Views are pure: no network, no global state; render them in tests.
 - A prompt page lives on the loopback interface only, under a single-use token,
   and never logs what was typed into it.
-- mygo is upstream `github.com/egoist/mygo` v0.7.2, where a window created,
+- mygo is upstream `github.com/egoist/mygo` v0.7.3, where a window created,
   shown, hidden or closed inside a frame is safe, `Hide` included (the
   `linux-hide-in-frame` fix for issue #680). If mygo moves to a release without
   it, hide a window from outside its own frame again through

@@ -370,6 +370,38 @@ func TestInterimFailureKeepsTheProxyForTheLadder(t *testing.T) {
 	}
 }
 
+// The draft is the frame's state: it is read without a lock, so a session
+// change publishes Online through the main-thread seam instead of writing the
+// field on the session goroutine.
+func TestSessionStatePublishesOnlineThroughTheUISeam(t *testing.T) {
+	cfg := config.Default()
+	application := &app{
+		cfg:      cfg,
+		settings: gotrustui.NewSettingsState(cfg, t.TempDir()),
+	}
+	publishes := 0
+	application.runOnUI = func(fn func()) {
+		publishes++
+		fn()
+	}
+
+	application.onSessionState(session.State{Phase: session.PhaseOnline})
+	if publishes != 1 {
+		t.Fatalf("publishes = %d, want 1", publishes)
+	}
+	if !application.settings.Online {
+		t.Fatal("Online = false after the session came up")
+	}
+
+	application.onSessionState(session.State{Phase: session.PhaseIdle})
+	if publishes != 2 {
+		t.Fatalf("publishes = %d, want 2", publishes)
+	}
+	if application.settings.Online {
+		t.Fatal("Online = true after the session ended")
+	}
+}
+
 // 断开 runs inside a frame on the UI thread. Manager.Logout waits for the login
 // it just cancelled, and that login publishes through onSessionState → onMain,
 // which needs the frame to finish. Joining the logout on the caller deadlocks

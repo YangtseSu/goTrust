@@ -208,7 +208,15 @@ func TestStoreChangedPasswordWritesTheCredential(t *testing.T) {
 	testApp.configPath = path
 	testApp.settings = gotrustui.NewSettingsState(cfg, dir)
 
+	var publishes int
+	testApp.runOnUI = func(fn func()) {
+		publishes++
+		fn()
+	}
 	testApp.storeChangedPassword(cfg.Profiles[0].Name, "new-password")
+	if publishes != 1 {
+		t.Fatalf("draft publishes through the UI seam = %d, want 1", publishes)
+	}
 
 	testApp.mu.RLock()
 	live := testApp.cfg.Active().Auth.Password
