@@ -67,6 +67,12 @@ Beyond the module prefix and the drops above:
   `authchallenge.UnsupportedHandler`, which fails with the reason. The source
   fell back to its terminal handler; goTrust's front-ends always supply their
   own prompt.
+- `Client.establishSession` adopts the device id, the sign key and the sidTicket
+  from the stored client data when the caller passes no `SessionOptions`, and it
+  drops a sidTicket the portal refuses before the fallback login. The source
+  adopted only the sign key and the ticket, so the restore predicate never saw
+  the device id and the password-free restore never ran: every start made a
+  password login, which a gateway that requires a captcha answered with one.
 
 ## Client version literals
 

@@ -417,6 +417,21 @@ func (c *Client) establishSession(
 	resourceData []byte,
 ) (sessionEstablishment, error) {
 	established := sessionEstablishment{resourceData: resourceData}
+	// The device id, the sign key and the sidTicket are one identity: the portal
+	// checks the pair on every authorization, so a restore has to present the
+	// values the session was minted with. A front-end stores the trio in the
+	// client data file and passes no SessionOptions, so the decision below takes
+	// them from the stored record. Leaving the device id out made
+	// canRestoreByTicket fail and turned every start into a password login.
+	if c.DeviceID == "" {
+		c.DeviceID = clientAuthData.DeviceID
+	}
+	if c.SignKey == "" {
+		c.SignKey = clientAuthData.SignKey
+	}
+	if c.SIDTicket == "" {
+		c.SIDTicket = clientAuthData.SIDTicket
+	}
 	established.resumed = c.canResume(established.resourceData)
 
 	switch {
@@ -432,7 +447,12 @@ func (c *Client) establishSession(
 		c.ConnectionID = buildConnectionID(c.DeviceID)
 		if _, err := sess.RestoreByTicket(ctx, c.SIDTicket); err != nil {
 			// A ticket that cannot be exchanged is not fatal: fall through to a
-			// login, which is what the recovery ladder does too.
+			// login, which is what the recovery ladder does too. The refused
+			// ticket cannot restore a later start either, so the login has to
+			// mint a replacement: keeping it made every following start try the
+			// same dead ticket and log in with the password (and a captcha,
+			// where the gateway asks for one).
+			c.SIDTicket = ""
 			log.Printf("aTrust sidTicket restore failed, logging in instead: %v", err)
 		} else {
 			// The restored session is authenticated, so the resource list is
@@ -510,15 +530,9 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 		clientAuthData.DeviceID, len(clientAuthData.Cookies),
 		log.Redact(clientAuthData.SignKey), log.Redact(clientAuthData.SIDTicket))
 	if clientAuthData.DeviceID == "" && c.DeviceID != "" {
+		// The caller named the device; the stored record has to carry it, because
+		// that record is where a later restore reads the pair from.
 		clientAuthData.DeviceID = c.DeviceID
-	}
-	if c.SignKey == "" {
-		// The stored key is the one the session was minted with; never replace it
-		// with a fresh one for a stored session (see canResume).
-		c.SignKey = clientAuthData.SignKey
-	}
-	if c.SIDTicket == "" {
-		c.SIDTicket = clientAuthData.SIDTicket
 	}
 
 	var authServerHost string

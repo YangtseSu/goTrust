@@ -237,6 +237,84 @@ func TestTicketRestoreWithoutResourceFile(t *testing.T) {
 	}
 }
 
+// TestTicketRestoreUsesTheStoredDeviceID: the front-end stores the device id,
+// the sign key and the sidTicket in the client data file and passes no
+// SessionOptions at all, so the device id the restore needs is only in that
+// file. Without it the setup fell back to a password login on every start,
+// which a gateway that requires a captcha answers with one each time.
+func TestTicketRestoreUsesTheStoredDeviceID(t *testing.T) {
+	stub := newRecoveryStub(t)
+	c := NewClient(ClientOptions{})
+	t.Cleanup(c.Close)
+
+	c.sessionMu.Lock()
+	c.session = auth.NewSession(stub.host(), nil)
+	c.sessionMu.Unlock()
+
+	clientAuthData := auth.ClientAuthData{
+		DeviceID:  "device",
+		SignKey:   "key",
+		SIDTicket: strings.Repeat("t", 73),
+		CSRFToken: "csrf",
+	}
+	established, err := c.establishSession(context.Background(), c.session, SetupOptions{}, &clientAuthData, nil)
+	if err != nil {
+		t.Fatalf("establishSession: %v", err)
+	}
+	if established.resumed || !established.restored {
+		t.Fatalf("establishment = %+v, want a ticket restore", established)
+	}
+	if got := c.DeviceID; got != "device" {
+		t.Fatalf("client device id = %q, want the stored one", got)
+	}
+	if _, _, exchange, _ := stub.hits(); exchange != 1 {
+		t.Fatalf("sessionIdExchange calls = %d, want 1", exchange)
+	}
+}
+
+// TestStaleTicketIsReplacedAfterTheFallbackLogin: a ticket the portal refuses
+// cannot restore a later start either, so the login that replaces it has to
+// mint a new one. Keeping the spent ticket made every following start take the
+// password path (and a captcha, where the gateway asks for one) again.
+func TestStaleTicketIsReplacedAfterTheFallbackLogin(t *testing.T) {
+	stub := newRecoveryStub(t)
+	stub.mu.Lock()
+	stub.authConfigFailures = 0
+	stub.exchangeRefusals = 1
+	stub.mu.Unlock()
+
+	c := NewClient(ClientOptions{})
+	t.Cleanup(c.Close)
+
+	c.sessionMu.Lock()
+	c.session = auth.NewSession(stub.host(), nil)
+	c.sessionMu.Unlock()
+
+	clientAuthData := auth.ClientAuthData{
+		DeviceID:  "device",
+		SignKey:   "key",
+		SIDTicket: "stale-ticket",
+	}
+	established, err := c.establishSession(context.Background(), c.session, SetupOptions{}, &clientAuthData, nil)
+	if err != nil {
+		t.Fatalf("establishSession: %v", err)
+	}
+	if established.restored {
+		t.Fatal("a refused ticket still reported a restore")
+	}
+	if got := c.sidTicket(); got != "" {
+		t.Fatalf("spent sidTicket = %q, want it cleared for the fallback login", got)
+	}
+
+	c.prepareRestoreTicket(context.Background(), c.session)
+	if got := c.sidTicket(); got == "" || got == "stale-ticket" {
+		t.Fatalf("sidTicket = %q after the fallback login, want a freshly minted one", got)
+	}
+	if _, ticket, _, _ := stub.hits(); ticket != 1 {
+		t.Fatalf("ticketExchange calls = %d, want 1", ticket)
+	}
+}
+
 // TestDocumentedCombinationsReachOneDecision: the client owns the
 // resume/restore/login decision, so the combinations main used to judge for
 // itself all end in the login path (and a clear error when no method is
