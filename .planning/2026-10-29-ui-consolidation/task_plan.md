@@ -13,12 +13,12 @@ separate chip.
 
 ## Next Step
 
-Start Phase 17: give the icon-only controls their names. Phase 16 (the sidebar
-as a real tab list) is complete; Phases 18-19 follow in order.
+Start Phase 18: bring the window forward on a second launch. Phase 17 (the
+icon-only controls' names) is complete; Phase 19 follows.
 
 ## Current Phase
 
-Phase 16 complete; Phases 17-19 pending.
+Phase 17 complete; Phases 18-19 pending.
 
 ## Decisions already made
 
@@ -861,13 +861,43 @@ Notes:
 
 ### Phase 17: Icon-only controls speak for themselves
 
-- [ ] `.Tooltip(label)` on the window controls, the appearance switch, the
+- [x] `.Tooltip(label)` on the window controls, the appearance switch, the
       power control and the resource row's menu glyph.
-- [ ] The row glyph takes `.Role(ui.RoleMenuButton)`: `Element.Menu` promotes
+- [x] The row glyph takes `.Role(ui.RoleMenuButton)`: `Element.Menu` promotes
       only `RoleAuto`/`RoleButton`, so it stays an image today.
-- [ ] Test: Tab reaches the row menu and Enter opens it; the renders keep
+- [x] Test: Tab reaches the row menu and Enter opens it; the renders keep
       their look.
-- **Status:** pending.
+- **Status:** complete.
+
+Notes:
+
+- v0.7.3's `Element.Menu` sets the menu-button, clickable and focusable flags
+  but promotes the role only from `RoleAuto`/`RoleButton`; an explicit
+  `Role(ui.RoleMenuButton)` stays. A focused menu button opens on Enter,
+  Space or Down (no modifiers) and Alt+Down (`ui/input.go`), so the row glyph
+  needed no new shortcut.
+- `Element.Tooltip` sets the accessible description when none is set and
+  shows the tip after the pointer rests 0.6 s, or at once when the keyboard
+  focus arrives from the keyboard; a disabled control keeps the description
+  but shows no tip. Window controls, the appearance switch and the row glyph
+  already had their label; the power control's label is the phase action.
+- The tester's `Texts`/`HasText` include accessible labels, so they cannot
+  prove a tip is painted. `TestPowerControlShowsItsTooltipOnFocus` compares
+  the frame before and after focus and requires changed pixels in the band
+  above the control, outside the focus ring; removing `.Tooltip` from the
+  control makes it fail, which was checked.
+- `TestResourceRowMenuIsReachableFromTheKeyboard` tabs to the row glyph and
+  presses Enter; `tester.Menu()` then lists 打开 and 复制. The role itself is
+  not observable through the exported tester API; mygo maps
+  `RoleMenuButton` to the platform's menu-button role.
+- Renders: the 102 states were regenerated at rest and the resources page was
+  checked visually: the title strip, the power control and the row glyphs keep
+  their look (a tip paints only on hover or focus).
+- Real window: the test build under headless mutter logged `goTrust ready` and
+  exited 0 on SIGTERM. Hover and keyboard tips in the real window are the
+  tester's engine, which the tests above exercise.
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .` and
+  `reuse lint` pass.
 
 ### Phase 18: A second launch brings the window forward
 

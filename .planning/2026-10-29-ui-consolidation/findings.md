@@ -375,7 +375,9 @@ status
 - **`Element.Menu` does not make an image a menu button.** It sets
   clickable/focusable and promotes only `RoleAuto`/`RoleButton` to
   `RoleMenuButton` (v0.7.2 `ui/menu.go:65-69`); the resource row's icon keeps
-  `RoleImage`, so assistive technology reads an image.
+  `RoleImage`, so assistive technology reads an image. Fixed in Phase 17: the
+  glyph sets `Role(ui.RoleMenuButton)` explicitly, and the icon-only controls
+  carry `Tooltip(label)`.
 - **A second launch has no listener.** `RequestSingleInstanceLock` returns
   false in the second instance and the first is only notified through
   `OnSecondInstance` (`docs/app.md:96-108`); we register none, so the running

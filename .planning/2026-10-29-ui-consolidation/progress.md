@@ -31,6 +31,25 @@ The review settled these points:
   with more than one account), 退出 — no 设置;
 - no memory display; the traffic card is optional.
 
+### Phase 17: Icon-only controls speak for themselves
+
+- **Status:** complete
+- `.Tooltip(label)` on the window controls, the appearance switch, the power
+  control and the resource row's menu glyph; the row glyph also takes
+  `.Role(ui.RoleMenuButton)`, which `Menu` does not set for a non-button role.
+- v0.7.3: a focused menu button opens on Enter, Space or Down, or Alt+Down, so
+  the row keeps its one `.Menu` click path.
+- Tests: `TestPowerControlShowsItsTooltipOnFocus` compares the frame before and
+  after focus and requires changed pixels in the band above the control; it
+  fails when the tip is removed. `TestResourceRowMenuIsReachableFromTheKeyboard`
+  tabs to the glyph and Enter opens 打开/复制. `Texts` includes accessible
+  labels, so it cannot prove a tip by itself.
+- Renders: 102 states at rest, the resources page checked visually (the title
+  strip, power control and row glyphs keep their look). Real window: headless
+  start, `goTrust ready`, SIGTERM exit 0.
+- Checks: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .`,
+  `reuse lint`.
+
 ### Phase 16: The sidebar is a real tab list
 
 - **Status:** complete
