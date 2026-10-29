@@ -354,7 +354,6 @@ func (a *app) actions() gotrustui.Actions {
 		TrayLogin:     a.startSavedLogin,
 		Logout:        a.disconnect,
 		ShowPage:      a.showPage,
-		ShowWindow:    a.showWindow,
 		SelectProfile: a.selectProfile,
 		Quit:          func() { mygo.App.Quit() },
 		Settings:      a.settingsActions(),

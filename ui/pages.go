@@ -77,14 +77,27 @@ func pageScroll(c *ui.Context, children func()) {
 	})
 }
 
-// dashboardPage is the session page: the state, the resources the gateway
-// granted, and the one line of listener and probe facts under them.
+// dashboardPage is the session page: the session card with its one control and
+// its measurements, and the resources the gateway granted in a second card.
 func dashboardPage(c *ui.Context, state *State, actions Actions, searchFocus *uint64) {
 	ui.Column(c).Grow(1).Shrink(1).Gap(sectionGap).Children(func() {
 		windowHeading(c, pageLabel(PageDashboard))
-		header(c, state, actions)
+		statusCard(c, state, actions)
 		resources(c, state, actions, searchFocus)
-		footer(c, state)
+	})
+}
+
+// statusCard is the session on the dashboard: the phase and its facts on the
+// left, the one control on the right, and the measurements under a rule. The
+// session reads before the resources because the card comes first.
+func statusCard(c *ui.Context, state *State, actions Actions) {
+	card(c).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Gap(sectionGap).Children(func() {
+			ui.Column(c).Grow(1).Shrink(1).Children(func() { sessionLine(c, state) })
+			powerControl(c, state, actions)
+		})
+		ui.Divider(c).Margin(c.Theme().Space(3), 0, c.Theme().Space(2.5), 0)
+		metricsRow(c, state)
 	})
 }
 

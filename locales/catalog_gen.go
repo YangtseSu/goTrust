@@ -224,26 +224,16 @@ func (msgs Messages) ProfileName(name string) string {
 	return Catalog.Format(msgs.locale, "profileName", map[string]any{"name": name})
 }
 
-// SessionEndpoint says "{host}:{port, number}"
+// SessionGateway says "网关地址 {host}:{port, number}"
 // in the language the app shows.
-func SessionEndpoint(host string, port int) string {
-	return In(i18n.Locale()).SessionEndpoint(host, port)
+func SessionGateway(host string, port int) string {
+	return In(i18n.Locale()).SessionGateway(host, port)
 }
 
-// SessionEndpoint says "{host}:{port, number}"
+// SessionGateway says "网关地址 {host}:{port, number}"
 // in the language of msgs.
-func (msgs Messages) SessionEndpoint(host string, port int) string {
-	return Catalog.Format(msgs.locale, "sessionEndpoint", map[string]any{"host": host, "port": port})
-}
-
-// SessionIntranet says "内网地址 {ip}"
-// in the language the app shows.
-func SessionIntranet(ip string) string { return In(i18n.Locale()).SessionIntranet(ip) }
-
-// SessionIntranet says "内网地址 {ip}"
-// in the language of msgs.
-func (msgs Messages) SessionIntranet(ip string) string {
-	return Catalog.Format(msgs.locale, "sessionIntranet", map[string]any{"ip": ip})
+func (msgs Messages) SessionGateway(host string, port int) string {
+	return Catalog.Format(msgs.locale, "sessionGateway", map[string]any{"host": host, "port": port})
 }
 
 // SessionHeldMinutes says "{minutes, plural, other {已保持 # 分钟}}"
@@ -264,6 +254,56 @@ func KeepAliveAgo(seconds int) string { return In(i18n.Locale()).KeepAliveAgo(se
 // in the language of msgs.
 func (msgs Messages) KeepAliveAgo(seconds int) string {
 	return Catalog.Format(msgs.locale, "keepAliveAgo", map[string]any{"seconds": seconds})
+}
+
+// KeepAliveAgoValue says "{seconds, plural, other {# 秒前}}"
+// in the language the app shows.
+func KeepAliveAgoValue(seconds int) string { return In(i18n.Locale()).KeepAliveAgoValue(seconds) }
+
+// KeepAliveAgoValue says "{seconds, plural, other {# 秒前}}"
+// in the language of msgs.
+func (msgs Messages) KeepAliveAgoValue(seconds int) string {
+	return Catalog.Format(msgs.locale, "keepAliveAgoValue", map[string]any{"seconds": seconds})
+}
+
+// MetricAssigned says "已分配地址"
+// in the language the app shows.
+func MetricAssigned() string { return In(i18n.Locale()).MetricAssigned() }
+
+// MetricAssigned says "已分配地址"
+// in the language of msgs.
+func (msgs Messages) MetricAssigned() string {
+	return Catalog.Format(msgs.locale, "metricAssigned", nil)
+}
+
+// MetricSOCKS5 says "SOCKS5"
+// in the language the app shows.
+func MetricSOCKS5() string { return In(i18n.Locale()).MetricSOCKS5() }
+
+// MetricSOCKS5 says "SOCKS5"
+// in the language of msgs.
+func (msgs Messages) MetricSOCKS5() string {
+	return Catalog.Format(msgs.locale, "metricSOCKS5", nil)
+}
+
+// MetricHTTP says "HTTP"
+// in the language the app shows.
+func MetricHTTP() string { return In(i18n.Locale()).MetricHTTP() }
+
+// MetricHTTP says "HTTP"
+// in the language of msgs.
+func (msgs Messages) MetricHTTP() string {
+	return Catalog.Format(msgs.locale, "metricHTTP", nil)
+}
+
+// MetricKeepAlive says "保活"
+// in the language the app shows.
+func MetricKeepAlive() string { return In(i18n.Locale()).MetricKeepAlive() }
+
+// MetricKeepAlive says "保活"
+// in the language of msgs.
+func (msgs Messages) MetricKeepAlive() string {
+	return Catalog.Format(msgs.locale, "metricKeepAlive", nil)
 }
 
 // ProfileMissing says "账户 {name} 不存在"
@@ -512,6 +552,16 @@ func Disconnect() string { return In(i18n.Locale()).Disconnect() }
 // in the language of msgs.
 func (msgs Messages) Disconnect() string {
 	return Catalog.Format(msgs.locale, "disconnect", nil)
+}
+
+// Retry says "重试"
+// in the language the app shows.
+func Retry() string { return In(i18n.Locale()).Retry() }
+
+// Retry says "重试"
+// in the language of msgs.
+func (msgs Messages) Retry() string {
+	return Catalog.Format(msgs.locale, "retry", nil)
 }
 
 // SettingsAction says "设置"
@@ -858,34 +908,24 @@ func (msgs Messages) TraySwitchAccount() string {
 	return Catalog.Format(msgs.locale, "traySwitchAccount", nil)
 }
 
-// TrayShow says "显示窗口"
+// TrayDashboard says "打开仪表盘"
 // in the language the app shows.
-func TrayShow() string { return In(i18n.Locale()).TrayShow() }
+func TrayDashboard() string { return In(i18n.Locale()).TrayDashboard() }
 
-// TrayShow says "显示窗口"
+// TrayDashboard says "打开仪表盘"
 // in the language of msgs.
-func (msgs Messages) TrayShow() string {
-	return Catalog.Format(msgs.locale, "trayShow", nil)
+func (msgs Messages) TrayDashboard() string {
+	return Catalog.Format(msgs.locale, "trayDashboard", nil)
 }
 
-// TrayOpenApp says "打开默认应用"
+// OpenDefaultApp says "打开默认应用"
 // in the language the app shows.
-func TrayOpenApp() string { return In(i18n.Locale()).TrayOpenApp() }
+func OpenDefaultApp() string { return In(i18n.Locale()).OpenDefaultApp() }
 
-// TrayOpenApp says "打开默认应用"
+// OpenDefaultApp says "打开默认应用"
 // in the language of msgs.
-func (msgs Messages) TrayOpenApp() string {
-	return Catalog.Format(msgs.locale, "trayOpenApp", nil)
-}
-
-// TraySettings says "设置…"
-// in the language the app shows.
-func TraySettings() string { return In(i18n.Locale()).TraySettings() }
-
-// TraySettings says "设置…"
-// in the language of msgs.
-func (msgs Messages) TraySettings() string {
-	return Catalog.Format(msgs.locale, "traySettings", nil)
+func (msgs Messages) OpenDefaultApp() string {
+	return Catalog.Format(msgs.locale, "openDefaultApp", nil)
 }
 
 // TrayQuit says "退出"

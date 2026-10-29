@@ -34,6 +34,13 @@ var (
 	// the arrowed menu button the header uses, because every row carries one
 	// and a list of buttons outshouts the rows.
 	iconRowMenu = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`))
+
+	// The dashboard's power control carries the phase in its glyph: a start, a
+	// stop and the failure's mark. The spinner for the two waiting phases is
+	// mygo's, which turns with the frames.
+	iconPowerPlay = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 7.2v9.6l7.2-4.8-7.2-4.8Z"/></svg>`))
+	iconPowerStop = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><rect x="7.5" y="7.5" width="9" height="9" rx="1.8"/></svg>`))
+	iconPowerFail = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 6.5v7"/><circle cx="12" cy="18" r="1.3" fill="currentColor" stroke="none"/></svg>`))
 )
 
 // The sidebar's pages have one glyph each, in the same weight as the rows

@@ -56,8 +56,9 @@ func TestToneInkPassesAA(t *testing.T) {
 	}
 }
 
-// Starting a login twice would race two sessions, so the button is disabled
-// while one runs, and the window says what it is doing.
+// Starting a login twice would race two sessions, so the power control disables
+// a start while another action runs. The control is the only place the state
+// speaks, so a busy button is simply unavailable.
 func TestBusyStateDisablesConnect(t *testing.T) {
 	var logins int
 	state := State{
@@ -68,9 +69,6 @@ func TestBusyStateDisablesConnect(t *testing.T) {
 	tester := ui.NewTester(View(&state, Actions{Login: func() { logins++ }}), 720, 560)
 	tester.Frame()
 
-	if !tester.HasText("处理中…") {
-		t.Fatalf("the busy indicator is missing; texts: %v", tester.Texts())
-	}
 	if err := tester.Click("连接"); err != nil {
 		t.Fatalf("click 连接: %v", err)
 	}
@@ -79,7 +77,8 @@ func TestBusyStateDisablesConnect(t *testing.T) {
 	}
 }
 
-// 断开 must stay usable while a login is pending: it is the only cancel.
+// A login in flight is a session to end: the same control shows the spinner
+// and stays usable, because 取消 is the only way out of a pending login.
 func TestBusyStateKeepsDisconnect(t *testing.T) {
 	var logouts int
 	state := State{
@@ -88,15 +87,15 @@ func TestBusyStateKeepsDisconnect(t *testing.T) {
 		Busy:    true,
 	}
 	tester := ui.NewTester(View(&state, Actions{Logout: func() { logouts++ }}), 720, 560)
-	if err := tester.Click("断开"); err != nil {
-		t.Fatalf("click 断开: %v", err)
+	if err := tester.Click("取消"); err != nil {
+		t.Fatalf("click 取消: %v", err)
 	}
 	if logouts != 1 {
 		t.Fatalf("logout calls = %d, want 1", logouts)
 	}
 }
 
-// Tab reaches the navigation first, then the session controls. The nav items
+// Tab reaches the navigation first, then the session control. The nav items
 // are tabs for assistive technology, so this is also the order they expose.
 func TestMainWindowTabOrder(t *testing.T) {
 	state := State{
@@ -108,7 +107,7 @@ func TestMainWindowTabOrder(t *testing.T) {
 
 	for _, want := range []string{
 		"仪表盘", "账户", "代理", "保活", "启动", "终端管理", "日志", "设置", "多账户",
-		"连接", "复制配置",
+		"连接",
 	} {
 		tester.Key(0, ui.KeyTab)
 		tester.Frame()

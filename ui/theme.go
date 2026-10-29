@@ -185,24 +185,20 @@ func textButton(c *ui.Context, label string) ui.Element {
 	})
 }
 
-// statusChip is the phase as the window's headline: a pill whose dot carries
-// the state's colour, with the label at title size in the theme's text colour.
-// The colour is the state's, so the eye finds the one changing element first,
-// and the text does not have to pass on a fill it does not sit on.
-func statusChip(c *ui.Context, state *State) {
-	label := phaseLabel(state.Session)
-	ink := toneInk(c.Theme(), phaseTone(state.Session.Phase))
-	ui.Row(c).AlignItems(ui.Center).Gap(8).PaddingX(12).PaddingY(4).
-		Radius(999).Background(chipSurface(c.Theme(), ink)).
-		Role(ui.RoleStatus).Label(locales.StatusLabel(label)).
-		Children(func() {
-			ui.Box(c).Size(9, 9).Radius(5).Background(ink)
-			ui.Text(c, label).FontSize(textSize(c, titleScale)).FontWeight(600).TextColor(c.Theme().Text)
-		})
+// card is a group of related content on its own face: the dashboard shows the
+// session and the resources as two cards, so each reads as one object instead
+// of every row sharing the page's background. The fill is the window's, so a
+// control inside the card keeps the theme's own button face; the border is
+// what draws the card.
+func card(c *ui.Context) ui.Element {
+	theme := c.Theme()
+	return ui.Column(c).Padding(theme.Space(3)).Radius(theme.Radius*2).
+		Border(1, theme.Border).Background(theme.Background)
 }
 
-// busyLine is the visible sign that a login or a logout is running: a spinner
-// and a word, so a slow gateway does not look like a frozen window.
+// busyLine is the visible sign that a save is running: a spinner and a word, so
+// a slow disk does not look like a frozen window. The dashboard's control says
+// the same for a login through its own spinner.
 func busyLine(c *ui.Context) {
 	ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 		ui.Spinner(c).Label(locales.BusyLabel())

@@ -85,8 +85,8 @@ func TestProfileSummaryShowsTheActiveAccount(t *testing.T) {
 	}
 }
 
-// Clicking 连接 must reach the action, and clicking 断开 in the online phase
-// must reach Logout instead. A swapped wiring would lock the user out.
+// Clicking 连接 must reach the action, and clicking 断开 (or 取消) in a live
+// phase must reach Logout instead. A swapped wiring would lock the user out.
 func TestButtonsCallTheRightAction(t *testing.T) {
 	cases := []struct {
 		phase      session.Phase
@@ -95,11 +95,11 @@ func TestButtonsCallTheRightAction(t *testing.T) {
 		wantLogout bool
 	}{
 		{phase: session.PhaseIdle, button: "连接", wantLogin: true},
-		{phase: session.PhaseFailed, button: "连接", wantLogin: true},
+		{phase: session.PhaseFailed, button: "重试", wantLogin: true},
 		{phase: session.PhaseOnline, button: "断开", wantLogout: true},
-		{phase: session.PhaseConnecting, button: "断开", wantLogout: true},
-		// 断开 during the ladder is how the user stops it.
-		{phase: session.PhaseReconnecting, button: "断开", wantLogout: true},
+		// 取消 is how a login waiting on the network or a prompt is stopped.
+		{phase: session.PhaseConnecting, button: "取消", wantLogout: true},
+		{phase: session.PhaseReconnecting, button: "取消", wantLogout: true},
 	}
 
 	for _, testCase := range cases {
@@ -126,6 +126,41 @@ func TestButtonsCallTheRightAction(t *testing.T) {
 				t.Fatalf("logout calls = %d, want 1", logout)
 			}
 		})
+	}
+}
+
+// The power control is the state: every phase has one label, one glyph and one
+// fill, and the two waiting phases turn a spinner instead of a glyph. Offline
+// and failed start a login; the other three end it, so hovering warns in red.
+func TestPowerControlShowsThePhase(t *testing.T) {
+	theme := ui.LightTheme()
+	cases := []struct {
+		phase  session.Phase
+		label  string
+		glyph  *ui.SVG
+		fill   ui.Color
+		ending bool
+	}{
+		{phase: session.PhaseIdle, label: "连接", glyph: iconPowerPlay, fill: theme.Accent},
+		{phase: session.PhaseConnecting, label: "取消", fill: theme.Warning, ending: true},
+		{phase: session.PhaseOnline, label: "断开", glyph: iconPowerStop, fill: theme.Success, ending: true},
+		{phase: session.PhaseReconnecting, label: "取消", fill: theme.Warning, ending: true},
+		{phase: session.PhaseFailed, label: "重试", glyph: iconPowerFail, fill: theme.Danger},
+	}
+	for _, testCase := range cases {
+		look := powerAppearance(theme, testCase.phase)
+		if look.label != testCase.label {
+			t.Fatalf("phase %s label = %q, want %q", testCase.phase, look.label, testCase.label)
+		}
+		if look.glyph != testCase.glyph {
+			t.Fatalf("phase %s glyph = %v, want %v", testCase.phase, look.glyph, testCase.glyph)
+		}
+		if look.fill != testCase.fill {
+			t.Fatalf("phase %s fill = %v, want %v", testCase.phase, look.fill, testCase.fill)
+		}
+		if look.ending != testCase.ending {
+			t.Fatalf("phase %s ending = %v, want %v", testCase.phase, look.ending, testCase.ending)
+		}
 	}
 }
 
@@ -198,20 +233,18 @@ func TestSidebarTagsTheLiveAccount(t *testing.T) {
 	}
 }
 
-// The footer is one line: which listeners are up and how long ago the session
-// was proved alive. The probe's own result is one hover away, not a second line
-// that pushes the resources up.
-func TestListenersAndKeepAliveAreListed(t *testing.T) {
+// The measurements are one row of four cells: the address the gateway
+// assigned, the two listeners and the last probe. A value the phase has not
+// produced is a dash, and the probe's own result stays in the description
+// instead of taking a second line.
+func TestSessionMetricsShowTheSessionFacts(t *testing.T) {
+	keepAlive := session.KeepAliveState{Target: "http://192.0.2.10/", Status: 200, OK: true, At: time.Now()}
 	state := State{
 		Session: session.State{
-			Phase:  session.PhaseOnline,
-			Detail: "vpn.example.com:443",
-			KeepAlive: session.KeepAliveState{
-				Target: "http://192.0.2.10/",
-				Status: 200,
-				OK:     true,
-				At:     time.Now(),
-			},
+			Phase:     session.PhaseOnline,
+			Detail:    "vpn.example.com:443",
+			ClientIP:  "203.0.113.4",
+			KeepAlive: keepAlive,
 		},
 		Config: config.Default(),
 		Listeners: []proxy.Listener{
@@ -223,23 +256,29 @@ func TestListenersAndKeepAliveAreListed(t *testing.T) {
 	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 
-	line := "SOCKS5 127.0.0.1:1080 · HTTP 127.0.0.1:1081 · 保活 0 秒前"
-	if !tester.HasText(line) {
-		t.Fatalf("the footer line is missing; texts: %v", tester.Texts())
+	for _, want := range []string{
+		"已分配地址", "203.0.113.4",
+		"SOCKS5", "127.0.0.1:1080",
+		"HTTP", "127.0.0.1:1081",
+		"保活", "0 秒前",
+	} {
+		if !tester.HasText(want) {
+			t.Fatalf("the metric %q is missing; texts: %v", want, tester.Texts())
+		}
 	}
-	if tester.HasText("保活 OK 200") {
-		t.Fatal("the probe detail is printed in the footer instead of its tooltip")
+	if tester.HasText("OK 200") {
+		t.Fatalf("the probe result is painted instead of described; texts: %v", tester.Texts())
+	}
+	if _, _, description := keepAliveMetric(&state, time.Now()); description != "OK 200 · http://192.0.2.10/" {
+		t.Fatalf("keep-alive description = %q", description)
 	}
 
-	anchor, ok := tester.Find(line)
-	if !ok {
-		t.Fatalf("no element shows %q", line)
-	}
-	tester.Move(anchor.X+anchor.W/2, anchor.Y+anchor.H/2)
-	tester.Advance(700 * time.Millisecond)
-	tester.Frame()
-	if !tester.HasText("保活 OK 200 · http://192.0.2.10/") {
-		t.Fatalf("the probe detail is missing from the tooltip; texts: %v", tester.Texts())
+	// Nothing has run yet: every cell says so with a dash rather than a guess.
+	idle := State{Session: session.State{Phase: session.PhaseIdle}, Config: config.Default()}
+	rendered := ui.NewTester(View(&idle, Actions{}), 720, 560)
+	rendered.Frame()
+	if !rendered.HasText("—") {
+		t.Fatalf("a missing metric is not a dash; texts: %v", rendered.Texts())
 	}
 }
 
@@ -399,8 +438,9 @@ func TestResourceSearchAppearsOnlyForLongGroups(t *testing.T) {
 	}
 }
 
-// At the window's minimum the list keeps three rows and the footer: the window
-// is for the resources, so it may not collapse to a heading under them.
+// At the window's minimum the list keeps three rows under the status card:
+// the window is for the resources, so it may not collapse to a heading under
+// them.
 func TestResourceListKeepsThreeRowsAtTheMinimumSize(t *testing.T) {
 	entries := make([]session.ResourceEntry, 0, 20)
 	for i := 1; i <= 20; i++ {
@@ -414,8 +454,8 @@ func TestResourceListKeepsThreeRowsAtTheMinimumSize(t *testing.T) {
 
 	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
-	if !tester.HasText("代理端口尚未开启") {
-		t.Fatalf("the footer left the window; texts: %v", tester.Texts())
+	if !tester.HasText("已分配地址") {
+		t.Fatalf("the status card left the window; texts: %v", tester.Texts())
 	}
 	height := float32(tester.Image().Bounds().Max.Y)
 	for _, title := range []string{"App 01", "App 02", "App 03"} {
@@ -561,6 +601,16 @@ func TestTrayMenuOffersConnectWhenIdle(t *testing.T) {
 	if login != 1 {
 		t.Fatalf("login calls = %d", login)
 	}
+
+	// A login already running disables the same item: the tray must not start
+	// a second one while the window's control refuses to.
+	state.Busy = true
+	menu = TrayMenu(&state, Actions{TrayLogin: func() { login++ }})
+	for _, item := range menu.Items() {
+		if item.ID == "toggle" && !item.Disabled {
+			t.Fatal("the tray offers 连接 while an action is running")
+		}
+	}
 }
 
 // One account has nothing to switch to: the tray spends no line on a submenu
@@ -641,8 +691,9 @@ func labels(items []*mygo.MenuItem) []string {
 	return out
 }
 
-// The ladder says which attempt is next and how long the wait is; that is the
-// only place a user learns the app is retrying instead of hanging.
+// The ladder says which attempt is next and how long the wait is, and the
+// phase line is where it lives now that the chip is gone; that is the only
+// place a user learns the app is retrying instead of hanging.
 func TestReconnectCountdownIsRendered(t *testing.T) {
 	cfg := config.Default()
 	cfg.Profiles[0].Server.Address = "vpn.example.com"
@@ -663,11 +714,11 @@ func TestReconnectCountdownIsRendered(t *testing.T) {
 	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
 
-	if !tester.HasText("重连中") {
-		t.Fatalf("the reconnect label is missing; texts: %v", tester.Texts())
-	}
 	if !tester.HasText("重连中 (2/5，4 秒后)") {
-		t.Fatalf("the countdown is missing; texts: %v", tester.Texts())
+		t.Fatalf("the ladder is missing; texts: %v", tester.Texts())
+	}
+	if !tester.HasText("网关地址 vpn.example.com:443") {
+		t.Fatalf("the gateway left the meta line; texts: %v", tester.Texts())
 	}
 	if got := TrayStatus(state.Session); got != "重连中 (2/5，4 秒后)" {
 		t.Fatalf("tray status = %q, want the attempt and the wait", got)
@@ -727,39 +778,76 @@ func TestKeepAliveSummary(t *testing.T) {
 	}
 }
 
-// The three Clash formats must be reachable from the window with the same
-// selection the CLI flags expose.
-func TestClashButtonsCopyEachFormat(t *testing.T) {
+// The tray is ordered by frequency: the state, the two window shortcuts, the
+// session toggle, the account submenu and quit. Separators only divide groups
+// that exist, so a one-account menu has no empty group and a menu never starts
+// or ends with a line.
+func TestTrayMenuOrder(t *testing.T) {
+	one := State{Session: session.State{Phase: session.PhaseIdle}, Config: config.Default()}
+	two := State{Session: session.State{Phase: session.PhaseIdle}, Config: config.Default()}
+	if _, err := two.Config.AddProfile("工作"); err != nil {
+		t.Fatalf("add profile: %v", err)
+	}
+
 	cases := []struct {
-		label string
-		want  ClashFormat
+		name  string
+		state *State
+		want  []string
 	}{
-		{label: "Clash 片段", want: ClashPlain},
-		{label: "Verge 脚本", want: ClashScript},
-		{label: "Clash 完整配置", want: ClashConfig},
+		{
+			name:  "one account",
+			state: &one,
+			want:  []string{"未连接", "-", "打开仪表盘", "打开默认应用", "-", "连接", "-", "退出"},
+		},
+		{
+			name:  "two accounts",
+			state: &two,
+			want:  []string{"未连接", "-", "打开仪表盘", "打开默认应用", "-", "连接", "-", "切换账户", "-", "退出"},
+		},
 	}
 	for _, testCase := range cases {
-		t.Run(string(testCase.want), func(t *testing.T) {
-			state := State{
-				Session: session.State{Phase: session.PhaseOnline},
-				Config:  config.Default(),
-			}
-			var copied []ClashFormat
-			actions := Actions{CopyClash: func(format ClashFormat) {
-				copied = append(copied, format)
-			}}
-			tester := ui.NewTester(View(&state, actions), 720, 620)
-			tester.Frame()
-			if err := tester.Click("复制配置"); err != nil {
-				t.Fatalf("open the copy menu: %v", err)
-			}
-			if err := tester.ChooseMenuItem(testCase.label); err != nil {
-				t.Fatalf("choose %q: %v", testCase.label, err)
-			}
-			if len(copied) != 1 || copied[0] != testCase.want {
-				t.Fatalf("copied = %v, want [%s]", copied, testCase.want)
+		t.Run(testCase.name, func(t *testing.T) {
+			got := menuLabels(TrayMenu(testCase.state, Actions{}))
+			if strings.Join(got, "|") != strings.Join(testCase.want, "|") {
+				t.Fatalf("tray order = %v, want %v", got, testCase.want)
 			}
 		})
+	}
+}
+
+// menuLabels is the menu's order in one list: a separator is "-", every other
+// item its label.
+func menuLabels(menu *mygo.Menu) []string {
+	out := make([]string, 0, len(menu.Items()))
+	for _, item := range menu.Items() {
+		if item.Type == mygo.MenuItemSeparator {
+			out = append(out, "-")
+			continue
+		}
+		out = append(out, item.Label)
+	}
+	return out
+}
+
+// 打开仪表盘 is the tray's one page shortcut: the tray icon keeps the page the
+// window was reading, so only this item moves it to the session.
+func TestTrayMenuOpensTheDashboard(t *testing.T) {
+	state := State{Session: session.State{Phase: session.PhaseIdle}, Config: config.Default()}
+	var chosen []Page
+	menu := TrayMenu(&state, Actions{ShowPage: func(page Page) { chosen = append(chosen, page) }})
+
+	var item *mygo.MenuItem
+	for _, candidate := range menu.Items() {
+		if candidate.ID == "dashboard" {
+			item = candidate
+		}
+	}
+	if item == nil {
+		t.Fatalf("no dashboard item in %v", labels(menu.Items()))
+	}
+	item.Click(item, nil)
+	if len(chosen) != 1 || chosen[0] != PageDashboard {
+		t.Fatalf("dashboard item chose %v", chosen)
 	}
 }
 
