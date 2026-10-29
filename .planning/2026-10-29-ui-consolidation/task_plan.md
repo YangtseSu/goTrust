@@ -13,12 +13,12 @@ separate chip.
 
 ## Next Step
 
-Start Phase 19: make the tray documentation match Linux. Phase 18 (the second
-launch) is complete.
+None: Phase 19 completes the plan. The remaining work is the operator's tray
+check on the real desktop (icon click and panel).
 
 ## Current Phase
 
-Phase 18 complete; Phase 19 pending.
+Phase 19 complete; all phases done.
 
 ## Decisions already made
 
@@ -935,10 +935,31 @@ Notes:
 
 ### Phase 19: The tray documentation matches Linux
 
-- [ ] README and `docs/design.md`: a tray with a menu opens it on click;
+- [x] README and `docs/design.md`: a tray with a menu opens it on click;
       activation shows the window (a double click under AppIndicator), and
       `打开仪表盘` is the menu item that always works.
-- **Status:** pending.
+- **Status:** complete.
+
+Notes:
+
+- Verified against v0.7.3: with a menu set, the AppIndicator icon opens the
+  menu on a click (GNOME's extension waits out the double-click time and opens
+  it on a single click); `SetActivatable` connects the `activate` handler only
+  when `OnClick` is set and the installed libayatana-appindicator3 has the
+  signal, so an older library reports no activation and the menu is the only
+  path. The handler is our `showWindow`, which keeps the page; 打开仪表盘 is
+  `ShowPage(PageDashboard)` and always works.
+- The README paragraph contradicted itself: it said a click opens the window
+  and that GNOME needs a double click. It now says the click opens the menu,
+  a double click activates the window in GNOME when supported, and that older
+  libraries leave only the menu. `docs/design.md` gained "The tray" with the
+  one-interface/no-设置 rule and the Linux click rules.
+- The menu order is pinned by `TestTrayMenuOrder`; the DBusMenu path was
+  exercised in the real GNOME session in Phase 6. A headless probe has no
+  StatusNotifier watcher (the nested session has no panel), so the icon click
+  and panel remain the operator's check.
+- Docs only. Checks: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint` pass.
 
 ## Out of scope
 

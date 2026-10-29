@@ -31,6 +31,26 @@ The review settled these points:
   with more than one account), 退出 — no 设置;
 - no memory display; the traffic card is optional.
 
+### Phase 19: The tray documentation matches Linux
+
+- **Status:** complete
+- README's tray paragraph was self-contradictory ("a click opens the window",
+  "GNOME needs a double click") and wrong about AppIndicator. It now says a
+  click opens the menu (GNOME's extension waits the double-click time), a
+  double click activates the window when libayatana-appindicator3 has the
+  `activate` signal, older releases leave only the menu, and 打开仪表盘 always
+  shows the window and selects the dashboard.
+- `docs/design.md` gained "The tray": the menu is the one interface (no 设置)
+  and the Linux click/activation rules.
+- Verified against v0.7.3 `docs/menus.md` and `internal/linux/menu.go`
+  (`SetActivatable` connects the handler only when `OnClick` is set and the
+  library has the signal; the panel opens the menu on a click). The menu order
+  is pinned by `TestTrayMenuOrder`; the DBusMenu path was exercised in the real
+  session in Phase 6. A headless probe finds no StatusNotifier watcher, so the
+  icon click and panel remain the operator's check.
+- Docs only; `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .`,
+  `reuse lint`.
+
 ### Phase 18: A second launch brings the window forward
 
 - **Status:** complete

@@ -387,7 +387,10 @@ status
 - **Tray clicks on Linux.** With a menu set, a click opens the menu; an
   `OnClick` listener answers activation, which AppIndicator sends on a double
   click (`docs/menus.md:428-432`). Our pattern matches the documented one;
-  the README wording does not.
+  the README wording does not. Fixed in Phase 19: the README and
+  `docs/design.md` now say the click opens the menu, activation (a double
+  click under GNOME) shows the window when the library has `activate`, and
+  打开仪表盘 always works.
 
 Revision (2026-10-29, after moving to v0.7.3): `loop.go` and the UI package
 are unchanged from v0.7.2, so every fact above still holds. The Phase 14 sweep
