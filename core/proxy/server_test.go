@@ -895,3 +895,170 @@ func TestHTTPForwardReusesTheUpstreamConnection(t *testing.T) {
 		t.Fatalf("upstream dials = %d, want 1 (the connection was not reused)", dials)
 	}
 }
+
+// The dashboard's traffic card reads these counters, so both directions must
+// be counted where the bytes actually move: the client side of a tunnel for
+// CONNECT and SOCKS5, and the bodies of a plain-HTTP exchange. A CONNECT
+// request is read by the HTTP server before the hijack, so only the payload
+// and the status line cross the tracked connection.
+func TestHTTPConnectCountsTraffic(t *testing.T) {
+	echo := echoServer(t)
+	bind := freePort(t)
+	server := startProxy(t, Options{HTTPBind: bind, Dial: directDial})
+
+	conn, err := net.Dial("tcp", bind)
+	if err != nil {
+		t.Fatalf("dial the proxy: %v", err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	request := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", echo.Addr(), echo.Addr())
+	if _, err := io.WriteString(conn, request); err != nil {
+		t.Fatalf("write CONNECT: %v", err)
+	}
+	reader := bufio.NewReader(conn)
+	status, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read status line: %v", err)
+	}
+	if !strings.Contains(status, "200") {
+		t.Fatalf("status = %q, want 200", status)
+	}
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read headers: %v", err)
+		}
+		if line == "\r\n" {
+			break
+		}
+	}
+
+	if _, err := conn.Write([]byte("hello")); err != nil {
+		t.Fatalf("write payload: %v", err)
+	}
+	echoed := make([]byte, len("hello"))
+	if _, err := io.ReadFull(reader, echoed); err != nil {
+		t.Fatalf("read payload: %v", err)
+	}
+
+	traffic := server.Traffic()
+	if want := uint64(len("hello")); traffic.Up != want {
+		t.Fatalf("up = %d, want %d (the payload)", traffic.Up, want)
+	}
+	if want := uint64(len("HTTP/1.1 200 Connection Established\r\n\r\n") + len("hello")); traffic.Down != want {
+		t.Fatalf("down = %d, want %d (status line and echo)", traffic.Down, want)
+	}
+}
+
+func TestHTTPForwardCountsTraffic(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read the request body: %v", err)
+		}
+		fmt.Fprintf(w, "got %s", body)
+	}))
+	defer upstream.Close()
+
+	bind := freePort(t)
+	server := startProxy(t, Options{HTTPBind: bind, Dial: directDial})
+	proxyURL, err := url.Parse("http://" + bind)
+	if err != nil {
+		t.Fatalf("parse proxy url: %v", err)
+	}
+	client := &http.Client{
+		Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)},
+		Timeout:   5 * time.Second,
+	}
+
+	request, err := http.NewRequest(http.MethodPost, upstream.URL+"/echo", strings.NewReader("ping"))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("post through the proxy: %v", err)
+	}
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if string(body) != "got ping" {
+		t.Fatalf("body = %q, want %q", body, "got ping")
+	}
+
+	traffic := server.Traffic()
+	if want := uint64(len("ping")); traffic.Up != want {
+		t.Fatalf("up = %d, want %d (the request body)", traffic.Up, want)
+	}
+	if want := uint64(len("got ping")); traffic.Down != want {
+		t.Fatalf("down = %d, want %d (the response body)", traffic.Down, want)
+	}
+}
+
+// SOCKS5 moves its handshake over the same tracked connection, so the totals
+// include it; the payload has to be counted in both directions on top.
+func TestSOCKS5CountsTraffic(t *testing.T) {
+	echo := echoServer(t)
+	bind := freePort(t)
+	server := startProxy(t, Options{SOCKS5Bind: bind, Dial: directDial})
+
+	conn, err := net.Dial("tcp", bind)
+	if err != nil {
+		t.Fatalf("dial the proxy: %v", err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	if _, err := conn.Write([]byte{0x05, 0x01, 0x00}); err != nil {
+		t.Fatalf("write greeting: %v", err)
+	}
+	greeting := make([]byte, 2)
+	if _, err := io.ReadFull(conn, greeting); err != nil {
+		t.Fatalf("read greeting: %v", err)
+	}
+
+	host, portText, err := net.SplitHostPort(echo.Addr().String())
+	if err != nil {
+		t.Fatalf("split echo address: %v", err)
+	}
+	port, err := net.LookupPort("tcp", portText)
+	if err != nil {
+		t.Fatalf("parse echo port: %v", err)
+	}
+	ip := net.ParseIP(host).To4()
+	if ip == nil {
+		t.Fatalf("echo address %s is not IPv4", host)
+	}
+	request := []byte{0x05, 0x01, 0x00, 0x01}
+	request = append(request, ip...)
+	request = binary.BigEndian.AppendUint16(request, uint16(port))
+	if _, err := conn.Write(request); err != nil {
+		t.Fatalf("write connect: %v", err)
+	}
+	reply := make([]byte, 10)
+	if _, err := io.ReadFull(conn, reply); err != nil {
+		t.Fatalf("read connect reply: %v", err)
+	}
+
+	if _, err := conn.Write([]byte("hello")); err != nil {
+		t.Fatalf("write payload: %v", err)
+	}
+	echoed := make([]byte, len("hello"))
+	if _, err := io.ReadFull(conn, echoed); err != nil {
+		t.Fatalf("read payload: %v", err)
+	}
+
+	traffic := server.Traffic()
+	// 3 bytes of greeting, 10 of connect request and the payload up; 2 of
+	// method selection, 10 of reply and the echo down.
+	if want := uint64(3 + 10 + len("hello")); traffic.Up != want {
+		t.Fatalf("up = %d, want %d", traffic.Up, want)
+	}
+	if want := uint64(2 + 10 + len("hello")); traffic.Down != want {
+		t.Fatalf("down = %d, want %d", traffic.Down, want)
+	}
+}

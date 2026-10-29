@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -126,6 +127,7 @@ func renderStates(t *testing.T, dir, lang string) {
 				Session:   online,
 				Config:    cfg,
 				Listeners: renderListeners(),
+				Traffic:   renderTraffic(),
 			},
 		},
 		{
@@ -334,21 +336,21 @@ func renderStates(t *testing.T, dir, lang string) {
 	}
 
 	t.Run("main-online-dark", func(t *testing.T) {
-		state := State{Session: online, Config: cfg, Listeners: renderListeners()}
+		state := State{Session: online, Config: cfg, Listeners: renderListeners(), Traffic: renderTraffic()}
 		tester := ui.NewTester(View(&state, Actions{}), 900, 740)
 		tester.SetDark(true)
 		save("main-online-dark", tester)
 	})
 	t.Run("main-small", func(t *testing.T) {
-		state := State{Session: online, Config: cfg, Listeners: renderListeners()}
+		state := State{Session: online, Config: cfg, Listeners: renderListeners(), Traffic: renderTraffic()}
 		save("main-small", ui.NewTester(View(&state, Actions{}), 720, 560))
 	})
 	t.Run("main-resources", func(t *testing.T) {
-		state := State{Session: longGrant(), Config: cfg, Listeners: renderListeners()}
+		state := State{Session: longGrant(), Config: cfg, Listeners: renderListeners(), Traffic: renderTraffic()}
 		save("main-resources", ui.NewTester(View(&state, Actions{}), 900, 740))
 	})
 	t.Run("main-resources-small", func(t *testing.T) {
-		state := State{Session: longGrant(), Config: cfg, Listeners: renderListeners()}
+		state := State{Session: longGrant(), Config: cfg, Listeners: renderListeners(), Traffic: renderTraffic()}
 		save("main-resources-small", ui.NewTester(View(&state, Actions{}), 720, 560))
 	})
 	t.Run("main-password-small", func(t *testing.T) {
@@ -408,6 +410,7 @@ func renderPageState(cfg config.Config, page Page) *State {
 		PACURL:    "http://127.0.0.1:1082/pac",
 		Session:   session.State{Phase: session.PhaseOnline, ClientIP: "203.0.113.4", Since: time.Now().Add(-17 * time.Minute)},
 		Listeners: renderListeners(),
+		Traffic:   renderTraffic(),
 	}
 }
 
@@ -422,6 +425,19 @@ func renderLogLines() []string {
 		"2026/10/29 09:12:04 HTTP proxy listening on 127.0.0.1:1081",
 		"2026/10/29 09:12:05 keep-alive: example.com answered 200",
 	}
+}
+
+// renderTraffic is a minute of proxy throughput for the dashboard card: a
+// download with a few waves and an upload a fraction of it, so both lines and
+// the fading fill are visible at both window sizes.
+func renderTraffic() TrafficState {
+	up := make([]float64, TrafficPoints)
+	down := make([]float64, TrafficPoints)
+	for i := range TrafficPoints {
+		down[i] = 1.6e6 + 1.1e6*math.Sin(float64(i)/6.5) + 0.35e6*math.Sin(float64(i)/2.2)
+		up[i] = 0.28e6 + 0.16e6*math.Sin(float64(i)/9)
+	}
+	return TrafficState{Up: up[TrafficPoints-1], Down: down[TrafficPoints-1], UpSeries: up, DownSeries: down}
 }
 
 // renderListeners are the two listeners a session binds by default.

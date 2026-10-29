@@ -242,6 +242,9 @@ func (a *app) runUI(ctx context.Context) error {
 			tail := &logTail{path: logFile.Path(), limit: gotrustui.LogTailLines, emit: a.setLogLines}
 			go tail.run(ctx)
 		}
+		// The dashboard's traffic card is a minute of samples: read the live
+		// server's counters once a second, whenever a session is up.
+		go a.sampleTraffic(ctx)
 
 		decision := decideAutoConnect(a.cfg)
 		switch {

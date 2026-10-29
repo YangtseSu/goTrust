@@ -286,6 +286,56 @@ func (msgs Messages) MetricKeepAlive() string {
 	return Catalog.Format(msgs.locale, "metricKeepAlive", nil)
 }
 
+// TrafficTitle says "流量"
+// in the language the app shows.
+func TrafficTitle() string { return In(i18n.Locale()).TrafficTitle() }
+
+// TrafficTitle says "流量"
+// in the language of msgs.
+func (msgs Messages) TrafficTitle() string {
+	return Catalog.Format(msgs.locale, "trafficTitle", nil)
+}
+
+// TrafficDown says "下行 {rate}"
+// in the language the app shows.
+func TrafficDown(rate string) string { return In(i18n.Locale()).TrafficDown(rate) }
+
+// TrafficDown says "下行 {rate}"
+// in the language of msgs.
+func (msgs Messages) TrafficDown(rate string) string {
+	return Catalog.Format(msgs.locale, "trafficDown", map[string]any{"rate": rate})
+}
+
+// TrafficUp says "上行 {rate}"
+// in the language the app shows.
+func TrafficUp(rate string) string { return In(i18n.Locale()).TrafficUp(rate) }
+
+// TrafficUp says "上行 {rate}"
+// in the language of msgs.
+func (msgs Messages) TrafficUp(rate string) string {
+	return Catalog.Format(msgs.locale, "trafficUp", map[string]any{"rate": rate})
+}
+
+// TrafficWindow says "最近 60 秒"
+// in the language the app shows.
+func TrafficWindow() string { return In(i18n.Locale()).TrafficWindow() }
+
+// TrafficWindow says "最近 60 秒"
+// in the language of msgs.
+func (msgs Messages) TrafficWindow() string {
+	return Catalog.Format(msgs.locale, "trafficWindow", nil)
+}
+
+// TrafficChart says "最近 60 秒上下行流量"
+// in the language the app shows.
+func TrafficChart() string { return In(i18n.Locale()).TrafficChart() }
+
+// TrafficChart says "最近 60 秒上下行流量"
+// in the language of msgs.
+func (msgs Messages) TrafficChart() string {
+	return Catalog.Format(msgs.locale, "trafficChart", nil)
+}
+
 // ProfileMissing says "账户 {name} 不存在"
 // in the language the app shows.
 func ProfileMissing(name string) string { return In(i18n.Locale()).ProfileMissing(name) }
@@ -534,51 +584,51 @@ func (msgs Messages) CopyPAC() string {
 	return Catalog.Format(msgs.locale, "copyPAC", nil)
 }
 
-// CopyConfig says "复制代理配置"
+// CopyConfig says "复制配置"
 // in the language the app shows.
 func CopyConfig() string { return In(i18n.Locale()).CopyConfig() }
 
-// CopyConfig says "复制代理配置"
+// CopyConfig says "复制配置"
 // in the language of msgs.
 func (msgs Messages) CopyConfig() string {
 	return Catalog.Format(msgs.locale, "copyConfig", nil)
 }
 
-// ClashPlain says "Clash 片段"
+// ClashPlain says "Clash"
 // in the language the app shows.
 func ClashPlain() string { return In(i18n.Locale()).ClashPlain() }
 
-// ClashPlain says "Clash 片段"
+// ClashPlain says "Clash"
 // in the language of msgs.
 func (msgs Messages) ClashPlain() string {
 	return Catalog.Format(msgs.locale, "clashPlain", nil)
 }
 
-// ClashScript says "Verge 脚本"
+// ClashScript says "Clash Script"
 // in the language the app shows.
 func ClashScript() string { return In(i18n.Locale()).ClashScript() }
 
-// ClashScript says "Verge 脚本"
+// ClashScript says "Clash Script"
 // in the language of msgs.
 func (msgs Messages) ClashScript() string {
 	return Catalog.Format(msgs.locale, "clashScript", nil)
 }
 
-// ClashConfig says "Clash 完整配置"
+// ClashConfig says "Clash 配置"
 // in the language the app shows.
 func ClashConfig() string { return In(i18n.Locale()).ClashConfig() }
 
-// ClashConfig says "Clash 完整配置"
+// ClashConfig says "Clash 配置"
 // in the language of msgs.
 func (msgs Messages) ClashConfig() string {
 	return Catalog.Format(msgs.locale, "clashConfig", nil)
 }
 
-// ResourcesTitle says "已获授权的资源"
+// ResourcesTitle says "已授权应用"
 // in the language the app shows.
 func ResourcesTitle() string { return In(i18n.Locale()).ResourcesTitle() }
 
-// ResourcesTitle says "已获授权的资源"
+// ResourcesTitle says "已授权应用"
 // in the language of msgs.
 func (msgs Messages) ResourcesTitle() string {
 	return Catalog.Format(msgs.locale, "resourcesTitle", nil)
@@ -684,23 +734,23 @@ func (msgs Messages) ResourceGroupOther() string {
 	return Catalog.Format(msgs.locale, "resourceGroupOther", nil)
 }
 
-// ResourceGroupCount says "{group} · {count, plural, other {# 项}}"
+// ResourceGroupCount says "{group} {count, number}"
 // in the language the app shows.
 func ResourceGroupCount(group string, count int) string {
 	return In(i18n.Locale()).ResourceGroupCount(group, count)
 }
 
-// ResourceGroupCount says "{group} · {count, plural, other {# 项}}"
+// ResourceGroupCount says "{group} {count, number}"
 // in the language of msgs.
 func (msgs Messages) ResourceGroupCount(group string, count int) string {
 	return Catalog.Format(msgs.locale, "resourceGroupCount", map[string]any{"group": group, "count": count})
 }
 
-// ResourceSearch says "搜索资源"
+// ResourceSearch says "搜索应用或地址"
 // in the language the app shows.
 func ResourceSearch() string { return In(i18n.Locale()).ResourceSearch() }
 
-// ResourceSearch says "搜索资源"
+// ResourceSearch says "搜索应用或地址"
 // in the language of msgs.
 func (msgs Messages) ResourceSearch() string {
 	return Catalog.Format(msgs.locale, "resourceSearch", nil)
@@ -850,11 +900,11 @@ func (msgs Messages) TrayTooltipKeepAlive(status string, summary string) string 
 	return Catalog.Format(msgs.locale, "trayTooltipKeepAlive", map[string]any{"status": status, "summary": summary})
 }
 
-// FieldGateway says "网关地址"
+// FieldGateway says "网关"
 // in the language the app shows.
 func FieldGateway() string { return In(i18n.Locale()).FieldGateway() }
 
-// FieldGateway says "网关地址"
+// FieldGateway says "网关"
 // in the language of msgs.
 func (msgs Messages) FieldGateway() string {
 	return Catalog.Format(msgs.locale, "fieldGateway", nil)
@@ -880,11 +930,11 @@ func (msgs Messages) FieldPassword() string {
 	return Catalog.Format(msgs.locale, "fieldPassword", nil)
 }
 
-// PasswordPlaceholder says "留空：二次验证在登录时询问"
+// PasswordPlaceholder says "留空：网关使用二次验证时，登录过程中提示"
 // in the language the app shows.
 func PasswordPlaceholder() string { return In(i18n.Locale()).PasswordPlaceholder() }
 
-// PasswordPlaceholder says "留空：二次验证在登录时询问"
+// PasswordPlaceholder says "留空：网关使用二次验证时，登录过程中提示"
 // in the language of msgs.
 func (msgs Messages) PasswordPlaceholder() string {
 	return Catalog.Format(msgs.locale, "passwordPlaceholder", nil)
@@ -1100,11 +1150,11 @@ func (msgs Messages) BindHint() string {
 	return Catalog.Format(msgs.locale, "bindHint", nil)
 }
 
-// DeviceID says "设备 ID"
+// DeviceID says "设备标识"
 // in the language the app shows.
 func DeviceID() string { return In(i18n.Locale()).DeviceID() }
 
-// DeviceID says "设备 ID"
+// DeviceID says "设备标识"
 // in the language of msgs.
 func (msgs Messages) DeviceID() string {
 	return Catalog.Format(msgs.locale, "deviceID", nil)
@@ -1610,21 +1660,21 @@ func (msgs Messages) PageProfiles() string {
 	return Catalog.Format(msgs.locale, "pageProfiles", nil)
 }
 
-// SettingsUnsaved says "未保存的修改"
+// SettingsUnsaved says "有未保存修改"
 // in the language the app shows.
 func SettingsUnsaved() string { return In(i18n.Locale()).SettingsUnsaved() }
 
-// SettingsUnsaved says "未保存的修改"
+// SettingsUnsaved says "有未保存修改"
 // in the language of msgs.
 func (msgs Messages) SettingsUnsaved() string {
 	return Catalog.Format(msgs.locale, "settingsUnsaved", nil)
 }
 
-// SettingsDiscard says "放弃修改"
+// SettingsDiscard says "放弃"
 // in the language the app shows.
 func SettingsDiscard() string { return In(i18n.Locale()).SettingsDiscard() }
 
-// SettingsDiscard says "放弃修改"
+// SettingsDiscard says "放弃"
 // in the language of msgs.
 func (msgs Messages) SettingsDiscard() string {
 	return Catalog.Format(msgs.locale, "settingsDiscard", nil)
@@ -1670,11 +1720,11 @@ func (msgs Messages) ProfileCurrent() string {
 	return Catalog.Format(msgs.locale, "profileCurrent", nil)
 }
 
-// NameField says "账户名称"
+// NameField says "名称"
 // in the language the app shows.
 func NameField() string { return In(i18n.Locale()).NameField() }
 
-// NameField says "账户名称"
+// NameField says "名称"
 // in the language of msgs.
 func (msgs Messages) NameField() string {
 	return Catalog.Format(msgs.locale, "nameField", nil)
@@ -1942,21 +1992,21 @@ func (msgs Messages) TotpRemoved() string {
 	return Catalog.Format(msgs.locale, "totpRemoved", nil)
 }
 
-// Socks5Listen says "SOCKS5 监听"
+// Socks5Listen says "SOCKS5"
 // in the language the app shows.
 func Socks5Listen() string { return In(i18n.Locale()).Socks5Listen() }
 
-// Socks5Listen says "SOCKS5 监听"
+// Socks5Listen says "SOCKS5"
 // in the language of msgs.
 func (msgs Messages) Socks5Listen() string {
 	return Catalog.Format(msgs.locale, "socks5Listen", nil)
 }
 
-// HttpListen says "HTTP 监听"
+// HttpListen says "HTTP"
 // in the language the app shows.
 func HttpListen() string { return In(i18n.Locale()).HttpListen() }
 
-// HttpListen says "HTTP 监听"
+// HttpListen says "HTTP"
 // in the language of msgs.
 func (msgs Messages) HttpListen() string {
 	return Catalog.Format(msgs.locale, "httpListen", nil)
@@ -2152,11 +2202,11 @@ func (msgs Messages) AuthChosen(method string) string {
 	return Catalog.Format(msgs.locale, "authChosen", map[string]any{"method": method})
 }
 
-// AuthAutoLabel says "自动（网关唯一方式）"
+// AuthAutoLabel says "自动"
 // in the language the app shows.
 func AuthAutoLabel() string { return In(i18n.Locale()).AuthAutoLabel() }
 
-// AuthAutoLabel says "自动（网关唯一方式）"
+// AuthAutoLabel says "自动"
 // in the language of msgs.
 func (msgs Messages) AuthAutoLabel() string {
 	return Catalog.Format(msgs.locale, "authAutoLabel", nil)
@@ -2276,11 +2326,11 @@ func (msgs Messages) Trust() string {
 	return Catalog.Format(msgs.locale, "trust", nil)
 }
 
-// Untrust says "取消信任"
+// Untrust says "取消信任本机"
 // in the language the app shows.
 func Untrust() string { return In(i18n.Locale()).Untrust() }
 
-// Untrust says "取消信任"
+// Untrust says "取消信任本机"
 // in the language of msgs.
 func (msgs Messages) Untrust() string {
 	return Catalog.Format(msgs.locale, "untrust", nil)

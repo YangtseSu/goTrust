@@ -33,8 +33,9 @@ an entry in its decisions table.
 * 多账户 is quieter than the pages above it: a subdued row whose tag is the
   live account, so the account list does not read as one more step of the
   settings pages.
-* One page is mounted at a time. A page of forms scrolls when the window is
-  shorter than the form; the shell's bars stay in place.
+* One page is mounted at a time. A page scrolls when its content is taller
+  than the window, the dashboard included, as the mockup's scrolling view
+  does; the shell's bars stay in place.
 
 ## The session is the headline
 
@@ -58,10 +59,19 @@ an entry in its decisions table.
 * A four-cell metrics row follows (已分配地址, SOCKS5, HTTP, 保活). A value the
   session does not have is `—`. The keep-alive cell carries the last probe's
   summary in its description, so the row stays one line.
-* The resources card is the second card: its title, the count,
-  打开默认应用 and the search field in the header, then the granted list.
-  打开默认应用 is disabled while the grant has no launch address; the filter
-  appears as soon as there is a row, and / focuses it.
+* The traffic card sits between the session and the resources: 流量, the
+  newest rates as two legends, 下行 in the accent and 上行 in the success
+  colour, 最近 60 秒 at the right, and a 80 DIP sparkline of the last minute
+  under them. The download is the accent area fading to nothing under its
+  stroke, the upload the success line above it; both share one scale, so the
+  taller line is the faster direction. The application samples the proxy's
+  byte counters once a second into a 60-point ring; a new session starts a
+  new minute, and a minute with no traffic draws a muted baseline instead.
+* The resources card is the third card: its title, the count,
+  打开默认应用 and the search field in the header, then the granted list as
+  part of the scrolling page. 打开默认应用 is disabled while the grant has no
+  launch address; the filter appears as soon as there is a row, and / focuses
+  it.
 * The session line is shared with the pre-login panels, so a question never
   hides the phase it belongs to.
 

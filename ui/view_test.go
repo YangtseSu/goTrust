@@ -300,7 +300,7 @@ func TestResourceListRendersAndActs(t *testing.T) {
 		Config: config.Default(),
 	}
 
-	rendered := ui.NewTester(View(&state, Actions{}), 720, 560)
+	rendered := ui.NewTester(View(&state, Actions{}), 900, 740)
 	rendered.Frame()
 	for _, want := range []string{"已授权应用", "2 项", "应用 1", "IP 地址 1", "Wiki", "Portal · web", "192.0.2.10", "tcp 443"} {
 		if !rendered.HasText(want) {
@@ -309,7 +309,7 @@ func TestResourceListRendersAndActs(t *testing.T) {
 	}
 
 	var opened string
-	openTester := ui.NewTester(View(&state, Actions{OpenResource: func(url string) { opened = url }}), 720, 560)
+	openTester := ui.NewTester(View(&state, Actions{OpenResource: func(url string) { opened = url }}), 900, 740)
 	if err := openTester.Click("Wiki 的操作"); err != nil {
 		t.Fatalf("open the row menu: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestResourceListRendersAndActs(t *testing.T) {
 	}
 
 	var copied string
-	copyTester := ui.NewTester(View(&state, Actions{CopyResource: func(value string) { copied = value }}), 720, 560)
+	copyTester := ui.NewTester(View(&state, Actions{CopyResource: func(value string) { copied = value }}), 900, 740)
 	// The address rule has no suggested URL, so 打开 is disabled there; the copy
 	// value is the row's own text.
 	if err := copyTester.Click("192.0.2.10 的操作"); err != nil {
@@ -436,10 +436,10 @@ func TestResourceSearchAppearsWithEntries(t *testing.T) {
 	}
 }
 
-// At the window's minimum the list keeps three rows under the status card:
-// the window is for the resources, so it may not collapse to a heading under
-// them.
-func TestResourceListKeepsThreeRowsAtTheMinimumSize(t *testing.T) {
+// At the window's minimum the dashboard is taller than the window, so the page
+// scrolls as the mockup's does: a row below the fold is reached instead of
+// hidden behind the window's edge.
+func TestDashboardScrollsAtTheMinimumSize(t *testing.T) {
 	entries := make([]session.ResourceEntry, 0, 20)
 	for i := 1; i <= 20; i++ {
 		title := fmt.Sprintf("App %02d", i)
@@ -452,18 +452,23 @@ func TestResourceListKeepsThreeRowsAtTheMinimumSize(t *testing.T) {
 
 	tester := ui.NewTester(View(&state, Actions{}), 720, 560)
 	tester.Frame()
-	if !tester.HasText("已分配地址") {
-		t.Fatalf("the status card left the window; texts: %v", tester.Texts())
+	if !tester.HasText("已分配地址") || !tester.HasText("流量") {
+		t.Fatalf("the top of the dashboard left the window; texts: %v", tester.Texts())
 	}
 	height := float32(tester.Image().Bounds().Max.Y)
-	for _, title := range []string{"App 01", "App 02", "App 03"} {
-		rect, ok := tester.Find(title)
-		if !ok {
-			t.Fatalf("%q is not in the list; texts: %v", title, tester.Texts())
-		}
-		if rect.Y+rect.H > height {
-			t.Fatalf("%q is below the window: %+v", title, rect)
-		}
+	row, ok := tester.Find("App 20")
+	if !ok {
+		t.Fatalf("the last row is not in the page; texts: %v", tester.Texts())
+	}
+	if row.Y < height {
+		t.Fatalf("the last row is already on screen at %+v; the page does not need to scroll", row)
+	}
+
+	tester.Scroll(400, 300, 0, 5_000)
+	tester.Frame()
+	row, ok = tester.Find("App 20")
+	if !ok || row.Y+row.H > height || row.Y < TitleBarHeight || row.W == 0 {
+		t.Fatalf("the last row after scrolling = %+v (ok=%v), want it inside the window", row, ok)
 	}
 }
 

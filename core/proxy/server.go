@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/things-go/go-socks5"
@@ -66,6 +67,12 @@ type Server struct {
 	// ignores hijacked connections, so Close has to drop them itself.
 	conns  map[net.Conn]struct{}
 	closed bool
+
+	// up and down count the bytes the proxy moved since it started. They are
+	// written on every tunnel read and write, so they are atomics rather than
+	// fields under mu: the data path must not contend for the lock Close and
+	// the listener list use.
+	up, down atomic.Uint64
 }
 
 // ErrNoListener reports that both binds were empty.
@@ -148,6 +155,32 @@ func (s *Server) Listeners() []Listener {
 		})
 	}
 	return listeners
+}
+
+// Traffic is the number of bytes the proxy has moved in each direction since
+// it started: Up is what clients sent into the tunnel, Down what came back
+// through it.
+type Traffic struct {
+	Up   uint64
+	Down uint64
+}
+
+// Traffic reports the byte counters. A closed server reports the totals it
+// ended with, because the listeners stop and nothing more is counted.
+func (s *Server) Traffic() Traffic {
+	return Traffic{Up: s.up.Load(), Down: s.down.Load()}
+}
+
+func (s *Server) countUp(n int) {
+	if n > 0 {
+		s.up.Add(uint64(n))
+	}
+}
+
+func (s *Server) countDown(n int) {
+	if n > 0 {
+		s.down.Add(uint64(n))
+	}
 }
 
 // Close stops every listener and drops every open tunnel. It is safe to call
@@ -233,6 +266,21 @@ func (c *trackedConn) Close() error {
 		err = c.Conn.Close()
 	})
 	return err
+}
+
+// Read counts what the client sends into the tunnel: the SOCKS5 handler and
+// the CONNECT tunnel both read the client connection to forward it.
+func (c *trackedConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	c.server.countUp(n)
+	return n, err
+}
+
+// Write counts what the tunnel sends back to the client.
+func (c *trackedConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	c.server.countDown(n)
+	return n, err
 }
 
 // CloseWrite keeps the half-close usable through the wrapper: the SOCKS5
@@ -388,6 +436,9 @@ func (s *Server) tunnel(w http.ResponseWriter, r *http.Request) {
 		if _, err := io.ReadFull(buffered.Reader, pending); err != nil {
 			return
 		}
+		// These bytes left the client before the hijack; the tunnel's own
+		// counter never saw them.
+		s.countUp(len(pending))
 		if _, err := target.Write(pending); err != nil {
 			return
 		}
@@ -418,6 +469,9 @@ func (s *Server) forward(w http.ResponseWriter, r *http.Request) {
 	outbound := r.Clone(r.Context())
 	outbound.RequestURI = ""
 	stripHopByHop(outbound.Header)
+	if outbound.Body != nil {
+		outbound.Body = countingReader{reader: outbound.Body, count: s.countUp}
+	}
 
 	response, err := s.transport.RoundTrip(outbound)
 	if err != nil {
@@ -436,8 +490,46 @@ func (s *Server) forward(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(response.StatusCode)
-	stream(w, response.Body)
+	stream(countingWriter{ResponseWriter: w, count: s.countDown}, response.Body)
 }
+
+// countingReader counts the request body a plain-HTTP exchange sends toward
+// the origin. Close follows the transport's own close of the request body.
+type countingReader struct {
+	reader io.Reader
+	count  func(int)
+}
+
+func (r countingReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	r.count(n)
+	return n, err
+}
+
+func (r countingReader) Close() error {
+	if closer, ok := r.reader.(io.Closer); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
+// countingWriter counts the response body a plain-HTTP exchange sends back to
+// the client. Unwrap keeps the response's own Flush reachable through it.
+type countingWriter struct {
+	http.ResponseWriter
+	count func(int)
+}
+
+func (w countingWriter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	w.count(n)
+	return n, err
+}
+
+// Unwrap exposes the wrapped writer to http.ResponseController, which is how
+// stream's Flush still reaches the connection through the wrapper. Embedding
+// the interface does not promote Flush: it is not one of its methods.
+func (w countingWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // stream copies a response body and flushes every chunk. Without a flush a
 // streamed response (event stream, chunked download, long poll) sits in the

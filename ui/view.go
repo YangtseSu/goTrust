@@ -55,6 +55,9 @@ type State struct {
 	Settings *SettingsState
 	// Listeners are the bound proxy endpoints.
 	Listeners []proxy.Listener
+	// Traffic is what the proxy moved over the last minute, sampled once a
+	// second while a session lives.
+	Traffic TrafficState
 	// PACURL is the loopback PAC a browser or extension can use, empty while
 	// the endpoint is disabled.
 	PACURL string
@@ -924,16 +927,14 @@ func phaseActive(phase session.Phase) bool {
 }
 
 // Resource rows are one line each: a glyph for the kind, the title, the ports
-// or the group beside it, and one menu that holds the actions. The list scrolls
-// and keeps room for three rows even at the window's minimum, because an
-// account can be granted far more entries than the window is tall and a list
-// that collapses to its heading hides the thing the window is for.
+// or the group beside it, and one menu that holds the actions. The dashboard
+// page scrolls, as the mockup does, so a long grant makes the page longer
+// instead of hiding rows inside a second scroll area.
 const (
 	resourceIconSize     = 18 // the kind glyph, and so the height of a row's line
 	resourceRowPadY      = 6  // above and below a row's line
 	resourceGroupSpacing = 12 // above a group's heading, except the first
 	resourceHeadingSpace = 4  // between a group's heading and its rows
-	resourceListMinRows  = 3
 )
 
 // resourceGroup is one kind's rows, in the order the window lists the kinds.
@@ -1025,7 +1026,7 @@ func resources(c *ui.Context, state *State, actions Actions, searchFocus *uint64
 	granted := state.Session.Resources
 
 	var filter string
-	card(c).Grow(1).Shrink(1).Gap(rowGap).Children(func() {
+	card(c).Gap(rowGap).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 			sectionHeading(c, locales.ResourcesTitle())
 			caption(c, locales.ResourceCount(len(granted.Entries)))
@@ -1057,15 +1058,13 @@ func resources(c *ui.Context, state *State, actions Actions, searchFocus *uint64
 			return
 		}
 
-		ui.Scroll(c).Grow(1).Shrink(1).MinHeight(resourceListMinHeight(c)).Children(func() {
-			ui.Column(c).Gap(2).Children(func() {
-				for index, group := range groups {
-					resourceGroupHeading(c, group, index == 0)
-					for _, entry := range group.entries {
-						resourceRow(c, entry, actions)
-					}
+		ui.Column(c).Gap(2).Children(func() {
+			for index, group := range groups {
+				resourceGroupHeading(c, group, index == 0)
+				for _, entry := range group.entries {
+					resourceRow(c, entry, actions)
 				}
-			})
+			}
 		})
 	})
 }
@@ -1084,17 +1083,6 @@ func resourceSearch(c *ui.Context, focus *uint64) string {
 		}
 	})
 	return *query
-}
-
-// resourceListMinHeight is the height of three rows at the theme's size: the
-// list keeps that much of the window when the status card and the resource
-// header have taken theirs.
-func resourceListMinHeight(c *ui.Context) float32 {
-	line := float32(resourceIconSize)
-	if text := c.Theme().FontSize * 1.3; text > line {
-		line = text
-	}
-	return resourceListMinRows * (line + 2*resourceRowPadY)
 }
 
 // resourceGroupHeading names one kind and counts the rows under it. The count

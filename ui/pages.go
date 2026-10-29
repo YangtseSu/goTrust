@@ -82,11 +82,14 @@ func pageScroll(c *ui.Context, children func()) {
 }
 
 // dashboardPage is the session page: the session card with its one control and
-// its measurements, and the resources the gateway granted in a second card.
+// its measurements, the proxy's throughput under it, and the resources the
+// gateway granted in the last card. The page scrolls like the mockup's view
+// when the window is shorter than the three cards.
 func dashboardPage(c *ui.Context, state *State, actions Actions, searchFocus *uint64) {
-	ui.Column(c).Grow(1).Shrink(1).Gap(sectionGap).Children(func() {
+	pageScroll(c, func() {
 		windowHeading(c, pageLabel(PageDashboard))
 		statusCard(c, state, actions)
+		trafficCard(c, state.Traffic)
 		resources(c, state, actions, searchFocus)
 	})
 }
