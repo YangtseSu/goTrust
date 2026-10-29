@@ -138,7 +138,49 @@ The review settled these points:
 
 ### Phase 4: Stateful play/stop control and tray
 
-- **Status:** pending
+- **Status:** complete
+- The dashboard is two cards on the window's own background: the session card
+  (phase and facts left, 60 DIP power control right, a rule, then the four
+  metrics) and the resources card (title, count, 打开默认应用 in the header).
+  `card` is the shared bordered column; the chip, the subline, the footer with
+  its tooltip and the dashboard copy menu are gone.
+- `powerAppearance` maps each phase to the control's label, glyph and fill:
+  连接 on accent, 取消 on amber with a spinner, 断开 on green with a stop
+  square, 重试 on red with the exclamation. `powerControl` adds the hover (red
+  for an ending action, `AccentHover` for a starting one) and the click
+  (active phases log out; idle and failed log in). A busy start is disabled;
+  a pending login keeps 取消.
+- `sessionLine` is shared with the pre-login panels, so the phase stays above a
+  question. The phase line is the reconnect ladder when it has started; the
+  meta line is `网关地址 host:port`, the held time online, the failure detail
+  in danger. `sessionFacts` replaced `sessionSummary`; `sessionEndpoint` and
+  `sessionIntranet` are deleted.
+- Metrics: 已分配地址 (`ClientIP`), SOCKS5 and HTTP from `State.Listeners`, 保活
+  as the probe's age in its tone with `KeepAliveSummary` as the description. An
+  absent value is `—`.
+- Resources header: 打开默认应用 (disabled without `DefaultAppURL`). The copy
+  menu, `controls`, `footer`, `footerContent` and `footerTip` are deleted;
+  `CopyPAC`/`CopyClash` and `ClashFormat` stay on `Actions` for 代理 in phase 5.
+- Tray: 未连接, separator, 打开仪表盘, 打开默认应用, separator, 连接/断开,
+  optional separator + 切换账户, separator, 退出. `Actions.ShowWindow` is
+  removed; the tray icon still calls `showWindow`, so it keeps the page.
+  Catalog: `trayShow` → `trayDashboard`, `trayOpenApp` → `openDefaultApp`,
+  `traySettings` removed; `retry`, `sessionGateway`, `metric*` and
+  `keepAliveAgoValue` added; the generated accessors were rewritten.
+- Tests: `TestPowerControlShowsThePhase` (label, glyph, fill, ending for all
+  five phases), `TestButtonsCallTheRightAction` (重试 and 取消 included),
+  `TestSessionMetricsShowTheSessionFacts` (values, dashes, description),
+  `TestTrayMenuOrder` (one and two accounts), `TestTrayMenuOpensTheDashboard`,
+  and the busy check in `TestTrayMenuOffersConnectWhenIdle`. The footer, chip
+  and copy-menu tests were removed with their subject.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint` pass. `GOTRUST_RENDER_DIR` rendered every
+  dashboard phase, the long grant at 900×740 and 720×560, dark mode and both
+  languages; the images show the two cards, the metric values and the spinner.
+  A throwaway pixel probe confirmed the hover fill (断开 green → `Danger`,
+  连接 accent → `AccentHover`). The binary ran under headless mutter
+  (`goTrust ready`, SIGTERM exit 0; the PAC port 1082 was already held by
+  another process). Interactive clicks and tray behaviour remain phase 6.
 
 ### Phase 5: Page contents approved in the mockup
 

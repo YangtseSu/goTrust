@@ -13,13 +13,12 @@ separate chip.
 
 ## Next Step
 
-Phase 4: the stateful play/stop control and the tray. 账户 is the first-run
-form, 多账户 is the bottom page with rows, and the tray's account submenu is
-the only switcher left.
+Phase 5: the page contents approved in the mockup. The dashboard is two cards
+with the stateful control, and the tray is the frequency-ordered menu.
 
 ## Current Phase
 
-Phase 3 complete; Phase 4 pending.
+Phase 4 complete; Phase 5 pending.
 
 ## Decisions already made
 
@@ -220,7 +219,7 @@ Notes:
 
 ### Phase 4: Stateful play/stop control and tray
 
-- [ ] Add `powerControl` to the dashboard: a 60 DIP round button at the right
+- [x] Add `powerControl` to the dashboard: a 60 DIP round button at the right
       of the status card's first row. The button is the action and the status:
       - offline: accent blue, play triangle, label 连接;
       - connecting: amber, spinner, label 取消;
@@ -230,29 +229,79 @@ Notes:
       Hover is red for a session-ending action and a darker accent for a
       starting one. A busy login disables a new start but keeps cancel
       available.
-- [ ] Replace the chip and the old `subline` with the phase text and the meta
+- [x] Replace the chip and the old `subline` with the phase text and the meta
       line `网关地址 <host:port> · 已保持 <duration>`; reconnecting shows the
       ladder position and countdown; failed shows the detail. The gateway comes
       from the live profile, the duration from `State.Session.Since`.
-- [ ] Keep the metrics row (已分配地址, SOCKS5, HTTP, 保活), using `—` for
+- [x] Keep the metrics row (已分配地址, SOCKS5, HTTP, 保活), using `—` for
       values that are not available; the keepalive value carries the summary in
       its description. Delete `footer`, `footerContent` and `footerTip`.
-- [ ] Move 打开默认应用 into the resources card header; delete the dashboard
+- [x] Move 打开默认应用 into the resources card header; delete the dashboard
       copy menu and the `⋯` menu. 复制配置 and PAC live on 代理; 打开日志目录
       lives on 日志; quit lives in the tray.
-- [ ] Rebuild `TrayMenu`: status line, separator, 打开仪表盘, 打开默认应用,
+- [x] Rebuild `TrayMenu`: status line, separator, 打开仪表盘, 打开默认应用,
       separator, 连接/断开, optional separator + 切换账户 submenu, separator,
       退出. Build the separators conditionally so a single-account menu has no
       empty group. No 设置 item.
-- [ ] Rename `trayShow` to 打开仪表盘 / Open Dashboard and `trayProfiles` to
+- [x] Rename `trayShow` to 打开仪表盘 / Open Dashboard and `trayProfiles` to
       切换账户 / Switch Account; remove the unused `traySettings` message.
-- [ ] Tray icon click shows and focuses the window and keeps the last page;
+- [x] Tray icon click shows and focuses the window and keeps the last page;
       打开仪表盘 switches to the dashboard. 打开默认应用 stays disabled
       without a launch URL; 连接 is disabled while busy.
-- [ ] Tests: each phase's button icon, colour, label and action; the tray order
+- [x] Tests: each phase's button icon, colour, label and action; the tray order
       with one and two accounts; the page switch from 打开仪表盘; the tray icon
       click keeps the page.
-- **Status:** pending.
+- **Status:** complete.
+
+Notes:
+
+- The dashboard is two cards on the window's own background (`card`, a
+  bordered column): the session card and the resources card. The status card's
+  first row is the phase and its facts on the left and the 60 DIP control on
+  the right; a rule, then the four-cell metrics row. The resources card's
+  header is the title, the count, a spacer and 打开默认应用, disabled while the
+  grant has no launch address.
+- `powerAppearance` maps the phase to the control's label, glyph and fill;
+  `powerControl` owns the hover (red for 断开/取消, `AccentHover` for
+  连接/重试) and the click (active phases call `Logout`, idle and failed call
+  `Login`). The two waiting phases use mygo's `Spinner` instead of a glyph;
+  `busyLine` now belongs to the save bar alone, and the dashboard button is
+  simply disabled while a start would race.
+- `sessionLine` is shared by the dashboard and the pre-login panel, so a
+  question still keeps the phase above it. `phaseText` is the phase label, or
+  the reconnect ladder when the ladder has started; `sessionFacts` builds the
+  meta line from `SessionGateway` and the held time (failure detail in the
+  danger tone, reconnect in the warning tone). The assigned address left the
+  sentence for the metrics row, so `sessionIntranet` and `sessionEndpoint` are
+  gone.
+- The keep-alive metric shows the age (`keepAliveAgoValue`, seconds) in the
+  probe's tone, with `KeepAliveSummary` as the value's description. A metric
+  with no value shows `—`.
+- 打开默认应用 now uses the window-level `openDefaultApp` key (the tray shared
+  it); the tray's `trayShow` became `trayDashboard` and `traySettings` is gone.
+  The copy actions (`CopyPAC`, `CopyClash`) and `ClashFormat` stay on `Actions`
+  for 代理 in phase 5 but no page shows them until then; their catalog strings
+  stay for phase 5's sweep too, together with `keepAliveAgo`, `proxyDisabled`,
+  `proxyListening`, `pacURL` and the already-unused `settingsAction`,
+  `moreActions`, `openLogsMenu`, `windowSettingsTitle`.
+- `Actions.ShowWindow` is gone: the tray icon's click path was always
+  `tray.OnClick(a.showWindow)`, and 打开仪表盘 now goes through
+  `ShowPage(PageDashboard)`.
+- Tests: `TestPowerControlShowsThePhase` covers the label/glyph/fill/ending of
+  all five phases, `TestButtonsCallTheRightAction` the click per phase,
+  `TestSessionMetricsShowTheSessionFacts` the row and its description,
+  `TestTrayMenuOrder` the order with one and two accounts,
+  `TestTrayMenuOpensTheDashboard` the page switch,
+  `TestTrayMenuOffersConnectWhenIdle` the busy disable. The footer, chip and
+  copy-menu tests are gone with what they tested.
+- Verification: `go build ./...`, `go test ./...`, `go vet ./...`,
+  `gofmt -l .` and `reuse lint` pass. `GOTRUST_RENDER_DIR` rendered the five
+  dashboard phases, the long grant at 900×740 and 720×560, dark mode and both
+  languages; the two-card layout, the four metrics and the spinner were checked
+  on the images. A throwaway pixel probe confirmed the hover fill (断开 turns
+  `Danger`, 连接 turns `AccentHover`). The binary ran under headless mutter
+  (`goTrust ready`, PAC port 1082 already held by another process, SIGTERM
+  exit 0). Interactive clicks and tray behaviour remain phase 6.
 
 ### Phase 5: Page contents approved in the mockup
 
