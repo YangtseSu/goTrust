@@ -13,11 +13,11 @@ separate chip.
 
 ## Next Step
 
-Phase 11 is complete. The optional traffic card (Phase 7) has not been started.
+Phase 12 is complete. The optional traffic card (Phase 7) has not been started.
 
 ## Current Phase
 
-Phase 11 complete; Phase 7 optional and not started.
+Phase 12 complete; Phase 7 optional and not started.
 
 ## Decisions already made
 
@@ -600,6 +600,21 @@ Notes:
 - Renders: `main-captcha`, `main-code`, `main-choice`, `main-sso`,
   `main-password`, `settings-password` and `about` were checked at 900, plus
   the small and dark page sets.
+
+### Phase 12: Captcha centering and About tagline
+
+- [x] The captcha image is centered in its card.
+- [x] The About hero takes more vertical room and adds a one-line tagline
+      under the name and version.
+- **Status:** complete.
+
+Notes:
+
+- The captcha box uses `AlignSelf(ui.Center)`; the click markers stay in the
+  image's own coordinates.
+- The About hero's padding rose to 56 DIP above and below, and the tagline
+  (`aboutTagline`) sits under `goTrust <version>` in the muted ink. The
+  project and license rows follow unchanged.
 
 ## Out of scope
 

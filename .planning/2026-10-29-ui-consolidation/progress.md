@@ -256,6 +256,14 @@ The review settled these points:
 - Render: `GOTRUST_RENDER_DIR` wrote 98 images after the chip change; the five
   dashboard phases, dark mode, the panel and 720×560 were checked.
 
+### Phase 12: Captcha centering and About tagline
+
+- **Status:** complete
+- The captcha image is centered in its card; the click mapping is unchanged.
+- The About hero is taller (56 DIP padding) and adds the tagline
+  "aTrust 桌面客户端 · 本地 SOCKS5 / HTTP 代理" under the name and version.
+- Verification: full checks and the About/captcha renders.
+
 ### Phase 11: Panel design pass and About room
 
 - **Status:** complete

@@ -312,3 +312,11 @@ status
 - **The forced password panel keeps its scroll.** The card grows and shrinks
   inside the panel slot, the body scrolls, and the foot stays at the card's
   bottom.
+
+## Phase 12 facts
+
+- **A centered image keeps its own coordinates.** `AlignSelf(Center)` moves
+  the captcha box, and the markers are absolute inside that box, so the
+  click mapping does not change.
+- **The About hero is one column of three lines.** The tagline is a locale
+  string under the name, so the block grows without touching the rows.
