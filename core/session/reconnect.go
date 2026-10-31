@@ -53,11 +53,13 @@ type ReconnectState struct {
 // KeepAliveState is the last application-traffic probe, reported by the
 // upstream loop through its result hook.
 type KeepAliveState struct {
-	// Target is the URL that was probed, or the remote-DNS fallback name.
+	// Target is the URL that was probed, the tcp://host:port of a TCP target,
+	// or the remote-DNS fallback name.
 	Target string
 	// Named reports whether the user configured this target.
 	Named bool
-	// Status is the HTTP answer; zero for a transport error or a DNS probe.
+	// Status is the HTTP answer; zero for a transport error, a TCP target or a
+	// DNS probe.
 	Status int
 	// OK reports whether the probe counted as application traffic.
 	OK bool

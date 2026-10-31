@@ -73,6 +73,12 @@ Beyond the module prefix and the drops above:
   adopted only the sign key and the ticket, so the restore predicate never saw
   the device id and the password-free restore never ran: every start made a
   password login, which a gateway that requires a captcha answered with one.
+- `service.DeriveKeepAliveTargets` derives TCP targets too. A grant for 80 is
+  still a plain HTTP request; 443 completes a TLS handshake, 22 is read for the
+  SSH identification, and any other single port gets one connection. The source
+  derived HTTP targets only, so an account granted 443 and 22 ran no keep-alive
+  at all. The connection is what the probe counts; the exchange is best effort
+  and its failure is logged, not reported as a failed probe.
 
 ## Client version literals
 

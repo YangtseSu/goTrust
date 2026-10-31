@@ -148,10 +148,13 @@ is device material, not a login: after Disconnect, or after the portal ends the
 session, the next connection logs in again. The gateway rejects a ticket
 exchange while logged out, so Connect at startup requires a saved password.
 
-The keep-alive sends a real HTTP request: a `https://` target is tunnelled with
-CONNECT and does not count as application traffic, so it does not renew the
-session. Manual targets are probed before derived candidates, and the interval
-has a 10 s floor.
+The keep-alive sends real traffic to a granted application. A plain HTTP request
+is the probe known to renew an idle session; a derived target uses port 80 when
+the grant covers it. Without an HTTP port the probe still runs: 443 completes a
+TLS handshake, 22 is read for the SSH identification, and any other port gets a
+TCP connection. Those probes at least notice a dead SID on the next round;
+whether a gateway renews a session on them is not guaranteed. Manual targets are
+probed before derived candidates, and the interval has a 10 s floor.
 
 ## Name resolution
 

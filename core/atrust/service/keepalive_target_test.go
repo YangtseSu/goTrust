@@ -34,7 +34,7 @@ func TestNamedKeepAliveTargets(t *testing.T) {
 			wantURLs: []string{"http://10.0.0.1/"},
 		},
 		{
-			name:        "https is reached with CONNECT and does not count as application traffic",
+			name:        "https is warned about because the probe verifies the certificate",
 			input:       "https://www.example.net/favicon.ico",
 			wantURLs:    []string{"https://www.example.net/favicon.ico"},
 			wantWarning: 1,
@@ -76,9 +76,9 @@ func TestDeriveKeepAliveTargets(t *testing.T) {
 		wantNotes bool
 	}{
 		{
-			name:      "a grant covering port 80 is probed on port 80",
+			name:      "a grant covering every port probes the well-known ports",
 			resources: []client.IPResource{httpResource("10.0.0.1", "", 1, 65535, "all")},
-			wantURLs:  []string{"http://10.0.0.1/"},
+			wantURLs:  []string{"http://10.0.0.1/", "tcp://10.0.0.1:443", "tcp://10.0.0.1:22"},
 		},
 		{
 			name:      "a range is probed at its first address and says so",
@@ -87,27 +87,24 @@ func TestDeriveKeepAliveTargets(t *testing.T) {
 			wantNotes: true,
 		},
 		{
-			name:      "a grant for port 22 is not an HTTP application",
+			name:      "a grant for port 22 is probed with the SSH identification",
 			resources: []client.IPResource{httpResource("10.0.0.7", "", 22, 22, "tcp")},
-			wantURLs:  nil,
-			wantNotes: true,
+			wantURLs:  []string{"tcp://10.0.0.7:22"},
 		},
 		{
-			name:      "a grant for port 443 is not probed with plain HTTP",
+			name:      "a grant for port 443 is probed with a TLS handshake",
 			resources: []client.IPResource{httpResource("10.0.0.7", "", 443, 443, "tcp")},
-			wantURLs:  nil,
-			wantNotes: true,
+			wantURLs:  []string{"tcp://10.0.0.7:443"},
 		},
 		{
-			name:      "a non-standard single port is not probed",
+			name:      "a non-standard single port is probed with a connection",
 			resources: []client.IPResource{httpResource("10.0.0.55", "", 8080, 8080, "tcp")},
-			wantURLs:  nil,
-			wantNotes: true,
+			wantURLs:  []string{"tcp://10.0.0.55:8080"},
 		},
 		{
-			name:      "a port-22 grant does not hide a later port-80 grant",
+			name:      "a port-22 grant is probed alongside a later port-80 grant",
 			resources: []client.IPResource{httpResource("10.0.0.7", "", 22, 22, "tcp"), httpResource("10.0.0.8", "", 80, 80, "tcp")},
-			wantURLs:  []string{"http://10.0.0.8/"},
+			wantURLs:  []string{"tcp://10.0.0.7:22", "http://10.0.0.8/"},
 		},
 		{
 			name:      "an ipv6 destination proves nothing and is skipped",
@@ -133,7 +130,7 @@ func TestDeriveKeepAliveTargets(t *testing.T) {
 				httpResource("10.0.0.1", "", 80, 80, "tcp"),
 				httpResource("10.0.0.1", "", 1, 65535, "all"),
 			},
-			wantURLs: []string{"http://10.0.0.1/"},
+			wantURLs: []string{"http://10.0.0.1/", "tcp://10.0.0.1:443", "tcp://10.0.0.1:22"},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -149,7 +146,7 @@ func TestDeriveKeepAliveTargets(t *testing.T) {
 			}
 			for _, target := range targets {
 				if target.Named {
-					t.Fatalf("derived target %s is marked as named", target.URL)
+					t.Fatalf("derived target %s is marked as named", target.String())
 				}
 			}
 		})

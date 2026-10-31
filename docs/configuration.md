@@ -131,7 +131,7 @@ client_data_path = ""
 | `auth.totp_secret` | TOTP 密钥。只有用户在一次性验证码面板里主动选择保存时才写入；关闭保存密码会一并清除 |
 | `keepalive.enabled` | 是否发送保活请求 |
 | `keepalive.interval` | 保活间隔，默认 `90s`，最小 10 s |
-| `keepalive.targets` | 手工保活目标，一行一个，优先级高于自动推导的目标 |
+| `keepalive.targets` | 手工保活目标，一行一个，优先级高于自动推导的目标（自动推导使用授权资源的 80、443、22 端口） |
 | `debug.client_data_path` | 自定义登录数据文件路径。留空时使用配置目录下的 `client_data-<账户名>.json` |
 
 窗口的“网关”字段接受 `host:port`、`https://host:port`、只写主机名（使用 443）、带结尾路径或斜杠的粘贴内容，以及方括号形式的 IPv6 地址（可带端口）。其他协议、空主机名和 1–65535 之外的端口会被拒绝。保存时窗口把字段拆成 `server.address` 和 `server.port` 两个键，文件格式不变。

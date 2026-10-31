@@ -39,6 +39,7 @@
   "reconnectProgressWait": "Reconnecting ({attempt, number}/{max, number}, {wait})",
   "reconnectWait": "{seconds, plural, one {in # s} other {in # s}}",
   "keepAliveOK": "OK {status, number} · {target}",
+  "keepAliveTCPOK": "TCP OK · {target}",
   "keepAliveFailed": "Failed · {target}",
   "keepAliveFailedStatus": "Failed {status, number} · {target}",
   "keepAliveDNSOK": "DNS OK · {target}",

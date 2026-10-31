@@ -179,10 +179,12 @@ The full field reference is in
 [`docs/configuration.en.md`](docs/configuration.en.md)
 ([中文](docs/configuration.md)).
 
-Keep-alive sends a real HTTP request to the intranet every 90 seconds by
-default. Manual targets take precedence over derived ones. Keep-alive targets
-must be `http://` addresses: an `https://` request goes through a CONNECT tunnel
-and does not count as application traffic, so it does not renew the session.
+Keep-alive sends real traffic to a granted resource every 90 seconds by
+default. Manual targets take precedence over derived ones. Derived probes
+prefer a granted port 80 with a plain HTTP request; without one, 443 completes a
+TLS handshake, 22 is read for the SSH identification, and any other single port
+gets a TCP connection. Write manual targets as `http://` addresses; an intranet
+`https://` address signed by a private CA fails the certificate check.
 
 Automatic reconnect after a drop is off by default. When on, it retries after
 1/2/4/8/16 seconds, up to 5 attempts; a captcha or second factor stops the

@@ -768,6 +768,13 @@ func TestKeepAliveSummary(t *testing.T) {
 			want: "OK 200 · http://192.0.2.10/",
 		},
 		{
+			name: "a successful TCP probe",
+			keepAlive: session.KeepAliveState{
+				Target: "tcp://192.0.2.10:443", OK: true, At: at,
+			},
+			want: "TCP OK · tcp://192.0.2.10:443",
+		},
+		{
 			name: "a transport failure",
 			keepAlive: session.KeepAliveState{
 				Target: "http://192.0.2.10/", Err: "dial timeout", At: at,

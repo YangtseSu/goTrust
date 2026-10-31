@@ -432,6 +432,16 @@ func (msgs Messages) KeepAliveOK(status int, target string) string {
 	return Catalog.Format(msgs.locale, "keepAliveOK", map[string]any{"status": status, "target": target})
 }
 
+// KeepAliveTCPOK says "TCP OK · {target}"
+// in the language the app shows.
+func KeepAliveTCPOK(target string) string { return In(i18n.Locale()).KeepAliveTCPOK(target) }
+
+// KeepAliveTCPOK says "TCP OK · {target}"
+// in the language of msgs.
+func (msgs Messages) KeepAliveTCPOK(target string) string {
+	return Catalog.Format(msgs.locale, "keepAliveTCPOK", map[string]any{"target": target})
+}
+
 // KeepAliveFailed says "失败 · {target}"
 // in the language the app shows.
 func KeepAliveFailed(target string) string { return In(i18n.Locale()).KeepAliveFailed(target) }

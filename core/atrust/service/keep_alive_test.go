@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	stdlog "log"
 	"net"
 	"net/http"
@@ -51,7 +52,7 @@ func TestKeepAliveRoundUsesTheFirstAnsweringTarget(t *testing.T) {
 	defer second.Close()
 
 	results := make([]KeepAliveResult, 0, 2)
-	target, ok := keepAliveRound(context.Background(), keepAliveClientFor(fakeDialer{}), []KeepAliveTarget{
+	target, ok := keepAliveRound(context.Background(), keepAliveClientFor(fakeDialer{}), fakeDialer{}, []KeepAliveTarget{
 		{URL: first.URL, Named: true},
 		{URL: second.URL, Named: true},
 	}, "", func(result KeepAliveResult) {
@@ -89,7 +90,7 @@ func TestKeepAliveRoundReportsWhenNoTargetAnswers(t *testing.T) {
 	defer server.Close()
 
 	var results []KeepAliveResult
-	target, ok := keepAliveRound(context.Background(), keepAliveClientFor(fakeDialer{}), []KeepAliveTarget{
+	target, ok := keepAliveRound(context.Background(), keepAliveClientFor(fakeDialer{}), fakeDialer{}, []KeepAliveTarget{
 		{URL: server.URL, Named: true},
 	}, "", func(result KeepAliveResult) {
 		results = append(results, result)
@@ -204,7 +205,106 @@ func TestKeepAliveOrderPutsTheWorkingTargetFirst(t *testing.T) {
 func urls(targets []KeepAliveTarget) []string {
 	out := make([]string, 0, len(targets))
 	for _, target := range targets {
-		out = append(out, target.URL)
+		out = append(out, target.String())
 	}
 	return out
+}
+
+// acceptLoop serves one connection at a time until the listener is closed.
+func acceptLoop(listener net.Listener, handle func(net.Conn)) {
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go handle(conn)
+		}
+	}()
+}
+
+// TestTCPKeepAliveAttempt: the probe counts once the tunnel carries a
+// connection to the granted address. The exchange the port implies is best
+// effort, because a service that does not speak it must not look like a dead
+// session.
+func TestTCPKeepAliveAttempt(t *testing.T) {
+	t.Run("a non-TLS server on 443 still counts as connected", func(t *testing.T) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = listener.Close() }()
+		acceptLoop(listener, func(conn net.Conn) { _ = conn.Close() })
+
+		var results []KeepAliveResult
+		dialer := fakeDialer{dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, network, listener.Addr().String())
+		}}
+		if !tcpKeepAliveAttempt(context.Background(), dialer, KeepAliveTarget{Address: "127.0.0.1:443"}, time.Second, func(result KeepAliveResult) {
+			results = append(results, result)
+		}) {
+			t.Fatalf("probe = false, want the established connection to count (results: %+v)", results)
+		}
+		if len(results) != 1 || !results[0].OK || results[0].Target != "tcp://127.0.0.1:443" || results[0].Err != nil {
+			t.Fatalf("results = %+v, want one OK connection to the granted address", results)
+		}
+	})
+
+	t.Run("the TLS handshake on 443 completes", func(t *testing.T) {
+		server := httptest.NewTLSServer(http.NotFoundHandler())
+		defer server.Close()
+
+		dialer := fakeDialer{dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+		}}
+		var results []KeepAliveResult
+		if !tcpKeepAliveAttempt(context.Background(), dialer, KeepAliveTarget{Address: "127.0.0.1:443"}, time.Second, func(result KeepAliveResult) {
+			results = append(results, result)
+		}) {
+			t.Fatalf("probe = false, want a completed handshake")
+		}
+		if len(results) != 1 || !results[0].OK {
+			t.Fatalf("results = %+v, want one OK probe", results)
+		}
+	})
+
+	t.Run("the SSH identification on 22 is read", func(t *testing.T) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = listener.Close() }()
+		acceptLoop(listener, func(conn net.Conn) {
+			defer func() { _ = conn.Close() }()
+			_, _ = conn.Write([]byte("SSH-2.0-OpenSSH_test\r\n"))
+		})
+
+		var results []KeepAliveResult
+		dialer := fakeDialer{dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, network, listener.Addr().String())
+		}}
+		if !tcpKeepAliveAttempt(context.Background(), dialer, KeepAliveTarget{Address: "127.0.0.1:22"}, time.Second, func(result KeepAliveResult) {
+			results = append(results, result)
+		}) {
+			t.Fatalf("probe = false, want the SSH banner read")
+		}
+		if len(results) != 1 || !results[0].OK {
+			t.Fatalf("results = %+v, want one OK probe", results)
+		}
+	})
+
+	t.Run("a failed connection is reported", func(t *testing.T) {
+		dialer := fakeDialer{dial: func(context.Context, string, string) (net.Conn, error) {
+			return nil, errors.New("tcp tunnel authentication failed: invalid SID")
+		}}
+		var results []KeepAliveResult
+		if tcpKeepAliveAttempt(context.Background(), dialer, KeepAliveTarget{Address: "127.0.0.1:22"}, time.Second, func(result KeepAliveResult) {
+			results = append(results, result)
+		}) {
+			t.Fatal("probe = true, want the dial error")
+		}
+		if len(results) != 1 || results[0].OK || results[0].Err == nil {
+			t.Fatalf("results = %+v, want one reported failure", results)
+		}
+	})
 }

@@ -851,9 +851,12 @@ func KeepAliveSummary(keepAlive session.KeepAliveState) string {
 		return locales.KeepAliveDNSFailed(keepAlive.Target)
 	}
 	if keepAlive.OK {
+		if keepAlive.Status == 0 {
+			return locales.KeepAliveTCPOK(keepAlive.Target)
+		}
 		return locales.KeepAliveOK(keepAlive.Status, keepAlive.Target)
 	}
-	if keepAlive.Err != "" {
+	if keepAlive.Err != "" || keepAlive.Status == 0 {
 		return locales.KeepAliveFailed(keepAlive.Target)
 	}
 	return locales.KeepAliveFailedStatus(keepAlive.Status, keepAlive.Target)
