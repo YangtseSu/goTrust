@@ -93,6 +93,19 @@ The PR was **merged on 2026-10-31**, after this tree's source commit
 (2026-10-24), so the local tree predates the fix. Its exact field names are the
 best recorded description; the merge is not a live result on every gateway.
 
+### Coverage in this plan
+
+| #166 change | Plan phase |
+|---|---|
+| `MACAddresses` in the auth data/options/session, persisted once | Phase 2 |
+| `reportEnv` sends `mac_addresses` and `X-Request-Sig` | Phase 2 |
+| `Session.signKey` derived from the anti-MITM answer | Phase 2 |
+| `bindAuthDevice` posts `{unbindList, reason}`, handles `bindStatus`/limits/device list | Phase 3 |
+| `authchallenge.CodeDevice` and the device-list prompt | Phase 3 |
+| Retire the old `DeviceBindHandler`/`ConfirmDeviceBind` yes/no path | Phase 3 |
+| `MACAddresses` config/CLI override | Not ported; generated and persisted automatically |
+| `authCheck` non-zero code with a next service | Phase 1 (not part of #166) |
+
 ## 3. Node selection and false reachability
 
 [zju-connect #123](https://github.com/Mythologyli/zju-connect/issues/123): with

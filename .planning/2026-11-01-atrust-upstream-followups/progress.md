@@ -8,7 +8,7 @@ Plan: `.planning/2026-11-01-atrust-upstream-followups/`. Pinned with
 ### Current Status
 
 - **Phase:** 1 - Follow the next service on a non-zero authCheck code
-- **Status:** pending (plan approved for review; no code changed)
+- **Status:** pending (public-source plan; no code changed)
 - **Started:** 2026-11-01
 
 ### What was done
@@ -23,19 +23,23 @@ Plan: `.planning/2026-11-01-atrust-upstream-followups/`. Pinned with
   L3 auth timeout, the TCP-tunnel connect status, listener bind errors, the
   missing node port default, RADIUS/SMS/CAS/OAuth2, forced password change,
   `sidTicket` restore and debug redaction.
-- Confirmed the local gaps that this plan addresses: `authCheck` discards a
-  non-zero answer's next service; `reportEnv` sends neither the device MAC nor
-  the request signature; `bindAuthDevice` uses the old payload; keep-alive
-  lacks name-only domain targets and a route witness; `connectConn` only falls
-  back to the major node group.
 - Corrected two earlier assumptions while checking the tree: the node probe
   already completes a TLS handshake in `internal/ping/tcp.go` (#124), so the
   mihomo false-positive is covered; and #166 merged on 2026-10-31, after this
-  tree's source commit, so the trusted-device fix is an upstream change to
-  port rather than an unmerged proposal.
+  tree's source commit, so the trusted-device fix is a public change to port.
+
+### Scope decision
+
+The plan uses only the public issue/PR evidence. It keeps:
+
+- `authCheck` non-zero code with a next service;
+- the public #166 `reportEnv` MAC/request signature and trusted-device bind
+  flow;
+- keep-alive truthfulness;
+- the small connection defects.
 
 No repository code, tests, documentation or configuration were changed in this
-session. Nothing was committed or pushed.
+session. The plan files are in the working tree and were not committed.
 
 ### Test Results
 
