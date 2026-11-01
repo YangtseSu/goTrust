@@ -734,7 +734,9 @@ func startupSection(c *ui.Context, state *SettingsState, actions SettingsActions
 		ui.Divider(c)
 		switchRow(c, &state.Draft.App.StartHidden, locales.StartHidden())
 		ui.Divider(c)
-		switchRow(c, &state.Draft.App.AutoReconnect, locales.AutoReconnect())
+		if index := state.Draft.ActiveIndex(); index >= 0 {
+			switchRow(c, &state.Draft.Profiles[index].AutoReconnect, locales.AutoReconnect())
+		}
 	})
 }
 

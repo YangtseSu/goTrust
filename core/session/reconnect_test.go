@@ -159,7 +159,7 @@ func TestSessionLossWithoutAutoReconnectExpires(t *testing.T) {
 func TestSessionLossWithoutAPasswordExpires(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	cfg := config.Default()
-	cfg.App.AutoReconnect = true
+	cfg.Profiles[cfg.ActiveIndex()].AutoReconnect = true
 
 	var states []State
 	manager := New(Options{

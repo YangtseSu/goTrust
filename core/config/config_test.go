@@ -1113,3 +1113,47 @@ func TestValidateRejectsAnUnreadableAccountIdentity(t *testing.T) {
 		t.Fatalf("a valid hardware address was refused: %v", err)
 	}
 }
+
+// TestIdentityForAcceptsTheProcessBlock: the tunnel reports the process a
+// connection comes from, and a gateway may key its policy on that name. It is
+// part of how an account presents itself, so it follows the same fallback.
+func TestIdentityForAcceptsTheProcessBlock(t *testing.T) {
+	cfg := Default()
+	cfg.Identity.ProcessName = "goTrust"
+	cfg.Identity.ProcessPath = "/usr/bin/gotrust"
+
+	vendor := Profile{Name: "vendor", Client: ProfileIdentity{
+		ProcessName:    "google-chrome-stable",
+		ProcessPath:    "/usr/bin/google-chrome-stable",
+		ProcessVersion: "120.0",
+	}}
+	own := Profile{Name: "own"}
+
+	got := cfg.IdentityFor(vendor)
+	if got.ProcessName != "google-chrome-stable" || got.ProcessPath != "/usr/bin/google-chrome-stable" || got.ProcessVersion != "120.0" {
+		t.Fatalf("process block = %+v, want the account's", got)
+	}
+
+	base := cfg.IdentityFor(own)
+	if base.ProcessName != "goTrust" || base.ProcessPath != "/usr/bin/gotrust" || base.ProcessVersion != "" {
+		t.Fatalf("process block = %+v, want the install's", base)
+	}
+}
+
+// TestAutoReconnectBelongsToTheAccount: a full login rotates the device token and
+// drops the account's other clients, which one account may accept and another
+// may not, so the switch cannot be one process-wide value.
+func TestAutoReconnectBelongsToTheAccount(t *testing.T) {
+	cfg := Default()
+	cfg.Profiles[0].AutoReconnect = true
+	if !cfg.Active().AutoReconnect {
+		t.Fatal("the active account's auto_reconnect was lost")
+	}
+
+	second := NewProfile("other")
+	cfg.Profiles = append(cfg.Profiles, second)
+	cfg.ActiveProfile = second.Name
+	if cfg.Active().AutoReconnect {
+		t.Fatal("an account without the flag inherited another account's setting")
+	}
+}

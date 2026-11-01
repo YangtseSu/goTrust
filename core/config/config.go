@@ -79,10 +79,6 @@ type AppConfig struct {
 	// makes that possible without asking first. A stored session is not a
 	// credential: it ends with its connection.
 	AutoConnect bool `toml:"auto_connect"`
-	// AutoReconnect retries a lost session on the 1/2/4/8/16 s ladder, five
-	// attempts at most. Off by default: a full login rotates the device token
-	// and drops other clients of the same account.
-	AutoReconnect bool `toml:"auto_reconnect"`
 }
 
 // LoggingConfig is global: one log file serves every profile.
@@ -302,6 +298,15 @@ func (c Config) IdentityFor(profile Profile) IdentityConfig {
 	if agent := strings.TrimSpace(profile.Client.UserAgent); agent != "" {
 		resolved.UserAgent = agent
 	}
+	if name := strings.TrimSpace(profile.Client.ProcessName); name != "" {
+		resolved.ProcessName = name
+	}
+	if path := strings.TrimSpace(profile.Client.ProcessPath); path != "" {
+		resolved.ProcessPath = path
+	}
+	if version := strings.TrimSpace(profile.Client.ProcessVersion); version != "" {
+		resolved.ProcessVersion = version
+	}
 	return resolved
 }
 
@@ -413,17 +418,20 @@ type Profile struct {
 	Keep   KeepConfig      `toml:"keepalive"`
 	Debug  DebugConfig     `toml:"debug"`
 	Client ProfileIdentity `toml:"identity,omitempty"`
+	// AutoReconnect retries this account's lost session on the 1/2/4/8/16 s
+	// ladder, five attempts at most. It belongs to the account rather than the
+	// process: a full login rotates the device token and drops the account's
+	// other clients, which one account may accept and another may not.
+	AutoReconnect bool `toml:"auto_reconnect,omitempty"`
 }
 
-// ProfileIdentity overrides how this account presents itself. A gateway may
+// ProfileIdentity overrides how this account presents itself: the identity the
+// portal reads, and the process block the tunnel reports for it. A gateway may
 // expect one account to look like the vendor's client and another to look like
 // this program, and two accounts may need two identities to be counted as two
-// devices. Neither can be shared, so every field falls back to [identity]
-// independently: an empty field follows the install value.
-//
-// Overriding device_id or mac_addresses makes the account a separate device to
-// the portal. That is deliberate here; the install-wide value stays the default
-// so a file that says nothing still presents one device for all accounts.
+// devices. Every field falls back to [identity] independently, so an empty
+// field follows the install value and a file that says nothing presents one
+// device as before.
 type ProfileIdentity struct {
 	// DeviceID is the 32-hex device id this account reports. Empty follows
 	// [identity].
@@ -443,6 +451,11 @@ type ProfileIdentity struct {
 	// UserAgent overrides the whole string. Empty derives it from the three
 	// fields above.
 	UserAgent string `toml:"user_agent,omitempty"`
+	// ProcessName, ProcessPath and ProcessVersion replace the tunnel process
+	// block this account reports. Empty follows [identity].
+	ProcessName    string `toml:"process_name,omitempty"`
+	ProcessPath    string `toml:"process_path,omitempty"`
+	ProcessVersion string `toml:"process_version,omitempty"`
 }
 
 // ServerConfig identifies the aTrust gateway.

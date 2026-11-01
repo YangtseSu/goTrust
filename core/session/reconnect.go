@@ -129,7 +129,7 @@ func (m *Manager) onSessionLost(reason string) {
 
 	cfg := m.settings()
 	profile := cfg.Active()
-	if !cfg.App.AutoReconnect {
+	if !profile.AutoReconnect {
 		m.expire("the session expired; sign in again")
 		return
 	}

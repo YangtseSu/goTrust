@@ -22,7 +22,6 @@ active_profile = "默认"
 autostart = false
 start_hidden = true
 auto_connect = false
-auto_reconnect = false
 
 [proxy]
 socks5_bind = "127.0.0.1:1080"
@@ -78,7 +77,6 @@ client_data_path = ""
 | `autostart` | `false` | 登录系统时启动。在“启动”页修改后立即写入系统的自启动项 |
 | `start_hidden` | `true` | 启动时只显示托盘，不弹出窗口 |
 | `auto_connect` | `false` | 启动后自动登录。需要已保存的密码 |
-| `auto_reconnect` | `false` | 会话中断后自动重连：1/2/4/8/16 秒，最多 5 次 |
 
 ### `[proxy]`
 
@@ -134,8 +132,11 @@ client_data_path = ""
 | `keepalive.enabled` | 是否发送保活请求 |
 | `keepalive.interval` | 保活间隔，默认 `90s`，最小 10 s |
 | `keepalive.targets` | 手工保活目标，一行一个，优先级高于自动推导的目标。自动推导使用授权资源的 80、443、22 端口，以及只给出域名、没有地址的授权 |
+| `auto_reconnect` | 该账户会话中断后自动重连：1/2/4/8/16 秒，最多 5 次。它属于账户：完整登录会更换设备令牌并踢掉该账户的其他客户端 |
 | `debug.client_data_path` | 自定义登录数据文件路径。留空时使用配置目录下的 `client_data-<账户名>.json` |
-| `identity.os_family` / `identity.client_version` / `identity.os_arch` / `identity.user_agent` | 该账户自我描述的方式。留空则跟随 `[identity]`：可以一个账户表现为官方客户端，另一个表现为本程序。`device_id` 与 `mac_addresses` 是整机级的，此处不接受 |
+| `identity.device_id` / `identity.mac_addresses` | 该账户呈现的设备。留空则跟随 `[identity]`，因此不填的账户共用一台设备。填写后该账户在网关侧成为独立设备；上一个设备的 sign key 与 ticket 会被清除，下次登录重新签发 |
+| `identity.os_family` / `identity.client_version` / `identity.os_arch` / `identity.user_agent` | 该账户自我描述的方式。留空则跟随 `[identity]`：可以一个账户表现为官方客户端，另一个表现为本程序 |
+| `identity.process_name` / `identity.process_path` / `identity.process_version` | 该账户上报的隧道进程块。留空则跟随 `[identity]` |
 
 窗口的“网关”字段接受 `host:port`、`https://host:port`、只写主机名（使用 443）、带结尾路径或斜杠的粘贴内容，以及方括号形式的 IPv6 地址（可带端口）。其他协议、空主机名和 1–65535 之外的端口会被拒绝。保存时窗口把字段拆成 `server.address` 和 `server.port` 两个键，文件格式不变。
 

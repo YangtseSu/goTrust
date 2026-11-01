@@ -22,7 +22,6 @@ active_profile = "work"
 autostart = false
 start_hidden = true
 auto_connect = false
-auto_reconnect = false
 
 [proxy]
 socks5_bind = "127.0.0.1:1080"
@@ -78,7 +77,6 @@ client_data_path = ""
 | `autostart` | `false` | Start when logging in to the system. Changing it on the Startup page immediately updates the system autostart entry |
 | `start_hidden` | `true` | On startup show only the tray icon, without opening a window |
 | `auto_connect` | `false` | Log in automatically after startup. Requires a saved password |
-| `auto_reconnect` | `false` | Reconnect automatically after the session drops: 1/2/4/8/16 seconds, up to 5 attempts |
 
 ### `[proxy]`
 
@@ -134,8 +132,11 @@ Each `[[profiles]]` entry is one account.
 | `keepalive.enabled` | Whether to send keepalive requests |
 | `keepalive.interval` | Keepalive interval, `90s` by default, minimum 10 s |
 | `keepalive.targets` | Manual keepalive targets, one per line, taking precedence over automatically derived targets. Derived targets come from granted ports 80, 443 and 22, and from name-only grants, which have no address to derive from |
+| `auto_reconnect` | Reconnect this account automatically after the session drops: 1/2/4/8/16 seconds, up to 5 attempts. It belongs to the account because a full login rotates the device token and drops the account's other clients |
 | `debug.client_data_path` | Custom login data file path. When empty, `client_data-<name>.json` in the configuration directory is used |
-| `identity.os_family` / `identity.client_version` / `identity.os_arch` / `identity.user_agent` | How this account describes its client. Empty fields follow `[identity]`, so one account can present the vendor's client while another presents this program. `device_id` and `mac_addresses` are install-wide and are not accepted here |
+| `identity.device_id` / `identity.mac_addresses` | The device this account presents. Empty follows `[identity]`, so accounts that say nothing share one device. Setting these makes the account a separate device to the portal; the stored sign key and ticket of the previous device are dropped and the next login mints new ones |
+| `identity.os_family` / `identity.client_version` / `identity.os_arch` / `identity.user_agent` | How this account describes its client. Empty fields follow `[identity]`, so one account can present the vendor's client while another presents this program |
+| `identity.process_name` / `identity.process_path` / `identity.process_version` | The tunnel process block this account reports. Empty follows `[identity]` |
 
 The window's Gateway field accepts `host:port`, `https://host:port`, a bare host (443), a pasted path or trailing slash, and a bracketed IPv6 address with or without a port. Other schemes, an empty host and ports outside 1–65535 are rejected. On save the field is split back into `server.address` and `server.port`; the file format does not change.
 
