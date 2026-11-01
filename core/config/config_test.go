@@ -4,6 +4,7 @@
 package config
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -963,5 +964,43 @@ func TestHandoffBindMustStayOnLoopback(t *testing.T) {
 	err := cfg.Validate()
 	if err == nil || !strings.Contains(err.Error(), "handoff bind") {
 		t.Fatalf("validate error = %v, want a handoff bind error", err)
+	}
+}
+
+// TestEnsureIdentityGeneratesOneHardwareAddress: the address names the machine,
+// so it is generated once and kept across every launch and profile. A hand-set
+// value wins.
+func TestEnsureIdentityGeneratesOneHardwareAddress(t *testing.T) {
+	cfg := Default()
+	cfg.Identity.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	cfg.Identity.MACAddresses = nil
+	if !cfg.EnsureIdentity() {
+		t.Fatal("a missing hardware address reported no change")
+	}
+	if len(cfg.Identity.MACAddresses) != 1 {
+		t.Fatalf("mac addresses = %v, want one", cfg.Identity.MACAddresses)
+	}
+	generated := cfg.Identity.MACAddresses[0]
+	address, err := net.ParseMAC(generated)
+	if err != nil {
+		t.Fatalf("generated address %q: %v", generated, err)
+	}
+	if address[0]&0x02 == 0 || address[0]&0x01 != 0 {
+		t.Fatalf("generated address %q is not locally administered and unicast", address)
+	}
+
+	// A second launch keeps it: the portal binds the endpoint to this value.
+	if cfg.EnsureIdentity() {
+		t.Fatalf("the identity changed on a second launch: %+v", cfg.Identity)
+	}
+	if len(cfg.Identity.MACAddresses) != 1 || cfg.Identity.MACAddresses[0] != generated {
+		t.Fatalf("mac addresses = %v, want %q", cfg.Identity.MACAddresses, generated)
+	}
+
+	chosen := IdentityConfig{MACAddresses: []string{"02:00:5e:10:00:42"}}
+	cfg.Identity = chosen
+	cfg.EnsureIdentity()
+	if cfg.Identity.MACAddresses[0] != "02:00:5e:10:00:42" {
+		t.Fatalf("a hand-set address was replaced: %v", cfg.Identity.MACAddresses)
 	}
 }

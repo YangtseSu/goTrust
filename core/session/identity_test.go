@@ -9,12 +9,15 @@ import (
 	"testing"
 )
 
-const testDeviceID = "0123456789ABCDEF0123456789ABCDEF"
+const (
+	testDeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	testMAC      = "02:00:5e:10:00:01"
+)
 
 func TestSeedDeviceIDAddsTheInstallID(t *testing.T) {
-	seeded, err := seedDeviceID([]byte(`{"cookies":[{"name":"sid","value":"x"}]}`), testDeviceID)
+	seeded, err := seedIdentity([]byte(`{"cookies":[{"name":"sid","value":"x"}]}`), testDeviceID, []string{testMAC})
 	if err != nil {
-		t.Fatalf("seedDeviceID() error = %v", err)
+		t.Fatalf("seedIdentity() error = %v", err)
 	}
 	var record map[string]json.RawMessage
 	if err := json.Unmarshal(seeded, &record); err != nil {
@@ -30,10 +33,17 @@ func TestSeedDeviceIDAddsTheInstallID(t *testing.T) {
 	if _, ok := record["cookies"]; !ok {
 		t.Fatal("the stored cookies were dropped")
 	}
+	var macs []string
+	if err := json.Unmarshal(record["mac_addresses"], &macs); err != nil {
+		t.Fatalf("mac addresses: %v", err)
+	}
+	if len(macs) != 1 || macs[0] != testMAC {
+		t.Fatalf("mac addresses = %v, want the install's", macs)
+	}
 }
 
 func TestSeedDeviceIDReplacesAnEarlierID(t *testing.T) {
-	seeded, err := seedDeviceID([]byte(`{"device_id":"OLDPROFILEID"}`), testDeviceID)
+	seeded, err := seedIdentity([]byte(`{"device_id":"OLDPROFILEID"}`), testDeviceID, []string{testMAC})
 	if err != nil {
 		t.Fatalf("seedDeviceID() error = %v", err)
 	}
@@ -52,15 +62,33 @@ func TestSeedDeviceIDReplacesAnEarlierID(t *testing.T) {
 // corrupt file is an error rather than a silent replacement.
 func TestSeedDeviceIDWithoutAnIdentity(t *testing.T) {
 	original := []byte(`{"device_id":"PROFILEID"}`)
-	seeded, err := seedDeviceID(original, "")
+	seeded, err := seedIdentity(original, "", nil)
 	if err != nil {
-		t.Fatalf("seedDeviceID() error = %v", err)
+		t.Fatalf("seedIdentity() error = %v", err)
 	}
 	if string(seeded) != string(original) {
 		t.Fatalf("stored session = %s, want it untouched", seeded)
 	}
-	if _, err := seedDeviceID([]byte("not json"), testDeviceID); err == nil {
+	if _, err := seedIdentity([]byte("not json"), testDeviceID, nil); err == nil {
 		t.Fatal("a corrupt stored session was accepted")
+	}
+}
+
+// A profile that already reported a hardware address keeps it: the portal
+// bound that endpoint to the value, so replacing it would invent a new device.
+func TestSeedIdentityKeepsAStoredAddress(t *testing.T) {
+	seeded, err := seedIdentity([]byte(`{"mac_addresses":["02:00:5e:10:00:09"]}`), testDeviceID, []string{testMAC})
+	if err != nil {
+		t.Fatalf("seedIdentity() error = %v", err)
+	}
+	var record struct {
+		MACAddresses []string `json:"mac_addresses"`
+	}
+	if err := json.Unmarshal(seeded, &record); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(record.MACAddresses) != 1 || record.MACAddresses[0] != "02:00:5e:10:00:09" {
+		t.Fatalf("mac addresses = %v, want the stored one", record.MACAddresses)
 	}
 }
 

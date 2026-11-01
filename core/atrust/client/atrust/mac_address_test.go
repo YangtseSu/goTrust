@@ -167,3 +167,20 @@ func TestEnsureMACAddressesDecidesOnce(t *testing.T) {
 		t.Fatalf("generated MAC %q: %v", first[0], err)
 	}
 }
+
+// TestLoginReportsTheConfiguredMAC: the address names the machine, so a value
+// the caller supplies for the installation is what the portal sees, and no
+// per-profile address is invented beside it.
+func TestLoginReportsTheConfiguredMAC(t *testing.T) {
+	stub := newLoginStub(t)
+	c := NewClient(ClientOptions{Session: SessionOptions{MACAddresses: []string{"02:00:5e:10:00:07"}}})
+	t.Cleanup(c.Close)
+
+	stored := loginAgainstStub(t, stub, c, auth.ClientAuthData{})
+	if len(stored.MACAddresses) != 1 || stored.MACAddresses[0] != "02:00:5e:10:00:07" {
+		t.Fatalf("stored mac_addresses = %v, want the configured one", stored.MACAddresses)
+	}
+	if len(stub.reportedMAC) != 1 || len(stub.reportedMAC[0]) != 1 || stub.reportedMAC[0][0] != "02:00:5e:10:00:07" {
+		t.Fatalf("reported = %v, want the configured address", stub.reportedMAC)
+	}
+}

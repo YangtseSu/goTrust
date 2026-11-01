@@ -100,6 +100,11 @@ type IdentityConfig struct {
 	// DeviceID is the 32-hex id the portal sees as deviceId. It is generated
 	// once and seeded into every profile's client data.
 	DeviceID string `toml:"device_id"`
+	// MACAddresses is the hardware address the portal records for this
+	// installation. Like DeviceID it is generated once and seeded into every
+	// profile, because it names the machine, not the account: a per-profile
+	// value would make one machine look like several endpoints.
+	MACAddresses []string `toml:"mac_addresses"`
 	// ClientVersion is the aTrust client version the UA reports. Empty takes
 	// the default the build was written against.
 	ClientVersion string `toml:"client_version"`
@@ -169,7 +174,23 @@ func (c *Config) EnsureIdentity() bool {
 		}
 		changed = true
 	}
+	if len(c.Identity.MACAddresses) == 0 {
+		c.Identity.MACAddresses = []string{randomMACAddress()}
+		changed = true
+	}
 	return changed
+}
+
+// randomMACAddress returns a locally administered unicast address: the portal
+// records it as the endpoint's hardware address, and the two flag bits are what
+// keep a generated value from colliding with a real vendor prefix.
+func randomMACAddress() string {
+	mac := make([]byte, 6)
+	if _, err := rand.Read(mac); err != nil {
+		panic(fmt.Sprintf("generate a hardware address: %v", err))
+	}
+	mac[0] = mac[0]&0xfe | 0x02
+	return net.HardwareAddr(mac).String()
 }
 
 // storedDeviceID returns the device id an existing profile already reported,

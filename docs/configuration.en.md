@@ -36,6 +36,7 @@ verbose = false
 
 [identity]
 device_id = "…"
+mac_addresses = ["…"]
 
 [[profiles]]
 id = "…"
@@ -109,6 +110,7 @@ Usually there is no need to edit this by hand; Settings → Local data shows the
 | Field | Description |
 |---|---|
 | `device_id` | 32-digit hexadecimal device identifier. Generated on first start and afterwards injected into every configuration's login data, so switching accounts is not seen by the portal as a new device. Changing it by hand to something the portal cannot read is rejected at startup |
+| `mac_addresses` | Hardware addresses the portal records for this installation. One locally administered address is generated on first start and injected into every account's login data, because it names the machine rather than the account. A hand-set list wins |
 | `client_version` | Client version reported in requests. Empty uses the default built into the program |
 | `os_family` | `linux` (default), `uos`, `windows`. Determines the User-Agent wording; the latter two use the values expected by the portal |
 | `os_arch` | Architecture name in the User-Agent |

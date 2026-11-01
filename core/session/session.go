@@ -325,7 +325,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 		return fail("read the stored session", err)
 	}
 	identity := m.settings().Identity
-	clientData, err = seedDeviceID(clientData, identity.DeviceID)
+	clientData, err = seedIdentity(clientData, identity.DeviceID, identity.MACAddresses)
 	if err != nil {
 		return fail("prepare the stored session", err)
 	}
@@ -356,7 +356,10 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	}
 
 	client := atrust.NewClient(atrust.ClientOptions{
-		Session:        atrust.SessionOptions{Username: profile.Auth.Username},
+		Session: atrust.SessionOptions{
+			Username:     profile.Auth.Username,
+			MACAddresses: identity.MACAddresses,
+		},
 		UnderlayDialer: dialer,
 	})
 

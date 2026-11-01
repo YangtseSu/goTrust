@@ -36,6 +36,7 @@ verbose = false
 
 [identity]
 device_id = "…"
+mac_addresses = ["…"]
 
 [[profiles]]
 id = "…"
@@ -109,6 +110,7 @@ client_data_path = ""
 | 字段 | 说明 |
 |---|---|
 | `device_id` | 32 位十六进制设备标识。首次启动生成，之后注入到每个账户的登录数据中，切换账号不会被门户看成新设备。手工改成门户读不懂的形式会在启动时被拒绝 |
+| `mac_addresses` | 网关记录的本机硬件地址。首次启动生成一个本地管理地址，并写入每个账号的登录数据：它标识的是这台机器，而不是账号。手工填写的值优先 |
 | `client_version` | 请求中上报的客户端版本。留空使用程序内置的默认值 |
 | `os_family` | `linux`（默认）、`uos`、`windows`。决定 User-Agent 的措辞；后两者使用门户对应的取值 |
 | `os_arch` | User-Agent 里的架构名 |
