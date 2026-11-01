@@ -782,11 +782,18 @@ func TestKeepAliveSummary(t *testing.T) {
 			want: "失败 · http://192.0.2.10/",
 		},
 		{
-			name: "an HTTP error",
+			name: "an HTTP error through the tunnel still renews the session",
 			keepAlive: session.KeepAliveState{
-				Target: "http://192.0.2.10/", Status: 503, At: at,
+				Target: "http://192.0.2.10/", Status: 503, OK: true, Routed: "tunnel", At: at,
 			},
-			want: "失败 503 · http://192.0.2.10/",
+			want: "OK 503 · http://192.0.2.10/",
+		},
+		{
+			name: "an answer that never crossed the tunnel is a warning",
+			keepAlive: session.KeepAliveState{
+				Target: "http://192.0.2.10/", Status: 200, Routed: "direct", At: at,
+			},
+			want: "直连（未续期）· http://192.0.2.10/",
 		},
 		{
 			name: "the DNS fallback",
