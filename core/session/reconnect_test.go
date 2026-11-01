@@ -291,7 +291,7 @@ func TestKeepAliveTargetsPutNamedBeforeDerived(t *testing.T) {
 		Protocol: "tcp",
 	}}
 
-	targets, _ := keepAliveTargets(profile, resources)
+	targets, _ := keepAliveTargets(profile, keepAliveResources{IPs: resources})
 	if len(targets) != 2 {
 		t.Fatalf("targets = %+v, want the named one and one derived", targets)
 	}

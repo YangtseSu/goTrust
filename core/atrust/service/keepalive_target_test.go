@@ -173,3 +173,59 @@ func TestDeriveKeepAliveTargetsIsBounded(t *testing.T) {
 		}
 	}
 }
+
+// A name-only grant has no address rule, so only the domain rules cover it. The
+// probe names the granted host, which is what the tunnel resolves.
+func TestDeriveDomainKeepAliveTargets(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		domains map[string][]client.DomainResource
+		want    []string
+	}{
+		{
+			name:    "a web grant is probed at its own host",
+			domains: map[string][]client.DomainResource{"portal.example.com": {{PortMin: 80, PortMax: 80, Protocol: "tcp"}}},
+			want:    []string{"http://portal.example.com/"},
+		},
+		{
+			name:    "a wildcard grant probes the bare name",
+			domains: map[string][]client.DomainResource{"*.intranet.example.com": {{PortMin: 80, PortMax: 443, Protocol: "all"}}},
+			want:    []string{"http://intranet.example.com/"},
+		},
+		{
+			name:    "a single non-web port is probed with a connection",
+			domains: map[string][]client.DomainResource{"git.example.com": {{PortMin: 22, PortMax: 22, Protocol: "tcp"}}},
+			want:    []string{"tcp://git.example.com:22"},
+		},
+		{
+			name:    "a udp-only grant carries no probe",
+			domains: map[string][]client.DomainResource{"dns.example.com": {{PortMin: 53, PortMax: 53, Protocol: "udp"}}},
+			want:    nil,
+		},
+		{
+			name:    "a grant with no usable ports carries no probe",
+			domains: map[string][]client.DomainResource{"odd.example.com": {{PortMin: 0, PortMax: 0, Protocol: "tcp"}}},
+			want:    nil,
+		},
+		{
+			name: "each name is probed once",
+			domains: map[string][]client.DomainResource{
+				"b.example.com": {{PortMin: 80, PortMax: 80, Protocol: "tcp"}},
+				"a.example.com": {{PortMin: 80, PortMax: 80, Protocol: "tcp"}},
+			},
+			want: []string{"http://a.example.com/", "http://b.example.com/"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			targets, notes := DeriveDomainKeepAliveTargets(tt.domains)
+			if got := urls(targets); !slices.Equal(got, tt.want) {
+				t.Fatalf("targets = %v, want %v (notes %v)", got, tt.want, notes)
+			}
+			for _, target := range targets {
+				if target.Named {
+					t.Fatalf("derived target %s is marked as named", target.String())
+				}
+			}
+		})
+	}
+}

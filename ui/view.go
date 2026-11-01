@@ -839,6 +839,11 @@ func KeepAliveSummary(keepAlive session.KeepAliveState) string {
 		}
 		return locales.KeepAliveDNSFailed(keepAlive.Target)
 	}
+	if keepAlive.Routed == "direct" {
+		// The answer came back over a direct connection: the host is up, but
+		// the request never crossed the tunnel and did not renew the session.
+		return locales.KeepAliveDirect(keepAlive.Target)
+	}
 	if keepAlive.OK {
 		if keepAlive.Status == 0 {
 			return locales.KeepAliveTCPOK(keepAlive.Target)

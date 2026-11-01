@@ -483,7 +483,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	m.set(State{Phase: PhaseOnline, Detail: gateway, ClientIP: tunnelIP, Resources: resources, Since: time.Now()})
 	m.cacheResources(profile, gateway, tunnelIP, resources)
 
-	go m.runKeepAlive(sessionCtx, profile, ipResources)
+	go m.runKeepAlive(sessionCtx, profile, keepAliveResources{IPs: ipResources, Domains: domainResources})
 	return nil
 }
 
@@ -641,13 +641,13 @@ func clientProcess() *atrust.TunnelProcess {
 // runKeepAlive holds the session open with real application traffic. Without a
 // target the upstream loop falls back to a DNS probe, which it warns does not
 // extend a session on gateways that expire idle tunnels.
-func (m *Manager) runKeepAlive(ctx context.Context, profile config.Profile, ipResources []clientpkg.IPResource) {
+func (m *Manager) runKeepAlive(ctx context.Context, profile config.Profile, resources keepAliveResources) {
 	if !profile.Keep.IsEnabled() {
 		m.logf("keep-alive is disabled by configuration")
 		return
 	}
 
-	targets, warnings := keepAliveTargets(profile, ipResources)
+	targets, warnings := keepAliveTargets(profile, resources)
 	for _, warning := range warnings {
 		m.logf("keep-alive: %s", warning)
 	}
@@ -668,9 +668,16 @@ func (m *Manager) runKeepAlive(ctx context.Context, profile config.Profile, ipRe
 	})
 }
 
+// keepAliveResources is what the keep-alive may derive targets from: the
+// address rules, and the name rules a grant may carry without an address.
+type keepAliveResources struct {
+	IPs     []clientpkg.IPResource
+	Domains clientpkg.DomainResources
+}
+
 // keepAliveTargets merges the user's named targets with the ones derived from
 // the granted resources.
-func keepAliveTargets(profile config.Profile, ipResources []clientpkg.IPResource) ([]service.KeepAliveTarget, []string) {
+func keepAliveTargets(profile config.Profile, resources keepAliveResources) ([]service.KeepAliveTarget, []string) {
 	var targets []service.KeepAliveTarget
 	var warnings []string
 
@@ -679,8 +686,15 @@ func keepAliveTargets(profile config.Profile, ipResources []clientpkg.IPResource
 		targets = append(targets, named...)
 		warnings = append(warnings, namedWarnings...)
 	}
-	if len(ipResources) > 0 {
-		derived, derivedWarnings := service.DeriveKeepAliveTargets(ipResources)
+	if len(resources.IPs) > 0 {
+		derived, derivedWarnings := service.DeriveKeepAliveTargets(resources.IPs)
+		targets = append(targets, derived...)
+		warnings = append(warnings, derivedWarnings...)
+	}
+	if len(resources.Domains) > 0 {
+		// A grant can name an application and no address: the gateway resolves
+		// it at connect time, so only the name rules cover it.
+		derived, derivedWarnings := service.DeriveDomainKeepAliveTargets(resources.Domains)
 		targets = append(targets, derived...)
 		warnings = append(warnings, derivedWarnings...)
 	}
@@ -837,6 +851,7 @@ func (m *Manager) recordKeepAlive(result service.KeepAliveResult) {
 		Named:    result.Named,
 		Status:   result.StatusCode,
 		OK:       result.OK,
+		Routed:   result.Routed,
 		Fallback: result.Fallback,
 		At:       result.At,
 	}

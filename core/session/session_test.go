@@ -134,7 +134,7 @@ func TestKeepAliveTargetsMergeNamedAndDerived(t *testing.T) {
 	profile := config.Default().Active()
 	profile.Keep.Targets = []string{"http://192.0.2.5/health"}
 
-	targets, _ := keepAliveTargets(profile, nil)
+	targets, _ := keepAliveTargets(profile, keepAliveResources{})
 	if len(targets) != 1 {
 		t.Fatalf("targets = %v, want one", targets)
 	}
@@ -144,7 +144,7 @@ func TestKeepAliveTargetsMergeNamedAndDerived(t *testing.T) {
 
 	empty := config.Default().Active()
 	empty.Keep.Targets = nil
-	targets, _ = keepAliveTargets(empty, nil)
+	targets, _ = keepAliveTargets(empty, keepAliveResources{})
 	if len(targets) != 0 {
 		t.Fatalf("targets = %v, want none without a config or resources", targets)
 	}
@@ -634,5 +634,20 @@ func TestAPacketStackPanicDoesNotKillTheApp(t *testing.T) {
 	manager.runPacketStack(func() {})
 	if len(logged) != 0 {
 		t.Fatalf("log = %v, want none for a normal return", logged)
+	}
+}
+
+// TestKeepAliveTargetsCoverNameOnlyGrants: a grant that names an application and
+// no address never becomes an IPResource, so only the domain rules cover it.
+func TestKeepAliveTargetsCoverNameOnlyGrants(t *testing.T) {
+	profile := config.Default().Active()
+	profile.Keep.Targets = nil
+
+	resources := keepAliveResources{Domains: clientpkg.DomainResources{
+		"portal.example.com": {{PortMin: 80, PortMax: 80, Protocol: "tcp"}},
+	}}
+	targets, _ := keepAliveTargets(profile, resources)
+	if len(targets) != 1 || targets[0].URL != "http://portal.example.com/" || targets[0].Named {
+		t.Fatalf("targets = %+v, want the granted name probed at its own host", targets)
 	}
 }

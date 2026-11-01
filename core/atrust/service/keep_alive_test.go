@@ -40,11 +40,13 @@ func keepAliveClientFor(dialer KeepAliveDialer) *http.Client {
 // the retry.
 func TestKeepAliveRoundUsesTheFirstAnsweringTarget(t *testing.T) {
 	var firstRequests atomic.Int32
+	// The first target refuses the connection: a transport error is the one
+	// outcome that says the tunnel did not carry the request.
 	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		firstRequests.Add(1)
-		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	defer first.Close()
+	firstURL := first.URL
+	first.Close()
 
 	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
@@ -53,7 +55,7 @@ func TestKeepAliveRoundUsesTheFirstAnsweringTarget(t *testing.T) {
 
 	results := make([]KeepAliveResult, 0, 2)
 	target, ok := keepAliveRound(context.Background(), keepAliveClientFor(fakeDialer{}), fakeDialer{}, []KeepAliveTarget{
-		{URL: first.URL, Named: true},
+		{URL: firstURL, Named: true},
 		{URL: second.URL, Named: true},
 	}, "", func(result KeepAliveResult) {
 		results = append(results, result)
@@ -61,8 +63,10 @@ func TestKeepAliveRoundUsesTheFirstAnsweringTarget(t *testing.T) {
 	if !ok || target != second.URL {
 		t.Fatalf("round = (%q, %t), want (%q, true)", target, ok, second.URL)
 	}
-	if got := firstRequests.Load(); got != 1 {
-		t.Fatalf("first target requests = %d, want 1 (no within-round retry)", got)
+	// The dead target was tried exactly once: the round moves on instead of
+	// retrying inside the round, and the next round is the retry.
+	if got := firstRequests.Load(); got != 0 {
+		t.Fatalf("first target requests = %d, want none on a refused connection", got)
 	}
 
 	// Every attempt is reported, not only the one that won, so a status line
@@ -70,8 +74,8 @@ func TestKeepAliveRoundUsesTheFirstAnsweringTarget(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("results = %+v, want one per attempt", results)
 	}
-	if results[0].Target != first.URL || results[0].OK || results[0].StatusCode != http.StatusInternalServerError {
-		t.Fatalf("first result = %+v, want a reported 500", results[0])
+	if results[0].Target != firstURL || results[0].OK || results[0].Err == nil {
+		t.Fatalf("first result = %+v, want a reported transport error", results[0])
 	}
 	if results[1].Target != second.URL || !results[1].OK || results[1].StatusCode != http.StatusOK {
 		t.Fatalf("second result = %+v, want a reported 200", results[1])
@@ -81,28 +85,48 @@ func TestKeepAliveRoundUsesTheFirstAnsweringTarget(t *testing.T) {
 	}
 }
 
+// TestKeepAliveAnyHTTPAnswerIsLive: a 403 or a 500 is still an application
+// request the gateway carried, so it renews the session. The status stays in
+// the result for the status line, but it does not decide liveness.
+func TestKeepAliveAnyHTTPAnswerIsLive(t *testing.T) {
+	for _, status := range []int{http.StatusForbidden, http.StatusNotFound, http.StatusInternalServerError} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+		}))
+
+		var results []KeepAliveResult
+		target, ok := keepAliveRound(context.Background(), keepAliveClientFor(fakeDialer{}), fakeDialer{}, []KeepAliveTarget{
+			{URL: server.URL, Named: true},
+		}, "", func(result KeepAliveResult) {
+			results = append(results, result)
+		})
+		server.Close()
+
+		if !ok || target != server.URL {
+			t.Fatalf("status %d: round = (%q, %t), want the target counted", status, target, ok)
+		}
+		if len(results) != 1 || !results[0].OK || results[0].StatusCode != status || results[0].Err != nil {
+			t.Fatalf("status %d: results = %+v", status, results)
+		}
+	}
+}
+
 func TestKeepAliveRoundReportsWhenNoTargetAnswers(t *testing.T) {
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadURL := server.URL
+	server.Close()
 
 	var results []KeepAliveResult
 	target, ok := keepAliveRound(context.Background(), keepAliveClientFor(fakeDialer{}), fakeDialer{}, []KeepAliveTarget{
-		{URL: server.URL, Named: true},
+		{URL: deadURL, Named: true},
 	}, "", func(result KeepAliveResult) {
 		results = append(results, result)
 	})
 	if ok || target != "" {
 		t.Fatalf("round = (%q, %t), want no target", target, ok)
 	}
-	if got := requests.Load(); got != 1 {
-		t.Fatalf("requests = %d, want 1", got)
-	}
-	if len(results) != 1 || results[0].OK || results[0].StatusCode != http.StatusNotFound {
-		t.Fatalf("results = %+v, want one reported 404", results)
+	if len(results) != 1 || results[0].OK || results[0].Err == nil {
+		t.Fatalf("results = %+v, want one reported transport error", results)
 	}
 }
 
@@ -307,4 +331,78 @@ func TestTCPKeepAliveAttempt(t *testing.T) {
 			t.Fatalf("results = %+v, want one reported failure", results)
 		}
 	})
+}
+
+// routedDialer is a tunnel dialer that also answers where a destination would
+// go, which is what the real dialer does.
+type routedDialer struct {
+	fakeDialer
+	direct bool
+}
+
+func (d routedDialer) RouteFor(context.Context, string, string) (bool, error) {
+	return !d.direct, nil
+}
+
+// TestKeepAliveDirectAnswerIsNotAProbe: an answer over a direct connection
+// proves the host is up, not that the session was renewed.
+func TestKeepAliveDirectAnswerIsNotAProbe(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	var results []KeepAliveResult
+	target, ok := keepAliveRound(context.Background(), keepAliveClientFor(fakeDialer{}), routedDialer{direct: true}, []KeepAliveTarget{
+		{URL: server.URL, Named: true},
+	}, "", func(result KeepAliveResult) {
+		results = append(results, result)
+	})
+	if ok || target != "" {
+		t.Fatalf("round = (%q, %t), want the direct answer rejected", target, ok)
+	}
+	if len(results) != 1 || results[0].OK || results[0].Routed != routedDirect || results[0].StatusCode != http.StatusOK {
+		t.Fatalf("results = %+v, want one direct answer kept as a warning", results)
+	}
+}
+
+func TestKeepAliveTunnelAnswerIsAProbe(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	var results []KeepAliveResult
+	if _, ok := keepAliveRound(context.Background(), keepAliveClientFor(fakeDialer{}), routedDialer{}, []KeepAliveTarget{
+		{URL: server.URL, Named: true},
+	}, "", func(result KeepAliveResult) {
+		results = append(results, result)
+	}); !ok {
+		t.Fatalf("a 403 through the tunnel did not count (results %+v)", results)
+	}
+	if len(results) != 1 || !results[0].OK || results[0].Routed != routedTunnel || results[0].StatusCode != http.StatusForbidden {
+		t.Fatalf("results = %+v", results)
+	}
+}
+
+func TestTCPKeepAliveDirectConnectionIsNotAProbe(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close() }()
+	acceptLoop(listener, func(conn net.Conn) { _ = conn.Close() })
+
+	direct := routedDialer{direct: true, fakeDialer: fakeDialer{dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, listener.Addr().String())
+	}}}
+	var results []KeepAliveResult
+	if tcpKeepAliveAttempt(context.Background(), direct, KeepAliveTarget{Address: "127.0.0.1:22"}, time.Second, func(result KeepAliveResult) {
+		results = append(results, result)
+	}) {
+		t.Fatal("a direct connection counted as a tunnel probe")
+	}
+	if len(results) != 1 || results[0].Routed != routedDirect || results[0].OK {
+		t.Fatalf("results = %+v", results)
+	}
 }

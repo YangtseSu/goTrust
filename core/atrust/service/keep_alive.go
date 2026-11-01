@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -23,6 +24,13 @@ const (
 	// candidateKeepAliveTimeout is the short leash a derived candidate gets: it is
 	// a guess, and the round moves on to the next candidate on a miss.
 	candidateKeepAliveTimeout = 3 * time.Second
+)
+
+// routedTunnel and routedDirect are what a probe reports about its own path:
+// only the first is the application traffic that holds a session open.
+const (
+	routedTunnel = "tunnel"
+	routedDirect = "direct"
 )
 
 // KeepAliveTarget is one address to probe. An HTTP target carries a URL; a TCP
@@ -49,6 +57,14 @@ type KeepAliveDialer interface {
 	Dial(ctx context.Context, network, address string) (net.Conn, error)
 }
 
+// RouteReporter is what a dialer that can answer for itself implements: whether
+// Dial would send this destination through the tunnel. A keep-alive probe is
+// only application traffic when it crosses the tunnel, so an answer that came
+// back over a direct connection is a warning, not a successful probe.
+type RouteReporter interface {
+	RouteFor(ctx context.Context, network, addr string) (bool, error)
+}
+
 // KeepAliveResult is the outcome of one probe. A caller that wants to show
 // what the last round learned (a tray tooltip, a status line) reads this
 // instead of matching the log lines the loop writes.
@@ -69,6 +85,11 @@ type KeepAliveResult struct {
 	// Fallback marks the remote-DNS probe, which is not application traffic
 	// and does not hold a session open.
 	Fallback bool
+	// Routed is how the probe left: routedTunnel for a connection the dialer
+	// sent through the tunnel, routedDirect for one it did not, and empty when
+	// the dialer could not say. A direct probe does not keep the session open,
+	// so it is never OK.
+	Routed string
 	// At is when the probe finished.
 	At time.Time
 }
@@ -167,12 +188,13 @@ func keepAliveAttempt(
 	if target.Address != "" {
 		return tcpKeepAliveAttempt(ctx, dialer, target, timeout, report)
 	}
-	return httpKeepAliveAttempt(ctx, client, target, timeout, report)
+	return httpKeepAliveAttempt(ctx, client, dialer, target, timeout, report)
 }
 
 func httpKeepAliveAttempt(
 	ctx context.Context,
 	client *http.Client,
+	dialer KeepAliveDialer,
 	target KeepAliveTarget,
 	timeout time.Duration,
 	report func(KeepAliveResult),
@@ -196,25 +218,71 @@ func httpKeepAliveAttempt(
 
 	resp, err := client.Do(req)
 	if err != nil {
+		result.Routed = probeRoute(ctx, dialer, target)
 		result.Err = err
 		finish()
-		log.Printf("KeepAlive: target=%s err=%v", target.URL, err)
+		log.Printf("KeepAlive: target=%s routed=%s err=%v", target.URL, orUnknown(result.Routed), err)
 		return false
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, keepAliveDrainLimit+1))
 
+	// Any HTTP answer is an application request the gateway carried, so it
+	// renews the session whatever the status says: a 403 from an application
+	// that wants a login is still traffic through the tunnel. The status stays
+	// in the result, because it is what a status line shows.
 	result.StatusCode = resp.StatusCode
-	if resp.StatusCode >= http.StatusBadRequest {
+	result.Routed = probeRoute(ctx, dialer, target)
+
+	if result.Routed == routedDirect {
 		finish()
-		log.Printf("KeepAlive: target=%s status=%d", target.URL, resp.StatusCode)
+		log.Printf("KeepAlive: target=%s status=%d routed=direct; the answer did not cross the tunnel, so the session is not renewed",
+			target.URL, resp.StatusCode)
 		return false
 	}
 
 	result.OK = true
 	finish()
-	log.Printf("KeepAlive: OK status=%d target=%s", resp.StatusCode, target.URL)
+	log.Printf("KeepAlive: OK status=%d routed=%s target=%s", resp.StatusCode, orUnknown(result.Routed), target.URL)
 	return true
+}
+
+// probeRoute asks the dialer where an HTTP probe went. A dialer that cannot
+// answer leaves it empty: a plain HTTP client used in a test carries no route,
+// and claiming either path would be a guess.
+func probeRoute(ctx context.Context, dialer KeepAliveDialer, target KeepAliveTarget) string {
+	targetURL, err := url.Parse(target.URL)
+	if err != nil {
+		return ""
+	}
+	port := targetURL.Port()
+	if port == "" {
+		port = "80"
+		if targetURL.Scheme == "https" {
+			port = "443"
+		}
+	}
+	return routeOf(ctx, dialer, net.JoinHostPort(targetURL.Hostname(), port))
+}
+
+// routeOf is the route query both kinds of probe share.
+func routeOf(ctx context.Context, dialer KeepAliveDialer, address string) string {
+	reporter, ok := dialer.(RouteReporter)
+	if !ok {
+		return ""
+	}
+	if routed, err := reporter.RouteFor(ctx, "tcp", address); err == nil && routed {
+		return routedTunnel
+	}
+	return routedDirect
+}
+
+// orUnknown prints the route for a log line.
+func orUnknown(routed string) string {
+	if routed == "" {
+		return "unknown"
+	}
+	return routed
 }
 
 // tcpKeepAliveAttempt opens a connection to a granted address through the
@@ -240,9 +308,10 @@ func tcpKeepAliveAttempt(
 
 	conn, err := dialer.Dial(attemptCtx, "tcp", target.Address)
 	if err != nil {
+		result.Routed = routeOf(ctx, dialer, target.Address)
 		result.Err = err
 		finish()
-		log.Printf("KeepAlive: target=%s err=%v", target.String(), err)
+		log.Printf("KeepAlive: target=%s routed=%s err=%v", target.String(), orUnknown(result.Routed), err)
 		return false
 	}
 	defer func() { _ = conn.Close() }()
@@ -251,9 +320,17 @@ func tcpKeepAliveAttempt(
 		log.Printf("KeepAlive: target=%s connected; application exchange: %v", target.String(), err)
 	}
 
+	result.Routed = routeOf(ctx, dialer, target.Address)
+	if result.Routed == routedDirect {
+		finish()
+		log.Printf("KeepAlive: target=%s connected directly, not through the tunnel; the session is not renewed",
+			target.String())
+		return false
+	}
+
 	result.OK = true
 	finish()
-	log.Printf("KeepAlive: OK tcp target=%s", target.String())
+	log.Printf("KeepAlive: OK tcp routed=%s target=%s", orUnknown(result.Routed), target.String())
 	return true
 }
 

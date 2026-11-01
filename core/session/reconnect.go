@@ -65,6 +65,9 @@ type KeepAliveState struct {
 	OK bool
 	// Err is the transport or lookup error, empty when the probe got an answer.
 	Err string
+	// Routed is how the probe left: "tunnel", "direct", or empty when the
+	// dialer could not say. A direct probe did not renew the session.
+	Routed string
 	// Fallback marks the remote-DNS probe, which does not hold the session.
 	Fallback bool
 	// At is when the probe finished. Zero means no probe has run.

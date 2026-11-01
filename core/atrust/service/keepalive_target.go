@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -58,9 +59,9 @@ func NamedKeepAliveTargets(value string) ([]KeepAliveTarget, []string) {
 	return targets, warnings
 }
 
-// DeriveKeepAliveTargets turns the granted resources into probe candidates. It
-// never invents an address and only uses ports the grant covers: 80 is probed
-// with a plain HTTP request, 443 with a TLS handshake, 22 with the SSH
+// DeriveKeepAliveTargets turns the granted address rules into probe candidates.
+// It never invents an address and only uses ports the grant covers: 80 is
+// probed with a plain HTTP request, 443 with a TLS handshake, 22 with the SSH
 // identification, and any other lowest port with a connection through the
 // tunnel.
 func DeriveKeepAliveTargets(ipResources []client.IPResource) ([]KeepAliveTarget, []string) {
@@ -103,6 +104,68 @@ func DeriveKeepAliveTargets(ipResources []client.IPResource) ([]KeepAliveTarget,
 	}
 
 	return targets, notes
+}
+
+// DeriveDomainKeepAliveTargets turns the granted name rules into probe
+// candidates. A grant may cover a name and no address at all: the gateway
+// resolves it at connect time, so no IPResource exists for it and the address
+// derivation above never sees it. The name is still the application the account
+// was granted, so a web grant is probed at its own host.
+func DeriveDomainKeepAliveTargets(domains map[string][]client.DomainResource) ([]KeepAliveTarget, []string) {
+	var targets []KeepAliveTarget
+	seen := make(map[string]bool)
+
+	names := make([]string, 0, len(domains))
+	for name := range domains {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		for _, resource := range domains[name] {
+			if len(targets) >= maxDerivedCandidates {
+				break
+			}
+			if resource.Protocol != "tcp" && resource.Protocol != "all" {
+				continue
+			}
+			port, ok := domainProbePort(resource)
+			if !ok {
+				continue
+			}
+			target := derivedDomainTarget(name, port)
+			if seen[target.String()] {
+				continue
+			}
+			seen[target.String()] = true
+			targets = append(targets, target)
+		}
+	}
+
+	return targets, nil
+}
+
+// domainProbePort picks the port a name grant is probed on: the well-known HTTP
+// port when the grant covers it, else the lowest port the grant allows.
+func domainProbePort(resource client.DomainResource) (int, bool) {
+	if resource.PortMin <= derivedHTTPPort && derivedHTTPPort <= resource.PortMax {
+		return derivedHTTPPort, true
+	}
+	if resource.PortMin > 0 && resource.PortMin <= resource.PortMax {
+		return resource.PortMin, true
+	}
+	return 0, false
+}
+
+// derivedDomainTarget names the probe for one granted domain. A leading "*." is
+// the gateway's wildcard for a subdomain and is not part of the host name.
+func derivedDomainTarget(name string, port int) KeepAliveTarget {
+	host := strings.TrimPrefix(name, "*.")
+	address := net.JoinHostPort(host, strconv.Itoa(port))
+	if port == derivedHTTPPort {
+		return KeepAliveTarget{URL: "http://" + host + "/"}
+	}
+	return KeepAliveTarget{Address: address}
 }
 
 // resourceForwardsProtocol reports whether the tunnel forwards a resource's

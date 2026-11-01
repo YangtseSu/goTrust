@@ -67,6 +67,86 @@ func (d *Dialer) dialDirectHost(ctx context.Context, network, hostAddr string) (
 	}
 }
 
+// tunnelRoute is the routing decision DialIPPort acts on: whether a
+// destination goes through the tunnel, and whether the granted resources cover
+// it. It returns the context carrying the resource that matched, which the
+// tunnel needs to authorise the connection. The keep-alive asks the same
+// question to tell a probe that crossed the tunnel from one that did not.
+func (d *Dialer) tunnelRoute(ctx context.Context, network string, ip net.IP, port int) (context.Context, bool, bool) {
+	useVPN := d.alwaysUseVPN
+	matchedResource := false
+
+	// Track whether dst:port matches any gateway-issued resource. We always
+	// run both resource lookups (even if useVPN was already forced true by
+	// alwaysUseVPN) so we can enforce the server-side ACL client-side.
+	if res := ctx.Value(resolve.ContextKeyDomainResource); res != nil {
+		var resource client.DomainResource
+		var matched bool
+		switch resources := res.(type) {
+		case []client.DomainResource:
+			resource, matched = matchDomainResourceForTunnel(resources, network, port)
+		case client.DomainResource:
+			resource, matched = matchDomainResourceForTunnel([]client.DomainResource{resources}, network, port)
+		}
+		if matched {
+			ctx = context.WithValue(ctx, resolve.ContextKeyDomainResource, resource)
+			useVPN = true
+			matchedResource = true
+		}
+	}
+
+	if !matchedResource && d.ipResources != nil {
+		if resource, matched := matchIPResourceForTunnel(d.resourceIndex, ip, network, port); matched {
+			ctx = context.WithValue(ctx, resolve.ContextKeyIPResource, resource)
+			useVPN = true
+			matchedResource = true
+		}
+	}
+
+	return ctx, useVPN, matchedResource
+}
+
+// RouteFor reports whether Dial would send the destination through the tunnel,
+// without opening anything. The keep-alive uses it as a witness: an answer
+// reached over a direct connection proves the host is up, not that the session
+// is being kept alive.
+func (d *Dialer) RouteFor(ctx context.Context, network, addr string) (bool, error) {
+	if strings.Count(addr, ":") > 1 {
+		// IPv6 destinations are dialled directly.
+		return false, nil
+	}
+
+	host, portText, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false, nil
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		return false, nil
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		if d.resolver == nil {
+			return false, errors.New("the destination name cannot be resolved without a resolver")
+		}
+		// The resolver attaches the domain resource to the context, which is
+		// how a name-only grant is matched.
+		ctx, ip, err = d.resolver.Resolve(ctx, host)
+		if err != nil {
+			// Dial falls back to a direct connection when a name does not
+			// resolve, so that is the honest answer here too.
+			return false, nil
+		}
+		if strings.Count(ip.String(), ":") > 0 {
+			return false, nil
+		}
+	}
+
+	_, useVPN, _ := d.tunnelRoute(ctx, network, ip, port)
+	return useVPN, nil
+}
+
 func (d *Dialer) DialIPPort(ctx context.Context, network, ipAddr string) (net.Conn, error) {
 	hostAddr := ""
 	if _, hostAddrOK := ctx.Value(resolve.ContextKeyResolveHost).(string); hostAddrOK {
@@ -94,7 +174,6 @@ func (d *Dialer) DialIPPort(ctx context.Context, network, ipAddr string) (net.Co
 		return nil, errors.New("Invalid port in address: " + ipAddr)
 	}
 
-	var useVPN = false
 	var target *net.IPAddr
 
 	if pureIp := net.ParseIP(ip); pureIp != nil {
@@ -104,38 +183,8 @@ func (d *Dialer) DialIPPort(ctx context.Context, network, ipAddr string) (net.Co
 		return d.dialDirectIP(ctx, network, ipAddr, hostAddr)
 	}
 
-	if d.alwaysUseVPN {
-		useVPN = true
-	}
-
-	// Track whether dst:port matches any gateway-issued resource. We always
-	// run both resource lookups (even if useVPN was already forced true by
-	// alwaysUseVPN) so we can enforce the server-side ACL client-side.
-	matchedResource := false
-
-	if res := ctx.Value(resolve.ContextKeyDomainResource); res != nil {
-		var resource client.DomainResource
-		var matched bool
-		switch resources := res.(type) {
-		case []client.DomainResource:
-			resource, matched = matchDomainResourceForTunnel(resources, network, port)
-		case client.DomainResource:
-			resource, matched = matchDomainResourceForTunnel([]client.DomainResource{resources}, network, port)
-		}
-		if matched {
-			ctx = context.WithValue(ctx, resolve.ContextKeyDomainResource, resource)
-			useVPN = true
-			matchedResource = true
-		}
-	}
-
-	if !matchedResource && d.ipResources != nil {
-		if resource, matched := matchIPResourceForTunnel(d.resourceIndex, target.IP, network, port); matched {
-			ctx = context.WithValue(ctx, resolve.ContextKeyIPResource, resource)
-			useVPN = true
-			matchedResource = true
-		}
-	}
+	var useVPN, matchedResource bool
+	ctx, useVPN, matchedResource = d.tunnelRoute(ctx, network, target.IP, port)
 
 	// Client-side ACL enforcement: if alwaysUseVPN forced VPN routing for a
 	// dst:port that is not in the server-issued resource list, sending it
