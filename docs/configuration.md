@@ -135,6 +135,7 @@ client_data_path = ""
 | `keepalive.interval` | 保活间隔，默认 `90s`，最小 10 s |
 | `keepalive.targets` | 手工保活目标，一行一个，优先级高于自动推导的目标。自动推导使用授权资源的 80、443、22 端口，以及只给出域名、没有地址的授权 |
 | `debug.client_data_path` | 自定义登录数据文件路径。留空时使用配置目录下的 `client_data-<账户名>.json` |
+| `identity.os_family` / `identity.client_version` / `identity.os_arch` / `identity.user_agent` | 该账户自我描述的方式。留空则跟随 `[identity]`：可以一个账户表现为官方客户端，另一个表现为本程序。`device_id` 与 `mac_addresses` 是整机级的，此处不接受 |
 
 窗口的“网关”字段接受 `host:port`、`https://host:port`、只写主机名（使用 443）、带结尾路径或斜杠的粘贴内容，以及方括号形式的 IPv6 地址（可带端口）。其他协议、空主机名和 1–65535 之外的端口会被拒绝。保存时窗口把字段拆成 `server.address` 和 `server.port` 两个键，文件格式不变。
 

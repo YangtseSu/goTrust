@@ -135,6 +135,7 @@ Each `[[profiles]]` entry is one account.
 | `keepalive.interval` | Keepalive interval, `90s` by default, minimum 10 s |
 | `keepalive.targets` | Manual keepalive targets, one per line, taking precedence over automatically derived targets. Derived targets come from granted ports 80, 443 and 22, and from name-only grants, which have no address to derive from |
 | `debug.client_data_path` | Custom login data file path. When empty, `client_data-<name>.json` in the configuration directory is used |
+| `identity.os_family` / `identity.client_version` / `identity.os_arch` / `identity.user_agent` | How this account describes its client. Empty fields follow `[identity]`, so one account can present the vendor's client while another presents this program. `device_id` and `mac_addresses` are install-wide and are not accepted here |
 
 The window's Gateway field accepts `host:port`, `https://host:port`, a bare host (443), a pasted path or trailing slash, and a bracketed IPv6 address with or without a port. Other schemes, an empty host and ports outside 1–65535 are rejected. On save the field is split back into `server.address` and `server.port`; the file format does not change.
 

@@ -1004,3 +1004,56 @@ func TestEnsureIdentityGeneratesOneHardwareAddress(t *testing.T) {
 		t.Fatalf("a hand-set address was replaced: %v", cfg.Identity.MACAddresses)
 	}
 }
+
+// TestIdentityForFollowsTheAccount: one installation may present the vendor's
+// client for one account and its own for another. The fields an account leaves
+// empty follow [identity], and the machine identifiers never change.
+func TestIdentityForFollowsTheAccount(t *testing.T) {
+	cfg := Default()
+	cfg.Identity.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	cfg.Identity.MACAddresses = []string{"02:00:5e:10:00:01"}
+	cfg.Identity.OSFamily = IdentityOSLinux
+	cfg.Identity.OSArch = "x86_64"
+
+	vendor := Profile{Name: "vendor", Client: ProfileIdentity{
+		OSFamily:      IdentityOSUOS,
+		ClientVersion: "2.5.16.41",
+	}}
+	own := Profile{Name: "own"}
+
+	vendorIdentity := cfg.IdentityFor(vendor)
+	if vendorIdentity.OSFamily != IdentityOSUOS {
+		t.Fatalf("vendor family = %q", vendorIdentity.OSFamily)
+	}
+	if !strings.Contains(vendorIdentity.UserAgentString(), "aTrustTray/2.5.16.41") {
+		t.Fatalf("vendor UA = %q", vendorIdentity.UserAgentString())
+	}
+	if vendorIdentity.DeviceID != cfg.Identity.DeviceID || len(vendorIdentity.MACAddresses) != 1 {
+		t.Fatalf("an account override changed the machine identity: %+v", vendorIdentity)
+	}
+
+	// The account without an override presents the install identity, which is
+	// the truthful default.
+	ownIdentity := cfg.IdentityFor(own)
+	truthful := cfg.Identity.UserAgentString()
+	if ownIdentity.OSFamily != IdentityOSLinux || ownIdentity.UserAgentString() != truthful {
+		t.Fatalf("own UA = %q, want %q", ownIdentity.UserAgentString(), truthful)
+	}
+	if strings.Contains(ownIdentity.UserAgentString(), "aTrustTray") {
+		t.Fatalf("an account inherited the vendor vocabulary: %q", ownIdentity.UserAgentString())
+	}
+}
+
+func TestValidateRejectsAnUnknownAccountFamily(t *testing.T) {
+	cfg := Default()
+	cfg.Profiles[0].Server.Address = "vpn.example.com"
+	cfg.Profiles[0].Auth.Username = "student"
+	cfg.Profiles[0].Client.OSFamily = "beos"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("an unknown account os_family was accepted")
+	}
+	cfg.Profiles[0].Client.OSFamily = IdentityOSUOS
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("a known account family was refused: %v", err)
+	}
+}

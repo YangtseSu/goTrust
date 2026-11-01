@@ -239,6 +239,38 @@ func (i IdentityConfig) validate() error {
 	return nil
 }
 
+// validate refuses an account-level client description the client cannot use.
+// An empty field means "follow [identity]", so only a set value is checked.
+func (i ProfileIdentity) validate() error {
+	switch family := i.OSFamily; family {
+	case "", IdentityOSLinux, IdentityOSUOS, IdentityOSWindows:
+	default:
+		return fmt.Errorf("os_family %q is not one of %q, %q or %q",
+			family, IdentityOSLinux, IdentityOSUOS, IdentityOSWindows)
+	}
+	return nil
+}
+
+// IdentityFor returns the identity the named account presents: the install
+// identity with the account's own client description applied. The device id and
+// the hardware address are taken from the install identity unchanged.
+func (c Config) IdentityFor(profile Profile) IdentityConfig {
+	resolved := c.Identity
+	if version := strings.TrimSpace(profile.Client.ClientVersion); version != "" {
+		resolved.ClientVersion = version
+	}
+	if family := strings.TrimSpace(profile.Client.OSFamily); family != "" {
+		resolved.OSFamily = family
+	}
+	if arch := strings.TrimSpace(profile.Client.OSArch); arch != "" {
+		resolved.OSArch = arch
+	}
+	if agent := strings.TrimSpace(profile.Client.UserAgent); agent != "" {
+		resolved.UserAgent = agent
+	}
+	return resolved
+}
+
 // UserAgentString is the UA the portal sees. An explicit user_agent wins.
 // Otherwise the default family states what the client is; the uos and windows
 // presets send the vocabulary those platforms use, only when the file selects
@@ -340,12 +372,36 @@ type Profile struct {
 	// across renames, and never reused, so per-profile state can key off it
 	// instead of the mutable name. A hand-edited value stays unless another
 	// profile already owns it.
-	ID     string       `toml:"id"`
-	Name   string       `toml:"name"`
-	Server ServerConfig `toml:"server"`
-	Auth   AuthConfig   `toml:"auth"`
-	Keep   KeepConfig   `toml:"keepalive"`
-	Debug  DebugConfig  `toml:"debug"`
+	ID     string          `toml:"id"`
+	Name   string          `toml:"name"`
+	Server ServerConfig    `toml:"server"`
+	Auth   AuthConfig      `toml:"auth"`
+	Keep   KeepConfig      `toml:"keepalive"`
+	Debug  DebugConfig     `toml:"debug"`
+	Client ProfileIdentity `toml:"identity,omitempty"`
+}
+
+// ProfileIdentity overrides how this account describes its client. A gateway
+// may expect one account to look like the vendor's client and another to look
+// like this program, and the two cannot share one answer.
+//
+// Only what a gateway reads as the client's own description belongs here. The
+// device id and the hardware address stay install-wide even in this section:
+// they name the machine, and one host presenting several of them is what makes
+// a portal count it as several devices.
+type ProfileIdentity struct {
+	// ClientVersion is the version the User-Agent reports. Empty follows
+	// [identity].
+	ClientVersion string `toml:"client_version,omitempty"`
+	// OSFamily selects the User-Agent vocabulary: linux, uos or windows.
+	// Empty follows [identity].
+	OSFamily string `toml:"os_family,omitempty"`
+	// OSArch is the uname -m spelling the User-Agent carries. Empty follows
+	// [identity].
+	OSArch string `toml:"os_arch,omitempty"`
+	// UserAgent overrides the whole string. Empty derives it from the three
+	// fields above.
+	UserAgent string `toml:"user_agent,omitempty"`
 }
 
 // ServerConfig identifies the aTrust gateway.
@@ -817,6 +873,13 @@ func (c Config) ProxyAddresses() (socks5, http string) {
 func (c Config) Validate() error {
 	if err := c.Identity.validate(); err != nil {
 		return err
+	}
+	// Every account is checked, not only the active one: a typo in an account
+	// that is not in use yet must not surface as a failed login later.
+	for _, profile := range c.Profiles {
+		if err := profile.Client.validate(); err != nil {
+			return fmt.Errorf("account %q: %w", profile.Name, err)
+		}
 	}
 	if err := c.Active().Validate(); err != nil {
 		return err
