@@ -179,12 +179,7 @@ func (t *L3Tunnel) waitConnectCall(call *l3TunnelConnectCall) (*l3TunnelConn, er
 }
 
 func (t *L3Tunnel) connectConn(nodeGroupID string) (*l3TunnelConn, error) {
-	t.client.BestNodesRWMutex.RLock()
-	addr := t.client.BestNodes[nodeGroupID]
-	if addr == "" {
-		addr = t.client.BestNodes[t.client.MajorNodeGroup]
-	}
-	t.client.BestNodesRWMutex.RUnlock()
+	addr := t.client.nodeAddress(nodeGroupID)
 	if addr == "" {
 		return nil, fmt.Errorf("no available node for group %s", nodeGroupID)
 	}

@@ -13,6 +13,11 @@ import (
 	"github.com/YangtseSu/goTrust/core/atrust/log"
 )
 
+// setupIPBudget is how long the IP request may take: the node dial, the tunnel
+// handshake and the gateway's answer together. The earlier ten seconds failed
+// setup on a gateway that was merely slow.
+const setupIPBudget = 20 * time.Second
+
 func parseIPAuthResponse(data []byte) error {
 	var response authResponseSID
 	if err := json.Unmarshal(data, &response); err != nil {
@@ -84,13 +89,7 @@ func readIPTunnelResponses(reader io.Reader) (net.IP, error) {
 }
 
 func (c *Client) getIP(parent context.Context) error {
-	addr := c.BestNodes[c.MajorNodeGroup]
-	if addr == "" {
-		for _, node := range c.BestNodes {
-			addr = node
-			break
-		}
-	}
+	addr := c.nodeAddress(c.MajorNodeGroup)
 	if addr == "" {
 		return fmt.Errorf("no reachable node for ip request")
 	}
@@ -98,7 +97,10 @@ func (c *Client) getIP(parent context.Context) error {
 	if parent == nil {
 		parent = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	// The gateway dials the node, completes the tunnel handshake and then
+	// answers the IP request; a slow one needs more than the ten seconds this
+	// used to allow, which failed setup on a gateway that was merely slow.
+	ctx, cancel := context.WithTimeout(parent, setupIPBudget)
 	defer cancel()
 	conn, err := dialTLSContext(ctx, c.underlayDialer, "tcp", addr, tunnelTLSConfig(c.tlsKeyLogWriter))
 	if err != nil {
@@ -121,7 +123,7 @@ func (c *Client) getIP(parent context.Context) error {
 		return err
 	}
 
-	if err := conn.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+	if err := conn.SetReadDeadline(time.Now().Add(setupIPBudget)); err != nil {
 		return err
 	}
 	ip, err := readIPTunnelResponses(conn)

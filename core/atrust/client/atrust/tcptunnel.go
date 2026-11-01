@@ -515,12 +515,7 @@ func (c *Client) DialTCP(ctx context.Context, addr *net.TCPAddr) (net.Conn, erro
 		return nil, fmt.Errorf("host:%s port:%d is not resource: %w", addr.IP, addr.Port, client.ErrResourceNotFound)
 	}
 
-	c.BestNodesRWMutex.RLock()
-	nodeAddr := c.BestNodes[nodeGroupID]
-	if nodeAddr == "" {
-		nodeAddr = c.BestNodes[c.MajorNodeGroup]
-	}
-	c.BestNodesRWMutex.RUnlock()
+	nodeAddr := c.nodeAddress(nodeGroupID)
 	if nodeAddr == "" {
 		return nil, fmt.Errorf("no available aTrust node for group %q", nodeGroupID)
 	}

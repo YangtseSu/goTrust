@@ -131,3 +131,30 @@ func TestSelectBestNodesOmitsGroupWhenNoNodeReachable(t *testing.T) {
 		t.Fatalf("selected unreachable node %q", got["group"])
 	}
 }
+
+// TestNodeAddressFallsBackPastTheMajorGroup: an account the gateway assigns to
+// no major group still has reachable gateways, and refusing to connect would
+// turn a naming difference into a dead tunnel.
+func TestNodeAddressFallsBackPastTheMajorGroup(t *testing.T) {
+	c := NewClient(ClientOptions{})
+	t.Cleanup(c.Close)
+
+	c.BestNodes = map[string]string{"other": "vpn.example:441"}
+	if got := c.nodeAddress("missing"); got != "vpn.example:441" {
+		t.Fatalf("nodeAddress() = %q, want the only reachable node", got)
+	}
+
+	c.BestNodes = map[string]string{"major": "major.example:441", "other": "other.example:441"}
+	c.MajorNodeGroup = "major"
+	if got := c.nodeAddress("missing"); got != "major.example:441" {
+		t.Fatalf("nodeAddress() = %q, want the major group's node", got)
+	}
+	if got := c.nodeAddress("major"); got != "major.example:441" {
+		t.Fatalf("nodeAddress(own group) = %q", got)
+	}
+
+	c.BestNodes = nil
+	if got := c.nodeAddress("missing"); got != "" {
+		t.Fatalf("nodeAddress() = %q, want empty when no node is known", got)
+	}
+}
