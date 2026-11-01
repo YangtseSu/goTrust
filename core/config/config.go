@@ -221,14 +221,13 @@ func (c *Config) storedDeviceID() string {
 // validate refuses a hand-edited device id the portal cannot read: it is the
 // 32-hex form the protocol uses.
 func (i IdentityConfig) validate() error {
-	id := strings.TrimSpace(i.DeviceID)
-	if id != "" {
-		if len(id) != 32 {
-			return fmt.Errorf("identity device_id %q is not 32 hex characters", id)
+	if id := strings.TrimSpace(i.DeviceID); id != "" {
+		if err := validateDeviceID(id); err != nil {
+			return err
 		}
-		if _, err := hex.DecodeString(id); err != nil {
-			return fmt.Errorf("identity device_id %q is not hexadecimal", id)
-		}
+	}
+	if err := validateMACAddresses(i.MACAddresses); err != nil {
+		return err
 	}
 	switch i.OSFamily {
 	case "", IdentityOSLinux, IdentityOSUOS, IdentityOSWindows:
@@ -239,9 +238,39 @@ func (i IdentityConfig) validate() error {
 	return nil
 }
 
+// validateDeviceID refuses an id the portal cannot read: it is the 32-hex form
+// the protocol uses.
+func validateDeviceID(id string) error {
+	if len(id) != 32 {
+		return fmt.Errorf("device_id %q is not 32 hex characters", id)
+	}
+	if _, err := hex.DecodeString(id); err != nil {
+		return fmt.Errorf("device_id %q is not hexadecimal", id)
+	}
+	return nil
+}
+
+// validateMACAddresses refuses an address the portal cannot read.
+func validateMACAddresses(addresses []string) error {
+	for _, address := range addresses {
+		if _, err := net.ParseMAC(strings.TrimSpace(address)); err != nil {
+			return fmt.Errorf("mac_addresses entry %q is not a hardware address", address)
+		}
+	}
+	return nil
+}
+
 // validate refuses an account-level client description the client cannot use.
 // An empty field means "follow [identity]", so only a set value is checked.
 func (i ProfileIdentity) validate() error {
+	if id := strings.TrimSpace(i.DeviceID); id != "" {
+		if err := validateDeviceID(id); err != nil {
+			return err
+		}
+	}
+	if err := validateMACAddresses(i.MACAddresses); err != nil {
+		return err
+	}
 	switch family := i.OSFamily; family {
 	case "", IdentityOSLinux, IdentityOSUOS, IdentityOSWindows:
 	default:
@@ -252,10 +281,15 @@ func (i ProfileIdentity) validate() error {
 }
 
 // IdentityFor returns the identity the named account presents: the install
-// identity with the account's own client description applied. The device id and
-// the hardware address are taken from the install identity unchanged.
+// identity with the account's own fields applied, one field at a time.
 func (c Config) IdentityFor(profile Profile) IdentityConfig {
 	resolved := c.Identity
+	if id := strings.TrimSpace(profile.Client.DeviceID); id != "" {
+		resolved.DeviceID = id
+	}
+	if len(profile.Client.MACAddresses) > 0 {
+		resolved.MACAddresses = profile.Client.MACAddresses
+	}
 	if version := strings.TrimSpace(profile.Client.ClientVersion); version != "" {
 		resolved.ClientVersion = version
 	}
@@ -381,15 +415,22 @@ type Profile struct {
 	Client ProfileIdentity `toml:"identity,omitempty"`
 }
 
-// ProfileIdentity overrides how this account describes its client. A gateway
-// may expect one account to look like the vendor's client and another to look
-// like this program, and the two cannot share one answer.
+// ProfileIdentity overrides how this account presents itself. A gateway may
+// expect one account to look like the vendor's client and another to look like
+// this program, and two accounts may need two identities to be counted as two
+// devices. Neither can be shared, so every field falls back to [identity]
+// independently: an empty field follows the install value.
 //
-// Only what a gateway reads as the client's own description belongs here. The
-// device id and the hardware address stay install-wide even in this section:
-// they name the machine, and one host presenting several of them is what makes
-// a portal count it as several devices.
+// Overriding device_id or mac_addresses makes the account a separate device to
+// the portal. That is deliberate here; the install-wide value stays the default
+// so a file that says nothing still presents one device for all accounts.
 type ProfileIdentity struct {
+	// DeviceID is the 32-hex device id this account reports. Empty follows
+	// [identity].
+	DeviceID string `toml:"device_id,omitempty"`
+	// MACAddresses is the hardware address this account reports. Empty
+	// follows [identity].
+	MACAddresses []string `toml:"mac_addresses,omitempty"`
 	// ClientVersion is the version the User-Agent reports. Empty follows
 	// [identity].
 	ClientVersion string `toml:"client_version,omitempty"`

@@ -739,3 +739,40 @@ func TestSessionStateChangesReachTheObserver(t *testing.T) {
 		t.Fatalf("observed states = %v, want %v", seen, want)
 	}
 }
+
+// TestStoredIdentityBeatsTheConfiguredDefault: a caller-supplied device id is a
+// default for a record that has none. Overwriting a recorded one would orphan the
+// sign key and ticket minted with it, and every start would need a password.
+func TestStoredIdentityBeatsTheConfiguredDefault(t *testing.T) {
+	stub := newRecoveryStub(t)
+	c := NewClient(ClientOptions{Session: SessionOptions{
+		DeviceID:     "configured",
+		MACAddresses: []string{"02:00:5e:10:00:02"},
+	}})
+	t.Cleanup(c.Close)
+
+	c.sessionMu.Lock()
+	c.session = auth.NewSession(stub.host(), nil)
+	c.sessionMu.Unlock()
+
+	clientAuthData := auth.ClientAuthData{
+		DeviceID:     "recorded",
+		MACAddresses: []string{"02:00:5e:10:00:01"},
+		SignKey:      "key",
+		SIDTicket:    strings.Repeat("t", 73),
+		CSRFToken:    "csrf",
+	}
+	established, err := c.establishSession(context.Background(), c.session, SetupOptions{}, &clientAuthData, nil)
+	if err != nil {
+		t.Fatalf("establishSession: %v", err)
+	}
+	if !established.restored {
+		t.Fatalf("establishment = %+v, want the recorded identity to restore", established)
+	}
+	if c.DeviceID != "recorded" {
+		t.Fatalf("client device id = %q, want the recorded one", c.DeviceID)
+	}
+	if len(c.MACAddresses) != 1 || c.MACAddresses[0] != "02:00:5e:10:00:01" {
+		t.Fatalf("client mac = %v, want the recorded one", c.MACAddresses)
+	}
+}

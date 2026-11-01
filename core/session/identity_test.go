@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"path"
 	"testing"
+
+	"github.com/YangtseSu/goTrust/core/config"
 )
 
 const (
@@ -92,6 +94,25 @@ func TestSeedIdentityKeepsAStoredAddress(t *testing.T) {
 	}
 }
 
+// A stored session without either field gains the configured pair, which is how
+// an account that has not logged in yet presents the device it is configured as.
+func TestSeedIdentityFillsAStoredSessionWithoutAnIdentity(t *testing.T) {
+	seeded, err := seedIdentity([]byte(`{"cookies":[]}`), testDeviceID, []string{testMAC})
+	if err != nil {
+		t.Fatalf("seedIdentity() error = %v", err)
+	}
+	var record struct {
+		DeviceID     string   `json:"device_id"`
+		MACAddresses []string `json:"mac_addresses"`
+	}
+	if err := json.Unmarshal(seeded, &record); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if record.DeviceID != testDeviceID || len(record.MACAddresses) != 1 || record.MACAddresses[0] != testMAC {
+		t.Fatalf("seeded = %+v", record)
+	}
+}
+
 // The L3 environment names this client, not the upstream library's default.
 func TestClientProcessNamesTheRunningBinary(t *testing.T) {
 	process := clientProcess()
@@ -100,5 +121,62 @@ func TestClientProcessNamesTheRunningBinary(t *testing.T) {
 	}
 	if process.Path == "" || !path.IsAbs(process.Path) {
 		t.Fatalf("path = %q, want the running binary's absolute path", process.Path)
+	}
+}
+
+// TestPrepareStoredIdentityDropsAnotherDevicesSession: the stored sign key and
+// ticket were minted with the recorded device, so a session that presents a
+// different one would come up and have every authorization rejected. They are
+// dropped instead, and the login mints a fresh pair.
+func TestPrepareStoredIdentityDropsAnotherDevicesSession(t *testing.T) {
+	stored := []byte(`{"device_id":"OLDDEVICE","sign_key":"key","sid_ticket":"ticket","cookies":[{"name":"sid","value":"x"}],"csrf_token":"csrf"}`)
+	prepared, err := prepareStoredIdentity(stored, config.IdentityConfig{
+		DeviceID:     testDeviceID,
+		MACAddresses: []string{testMAC},
+	})
+	if err != nil {
+		t.Fatalf("prepareStoredIdentity() error = %v", err)
+	}
+	var record map[string]json.RawMessage
+	if err := json.Unmarshal(prepared, &record); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	for _, gone := range []string{"sign_key", "sid_ticket", "cookies"} {
+		if _, present := record[gone]; present {
+			t.Fatalf("%s survived a device change", gone)
+		}
+	}
+	var deviceID string
+	if err := json.Unmarshal(record["device_id"], &deviceID); err != nil {
+		t.Fatalf("device id: %v", err)
+	}
+	if deviceID != testDeviceID {
+		t.Fatalf("device id = %q, want the configured one", deviceID)
+	}
+	if _, present := record["csrf_token"]; !present {
+		t.Fatal("material the new device can still use was dropped")
+	}
+}
+
+// A record that already names the configured device keeps its session: that is
+// the normal start, and dropping the key would turn every launch into a login.
+func TestPrepareStoredIdentityKeepsTheMatchingSession(t *testing.T) {
+	stored := []byte(`{"device_id":"` + testDeviceID + `","sign_key":"key","sid_ticket":"ticket"}`)
+	prepared, err := prepareStoredIdentity(stored, config.IdentityConfig{
+		DeviceID:     testDeviceID,
+		MACAddresses: []string{testMAC},
+	})
+	if err != nil {
+		t.Fatalf("prepareStoredIdentity() error = %v", err)
+	}
+	var record struct {
+		SignKey   string `json:"sign_key"`
+		SIDTicket string `json:"sid_ticket"`
+	}
+	if err := json.Unmarshal(prepared, &record); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if record.SignKey != "key" || record.SIDTicket != "ticket" {
+		t.Fatalf("the stored session was dropped: %+v", record)
 	}
 }

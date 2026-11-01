@@ -451,14 +451,14 @@ func (c *Client) establishSession(
 	established := sessionEstablishment{resourceData: resourceData}
 	// The device id, the sign key and the sidTicket are one identity: the portal
 	// checks the pair on every authorization, so a restore has to present the
-	// values the session was minted with. A front-end stores the trio in the
-	// client data file and passes no SessionOptions, so the decision below takes
-	// them from the stored record. Leaving the device id out made
-	// canRestoreByTicket fail and turned every start into a password login.
-	if c.DeviceID == "" {
+	// values the session was minted with. The stored record is therefore the
+	// authority, and a caller-supplied value is only the default for a record
+	// that has none: overwriting a recorded device would orphan the sign key and
+	// ticket minted with it, and every start would become a password login.
+	if clientAuthData.DeviceID != "" {
 		c.DeviceID = clientAuthData.DeviceID
 	}
-	if len(c.MACAddresses) == 0 {
+	if len(clientAuthData.MACAddresses) > 0 {
 		c.MACAddresses = clientAuthData.MACAddresses
 	}
 	if c.SignKey == "" {

@@ -1057,3 +1057,59 @@ func TestValidateRejectsAnUnknownAccountFamily(t *testing.T) {
 		t.Fatalf("a known account family was refused: %v", err)
 	}
 }
+
+// TestIdentityForAcceptsTheMachineFields: an account may present itself as a
+// separate device. Empty fields follow [identity], so two accounts that say
+// nothing are still one device.
+func TestIdentityForAcceptsTheMachineFields(t *testing.T) {
+	cfg := Default()
+	cfg.Identity.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	cfg.Identity.MACAddresses = []string{"02:00:5e:10:00:01"}
+
+	separate := Profile{
+		Name: "separate",
+		Client: ProfileIdentity{
+			DeviceID:     "FEDCBA9876543210FEDCBA9876543210",
+			MACAddresses: []string{"02:00:5e:10:00:02"},
+		},
+	}
+	inherited := Profile{Name: "inherited"}
+
+	got := cfg.IdentityFor(separate)
+	if got.DeviceID != "FEDCBA9876543210FEDCBA9876543210" {
+		t.Fatalf("device id = %q, want the account's", got.DeviceID)
+	}
+	if len(got.MACAddresses) != 1 || got.MACAddresses[0] != "02:00:5e:10:00:02" {
+		t.Fatalf("mac = %v, want the account's", got.MACAddresses)
+	}
+
+	base := cfg.IdentityFor(inherited)
+	if base.DeviceID != cfg.Identity.DeviceID || len(base.MACAddresses) != 1 ||
+		base.MACAddresses[0] != "02:00:5e:10:00:01" {
+		t.Fatalf("an account without an override changed the device: %+v", base)
+	}
+}
+
+func TestValidateRejectsAnUnreadableAccountIdentity(t *testing.T) {
+	cfg := Default()
+	cfg.Profiles[0].Server.Address = "vpn.example.com"
+	cfg.Profiles[0].Auth.Username = "student"
+
+	cfg.Profiles[0].Client.DeviceID = "not-hex"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("a device id the portal cannot read was accepted")
+	}
+	cfg.Profiles[0].Client.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("a valid device id was refused: %v", err)
+	}
+
+	cfg.Profiles[0].Client.MACAddresses = []string{"not-a-mac"}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("a hardware address the portal cannot read was accepted")
+	}
+	cfg.Profiles[0].Client.MACAddresses = []string{"02:00:5e:10:00:03"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("a valid hardware address was refused: %v", err)
+	}
+}

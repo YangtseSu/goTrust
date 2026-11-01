@@ -324,11 +324,12 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	if err != nil {
 		return fail("read the stored session", err)
 	}
-	// The install identity names the machine; the account may present a
-	// different client description, which is what the User-Agent is built from.
-	install := m.settings().Identity
+	// The install identity names the machine; an account may override it, in
+	// which case this account presents its own device. With no override the
+	// resolved values are the install ones, so a file that says nothing keeps
+	// seeding what the portal already recorded.
 	identity := m.settings().IdentityFor(profile)
-	clientData, err = seedIdentity(clientData, install.DeviceID, install.MACAddresses)
+	clientData, err = prepareStoredIdentity(clientData, identity)
 	if err != nil {
 		return fail("prepare the stored session", err)
 	}
@@ -361,7 +362,8 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	client := atrust.NewClient(atrust.ClientOptions{
 		Session: atrust.SessionOptions{
 			Username:     profile.Auth.Username,
-			MACAddresses: install.MACAddresses,
+			DeviceID:     identity.DeviceID,
+			MACAddresses: identity.MACAddresses,
 		},
 		UnderlayDialer: dialer,
 	})
