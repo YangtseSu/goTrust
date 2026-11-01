@@ -65,6 +65,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		"print the URL of an interactive login step instead of opening a browser")
 	promptLang := flags.String("prompt-lang", "en",
 		"language of the interactive login pages: en or zh")
+	resetLoginData := flags.Bool("reset-login-data", false,
+		"remove the active profile's stored session material (cookies, sign key, sid ticket) and exit")
 	showVersion := flags.Bool("version", false, "print the version and exit")
 
 	switch err := flags.Parse(args); {
@@ -82,7 +84,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return ExitUsage
 	}
 	commands := 0
-	for _, command := range []bool{*status, *printResources, *pacURL, *printPAC, *printClash, *printClashScript, *printClashConfig} {
+	for _, command := range []bool{*status, *printResources, *pacURL, *printPAC, *printClash, *printClashScript, *printClashConfig, *resetLoginData} {
 		if command {
 			commands++
 		}
@@ -118,6 +120,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return reportRender(stdout, stderr, cfg, path, "clash-script")
 	case *printClashConfig:
 		return reportRender(stdout, stderr, cfg, path, "clash-config")
+	case *resetLoginData:
+		return removeLoginData(stdout, stderr, cfg, path)
 	default:
 		return runSession(stdout, stderr, cfg, path, *asJSON, *printURL, *promptLang)
 	}

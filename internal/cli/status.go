@@ -182,3 +182,24 @@ func reportRender(stdout, stderr io.Writer, cfg config.Config, configPath string
 	fmt.Fprint(stdout, text)
 	return ExitOK
 }
+
+// removeLoginData removes the active profile's stored session material. It is
+// the recovery step for a record the portal no longer accepts: the next start
+// logs in from nothing instead of replaying a dead ticket. A running instance
+// owns the file, so the reset refuses while the profile is in use.
+func removeLoginData(stdout, stderr io.Writer, cfg config.Config, configPath string) int {
+	if _, held, err := profilelock.Probe(configPath, cfg.ActiveProfile); err != nil {
+		fmt.Fprintf(stderr, "reset: %v\n", err)
+		return ExitFailure
+	} else if held {
+		fmt.Fprintf(stderr, "reset: profile %s is in use; stop it first\n", cfg.ActiveProfile)
+		return ExitFailure
+	}
+
+	if err := session.RemoveClientData(cfg); err != nil {
+		fmt.Fprintf(stderr, "reset: %v\n", err)
+		return ExitFailure
+	}
+	fmt.Fprintf(stdout, "profile %s: stored login data removed\n", cfg.Active().Name)
+	return ExitOK
+}

@@ -131,12 +131,12 @@ Each `[[profiles]]` entry is one account.
 | `auth.totp_secret` | TOTP secret. Written only when the user explicitly chooses to save it in the one-time code panel; turning off password storage clears it as well |
 | `keepalive.enabled` | Whether to send keepalive requests |
 | `keepalive.interval` | Keepalive interval, `90s` by default, minimum 10 s |
-| `keepalive.targets` | Manual keepalive targets, one per line, taking precedence over automatically derived targets (derived from granted ports 80, 443 and 22) |
+| `keepalive.targets` | Manual keepalive targets, one per line, taking precedence over automatically derived targets. Derived targets come from granted ports 80, 443 and 22, and from name-only grants, which have no address to derive from |
 | `debug.client_data_path` | Custom login data file path. When empty, `client_data-<name>.json` in the configuration directory is used |
 
 The window's Gateway field accepts `host:port`, `https://host:port`, a bare host (443), a pasted path or trailing slash, and a bracketed IPv6 address with or without a port. Other schemes, an empty host and ports outside 1–65535 are rejected. On save the field is split back into `server.address` and `server.port`; the file format does not change.
 
-`client_data*.json` holds cookies and session tickets, also with mode 0600. Renaming an account moves it and deleting an account removes it, both only after settings are saved.
+`client_data*.json` holds cookies, the device MAC and session tickets, also with mode 0600. Renaming an account moves it and deleting an account removes it, both only after settings are saved. Reset login data on the Settings page, or `gotrust-cli --reset-login-data`, removes it and makes the next login start from nothing: that is the recovery step for a stored record the portal no longer accepts.
 
 ## Compatibility
 

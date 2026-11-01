@@ -74,6 +74,13 @@ type SettingsState struct {
 	PasswordBusy   bool
 	PasswordStatus string
 	PasswordError  bool
+	// ResetArmed is the first click of the login-data reset: the row then asks
+	// for the second, because the action deletes the stored account material.
+	// ResetStatus reports the outcome inside the row.
+	ResetArmed  bool
+	ResetBusy   bool
+	ResetStatus string
+	ResetError  bool
 	// TrustKnown and Trusted are the portal's answer about this device, read
 	// through the live session. TrustStatus reports a query or change in
 	// progress or the error it returned; TrustBusy disables the buttons.
@@ -154,6 +161,11 @@ type SettingsActions struct {
 	// ClearLogs truncates the log file and removes its rotated copies.
 	ClearLogs func()
 	OpenLogs  func()
+	// ArmResetLoginData is the first click of the reset; ResetLoginData runs it
+	// once the row asks again. The action deletes the profile's stored session
+	// material, so it is a decision, not a button.
+	ArmResetLoginData func()
+	ResetLoginData    func()
 	// DiscoverAuth asks the gateway in the draft for its authentication
 	// methods; SelectAuth stores the chosen one in the draft.
 	DiscoverAuth func()
@@ -747,6 +759,39 @@ func localDataSection(c *ui.Context, state *SettingsState, profile *config.Profi
 				actions.OpenConfig()
 			}
 		})
+		resetRow(c, state, actions)
+	})
+}
+
+// resetRow is the stored-login-data recovery: the first click arms it, the
+// second removes the material, and Cancel puts it back. Deleting the file is
+// the point, so the row never acts on one click.
+func resetRow(c *ui.Context, state *SettingsState, actions SettingsActions) {
+	sub := locales.ResetLoginDataDesc()
+	if state.ResetStatus != "" {
+		sub = state.ResetStatus
+	}
+	rowLine(c, locales.ResetLoginData(), sub, func() {
+		if state.ResetBusy {
+			return
+		}
+		if state.ResetArmed {
+			cancel := ui.Button(c, locales.CommonCancel())
+			if cancel.Clicked() && actions.ArmResetLoginData != nil {
+				actions.ArmResetLoginData()
+			}
+			confirm := ui.Button(c, locales.ResetLoginDataConfirm())
+			confirm.TextColor(c.Theme().Danger)
+			if confirm.Clicked() && actions.ResetLoginData != nil {
+				actions.ResetLoginData()
+			}
+			return
+		}
+		arm := ui.Button(c, locales.ResetLoginDataAction())
+		arm.TextColor(c.Theme().Danger)
+		if arm.Description(locales.ResetLoginDataDesc()).Clicked() && actions.ArmResetLoginData != nil {
+			actions.ArmResetLoginData()
+		}
 	})
 }
 

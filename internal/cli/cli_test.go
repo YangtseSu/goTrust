@@ -461,3 +461,55 @@ func TestPromptLanguage(t *testing.T) {
 		t.Fatalf("fr: exit = %d, stderr = %q", code, stderr)
 	}
 }
+
+// TestResetLoginDataRemovesTheStoredMaterial: the stored record is what a stale
+// ticket or a mismatched sign key replays, so the recovery step has to delete it
+// and say so.
+func TestResetLoginDataRemovesTheStoredMaterial(t *testing.T) {
+	_, path := testSettings(t)
+	// The file lives beside the settings file that names the profile, which is
+	// the path the loaded configuration resolves to.
+	clientData := filepath.Join(filepath.Dir(path), "client_data.json")
+	if err := os.WriteFile(clientData, []byte(`{"device_id":"0123456789abcdef0123456789abcdef"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := run(t, "--config", path, "--reset-login-data")
+	if code != ExitOK {
+		t.Fatalf("exit = %d, stderr = %q", code, stderr)
+	}
+	if !strings.Contains(stdout, "stored login data removed") {
+		t.Fatalf("stdout = %q", stdout)
+	}
+	if _, err := os.Stat(clientData); !os.IsNotExist(err) {
+		t.Fatalf("the client data file still exists: %v", err)
+	}
+}
+
+func TestResetLoginDataWithoutAStoredRecordSucceeds(t *testing.T) {
+	_, path := testSettings(t)
+
+	code, _, stderr := run(t, "--config", path, "--reset-login-data")
+	if code != ExitOK {
+		t.Fatalf("exit = %d, stderr = %q", code, stderr)
+	}
+}
+
+// A running instance owns the file: removing it underneath a live session would
+// have the session write its snapshot back on the next renewal.
+func TestResetLoginDataRefusesWhileTheProfileIsInUse(t *testing.T) {
+	cfg, path := testSettings(t)
+	lock, err := profilelock.Acquire(path, cfg.ActiveProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = lock.Release() }()
+
+	code, _, stderr := run(t, "--config", path, "--reset-login-data")
+	if code != ExitFailure {
+		t.Fatalf("exit = %d, want a refusal", code)
+	}
+	if !strings.Contains(stderr, "is in use") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}

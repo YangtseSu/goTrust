@@ -897,6 +897,37 @@ func (m *Manager) fail(err error) {
 	m.set(State{Phase: PhaseFailed, Detail: err.Error(), Since: time.Now()})
 }
 
+// ResetLoginData removes the active profile's stored session material. It is the
+// recovery step for a record the portal no longer accepts (a stale ticket that
+// produces "already on", or a sign key that no longer matches the device): the
+// next login starts from nothing and mints a fresh device identity.
+//
+// The live session is torn down first, so nothing writes the file back while it
+// is being removed.
+func (m *Manager) ResetLoginData() error {
+	m.Logout()
+	if err := RemoveClientData(m.settings()); err != nil {
+		return err
+	}
+	m.logf("removed the stored session material for %q", m.settings().Active().Name)
+	return nil
+}
+
+// RemoveClientData deletes the active profile's stored session material. A
+// caller has to end the live session first: it writes its own snapshot back on
+// the next renewal, which would recreate the file.
+func RemoveClientData(cfg config.Config) error {
+	profile := cfg.Active()
+	path, err := cfg.ClientDataPathFor(profile)
+	if err != nil {
+		return fmt.Errorf("locate the stored session: %w", err)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove %s: %w", path, err)
+	}
+	return nil
+}
+
 // readClientData loads the stored session material. A missing file is normal on
 // a first run.
 func readClientData(path string) ([]byte, error) {

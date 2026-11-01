@@ -258,6 +258,7 @@ gotrust-cli --print-clash-script             # Clash Verge Rev global extension 
 gotrust-cli --print-clash-config             # full local Mihomo configuration
 gotrust-cli --json                           # resources and status as JSON
 gotrust-cli --prompt-lang zh                 # Chinese login pages (terminal output stays English)
+gotrust-cli --reset-login-data                # drop the stored cookies, sign key and restore ticket
 gotrust-cli --version
 ```
 

@@ -610,14 +610,16 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 		SelectProfile: func(index int) {
 			mutate(func(state *gotrustui.SettingsState) { state.Select(index) })
 		},
-		SetAutostart: a.setAutostart,
-		SetVerbose:   a.setVerbose,
-		ClearLogs:    a.clearLogs,
-		OpenLogs:     a.openLogs,
-		OpenConfig:   a.openConfig,
-		CopyLogs:     a.copyLogs,
-		OpenURL:      a.openURL,
-		DiscoverAuth: a.discoverAuth,
+		SetAutostart:      a.setAutostart,
+		SetVerbose:        a.setVerbose,
+		ClearLogs:         a.clearLogs,
+		OpenLogs:          a.openLogs,
+		OpenConfig:        a.openConfig,
+		ArmResetLoginData: a.armResetLoginData,
+		ResetLoginData:    a.resetLoginData,
+		CopyLogs:          a.copyLogs,
+		OpenURL:           a.openURL,
+		DiscoverAuth:      a.discoverAuth,
 		SelectAuth: func(index int) {
 			mutate(func(state *gotrustui.SettingsState) { state.SelectAuth(index) })
 		},
@@ -823,6 +825,61 @@ func (a *app) setSettingsTrusted(trusted bool) {
 			}
 		})
 	}()
+}
+
+// armResetLoginData turns the reset row into its confirmation step, or back.
+func (a *app) armResetLoginData() {
+	a.mu.Lock()
+	if settings := a.settings; settings != nil {
+		settings.ResetArmed = !settings.ResetArmed
+		settings.ResetStatus = ""
+		settings.ResetError = false
+	}
+	a.mu.Unlock()
+	a.invalidate()
+}
+
+// resetLoginData removes the selected profile's stored session material, which
+// is the recovery step for a record the portal no longer accepts. The live
+// session has to end first: it would write its own snapshot back over the file.
+func (a *app) resetLoginData() {
+	a.mu.Lock()
+	settings := a.settings
+	if settings == nil || settings.ResetBusy {
+		a.mu.Unlock()
+		return
+	}
+	settings.ResetArmed = false
+	settings.ResetBusy = true
+	settings.ResetStatus = locales.Submitting()
+	settings.ResetError = false
+	a.mu.Unlock()
+	a.invalidate()
+
+	a.onUI(func() {
+		// Tearing the session down on the UI thread first is what lets the
+		// manager remove the file: a live session writes its own snapshot back.
+		a.disconnect()
+		go func() {
+			var err error
+			if a.manager != nil {
+				err = a.manager.ResetLoginData()
+			}
+			a.onUI(func() {
+				if current := a.settings; current != nil {
+					current.ResetBusy = false
+					if err != nil {
+						current.ResetStatus = locales.ResetLoginDataFailed(err.Error())
+						current.ResetError = true
+					} else {
+						current.ResetStatus = locales.ResetLoginDataDone()
+						current.ResetError = false
+					}
+				}
+				a.invalidate()
+			})
+		}()
+	})
 }
 
 // cancelSettingsPassword returns to the sections. A change in flight cannot be

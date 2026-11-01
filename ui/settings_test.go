@@ -1173,3 +1173,55 @@ func TestSettingsStatusShowsAsAToast(t *testing.T) {
 		t.Fatal("the result stayed on screen instead of fading as a toast")
 	}
 }
+
+// TestResetLoginDataRowAsksTwice: the row deletes the stored account material,
+// so one click arms it and the second one runs it; Cancel puts the row back.
+func TestResetLoginDataRowAsksTwice(t *testing.T) {
+	var armed, reset int
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	actions := settingsActionsFor(state)
+	actions.ArmResetLoginData = func() {
+		armed++
+		state.ResetArmed = !state.ResetArmed
+	}
+	actions.ResetLoginData = func() {
+		reset++
+		state.ResetArmed = false
+	}
+
+	_, tester := newShell(t, state, actions, PageSettings)
+	if !tester.HasText("重置登录数据") {
+		t.Fatal("the reset row is missing")
+	}
+	if err := tester.Click("重置"); err != nil {
+		t.Fatalf("click reset: %v", err)
+	}
+	tester.Frame()
+	if armed != 1 || reset != 0 {
+		t.Fatalf("armed = %d reset = %d after the first click", armed, reset)
+	}
+
+	if !tester.HasText("确认删除") || !tester.HasText("取消") {
+		t.Fatal("the confirmation step is missing")
+	}
+	if err := tester.Click("取消"); err != nil {
+		t.Fatalf("click cancel: %v", err)
+	}
+	tester.Frame()
+	if state.ResetArmed || reset != 0 {
+		t.Fatalf("cancel left the row armed: %+v", state.ResetArmed)
+	}
+
+	// Arm it again and confirm: the second click is the one that removes.
+	if err := tester.Click("重置"); err != nil {
+		t.Fatalf("arm again: %v", err)
+	}
+	tester.Frame()
+	if err := tester.Click("确认删除"); err != nil {
+		t.Fatalf("click confirm: %v", err)
+	}
+	tester.Frame()
+	if reset != 1 {
+		t.Fatalf("reset calls = %d, want 1", reset)
+	}
+}

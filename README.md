@@ -207,6 +207,7 @@ gotrust-cli --print-clash-script             # Clash Verge Rev 的全局扩展�
 gotrust-cli --print-clash-config             # 完整的本地 Mihomo 配置
 gotrust-cli --json                           # 资源与状态以 JSON 输出
 gotrust-cli --prompt-lang zh                 # 登录提示页用中文（终端输出仍为英文）
+gotrust-cli --reset-login-data                # 删除已保存的 Cookie、签名密钥和恢复票据
 gotrust-cli --version
 ```
 
