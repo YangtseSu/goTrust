@@ -370,7 +370,7 @@ func TestPACURLPrintsTheEndpoint(t *testing.T) {
 
 func TestPACURLRefusesADisabledEndpoint(t *testing.T) {
 	cfg, path := testSettings(t)
-	cfg.Handoff.Listen = ""
+	cfg.ActiveProfileRef().Hand.SetListen("")
 	if err := config.SaveFile(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -513,3 +513,6 @@ func TestResetLoginDataRefusesWhileTheProfileIsInUse(t *testing.T) {
 		t.Fatalf("stderr = %q", stderr)
 	}
 }
+
+// active is the profile a session runs with.
+func active(c *config.Config) *config.Profile { return c.ActiveProfileRef() }

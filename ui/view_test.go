@@ -214,7 +214,7 @@ func TestShellIsOneSurface(t *testing.T) {
 // the bare name, inside the sidebar and not the page.
 func TestSidebarTagsTheLiveAccount(t *testing.T) {
 	cfg := config.Default()
-	if _, err := cfg.AddProfile("工作"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add account: %v", err)
 	}
 	cfg.ActiveProfile = "工作"
@@ -518,7 +518,7 @@ func TestTrayStatus(t *testing.T) {
 // The tray menu is the only control surface when the window is hidden.
 func TestTrayMenuStatusProfilesAndToggle(t *testing.T) {
 	cfg := config.Default()
-	if _, err := cfg.AddProfile("工作"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
 	cfg.ActiveProfile = config.DefaultProfileName
@@ -820,7 +820,7 @@ func TestKeepAliveSummary(t *testing.T) {
 func TestTrayMenuOrder(t *testing.T) {
 	one := State{Session: session.State{Phase: session.PhaseIdle}, Config: config.Default()}
 	two := State{Session: session.State{Phase: session.PhaseIdle}, Config: config.Default()}
-	if _, err := two.Config.AddProfile("工作"); err != nil {
+	if _, err := two.Config.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
 

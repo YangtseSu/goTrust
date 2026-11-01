@@ -287,9 +287,12 @@ func logsPage(c *ui.Context, state *State, actions SettingsActions) {
 	ui.Column(c).Grow(1).Shrink(1).Gap(sectionGap).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Gap(rowGap).Children(func() {
 			windowHeading(c, pageLabel(PageLogs)).Grow(1)
-			if switchLabel(c, &settings.Draft.Logging.Verbose, locales.VerboseLog()) &&
+			// The level belongs to the connected account: one log file carries
+			// whatever the session in use asked for.
+			if profile := settings.SelectedProfile(); profile != nil &&
+				switchLabel(c, &profile.Log.Verbose, locales.VerboseLog()) &&
 				actions.SetVerbose != nil {
-				actions.SetVerbose(settings.Draft.Logging.Verbose)
+				actions.SetVerbose(profile.Log.Verbose)
 			}
 			if ui.Button(c, locales.ClearLogs()).Clicked() && actions.ClearLogs != nil {
 				actions.ClearLogs()
@@ -408,9 +411,9 @@ func profilesPage(c *ui.Context, state *State, actions Actions) {
 				})
 			})
 			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-				if ui.Button(c, locales.ProfileNew()).Clicked() && actions.Settings.NewProfile != nil {
-					actions.Settings.NewProfile()
-				}
+				// Copy is the only way to add an account. A blank one would have
+				// to mint a device of its own, and an account the user just
+				// created has no reason to look like a second machine.
 				if ui.Button(c, locales.ProfileDuplicate()).Clicked() && actions.Settings.DuplicateProfile != nil {
 					actions.Settings.DuplicateProfile()
 				}

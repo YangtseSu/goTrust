@@ -26,7 +26,7 @@ func TestSettingsApplyBuildsAProfile(t *testing.T) {
 	state.Draft.Profiles[0].Auth.Password = "secret"
 	state.Draft.Profiles[0].Keep.SetEnabled(false)
 	state.Targets[0] = "http://192.0.2.5/\n\nhttp://192.0.2.6/, http://192.0.2.5/"
-	state.Draft.Proxy.HTTPBind = ""
+	edited(&state.Draft).Proxy.HTTPBind = ""
 
 	cfg, err := state.Apply()
 	if err != nil {
@@ -53,7 +53,7 @@ func TestSettingsApplyBuildsAProfile(t *testing.T) {
 		profile.Keep.Targets[1] != "http://192.0.2.6/" {
 		t.Fatalf("targets = %v", profile.Keep.Targets)
 	}
-	if socks5, httpBind := cfg.ProxyAddresses(); httpBind != "" || socks5 == "" {
+	if socks5, httpBind := activeValue(cfg).ProxyAddresses(); httpBind != "" || socks5 == "" {
 		t.Fatalf("proxy = %q %q", socks5, httpBind)
 	}
 	if cfg.Version != config.CurrentVersion {
@@ -82,17 +82,17 @@ func TestSettingsApplyRejectsBadValues(t *testing.T) {
 		{"bad interval", func(state *SettingsState) { state.Draft.Profiles[0].Keep.Interval = "soon" }},
 		{"interval below the floor", func(state *SettingsState) { state.Draft.Profiles[0].Keep.Interval = "5s" }},
 		{"no listener", func(state *SettingsState) {
-			state.Draft.Proxy.SOCKS5Bind = ""
-			state.Draft.Proxy.HTTPBind = ""
+			edited(&state.Draft).Proxy.SOCKS5Bind = ""
+			edited(&state.Draft).Proxy.HTTPBind = ""
 		}},
 		{"non-loopback bind", func(state *SettingsState) {
-			state.Draft.Proxy.HTTPBind = "0.0.0.0:1081"
+			edited(&state.Draft).Proxy.HTTPBind = "0.0.0.0:1081"
 		}},
 		{"malformed bind", func(state *SettingsState) {
-			state.Draft.Proxy.SOCKS5Bind = "127.0.0.1"
+			edited(&state.Draft).Proxy.SOCKS5Bind = "127.0.0.1"
 		}},
 		{"duplicate name", func(state *SettingsState) {
-			state.AddProfile()
+			state.DuplicateProfile()
 			state.NameText = config.DefaultProfileName
 			state.Selected = 1
 		}},
@@ -112,14 +112,14 @@ func TestSettingsApplyRejectsBadValues(t *testing.T) {
 // same rule runs again before a login.
 func TestSettingsApplyTrimsAndChecksProxyBinds(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
-	state.Draft.Proxy.SOCKS5Bind = " 127.0.0.1:1080 "
-	state.Draft.Proxy.HTTPBind = " localhost:1081 "
+	edited(&state.Draft).Proxy.SOCKS5Bind = " 127.0.0.1:1080 "
+	edited(&state.Draft).Proxy.HTTPBind = " localhost:1081 "
 
 	cfg, err := state.Apply()
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if socks5, httpBind := cfg.ProxyAddresses(); socks5 != "127.0.0.1:1080" || httpBind != "localhost:1081" {
+	if socks5, httpBind := activeValue(cfg).ProxyAddresses(); socks5 != "127.0.0.1:1080" || httpBind != "localhost:1081" {
 		t.Fatalf("proxy = %q %q, want the trimmed binds", socks5, httpBind)
 	}
 }
@@ -142,7 +142,7 @@ func TestSettingsApplyAcceptsTheMinimumKeepAliveInterval(t *testing.T) {
 func TestSettingsProfileActions(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 
-	state.AddProfile()
+	state.DuplicateProfile()
 	if len(state.Draft.Profiles) != 2 || state.Selected != 1 {
 		t.Fatalf("profiles = %v selected = %d", state.Draft.ProfileNames(), state.Selected)
 	}
@@ -176,7 +176,7 @@ func TestSettingsProfileActions(t *testing.T) {
 // state reports what to move; the caller applies it after writing the settings.
 func TestSettingsClientDataChangesFollowTheDraft(t *testing.T) {
 	cfg := config.Default()
-	if _, err := cfg.AddProfile("工作"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
 	state := NewSettingsState(cfg, "/tmp/logs")
@@ -276,14 +276,14 @@ func TestEditingTheGatewayDropsTheDiscoveredMethods(t *testing.T) {
 }
 
 func TestShellRendersPagesAndCallsActions(t *testing.T) {
-	var saved, created, discarded, autostart, verbose int
+	var saved, copied, discarded, autostart, verbose int
 	state := NewSettingsState(config.Default(), "/var/log/gotrust")
 	state.Draft.Profiles[0].Auth.Password = "hunter2"
 
 	actions := SettingsActions{
-		Save:       func() { saved++ },
-		Discard:    func() { discarded++ },
-		NewProfile: func() { created++ },
+		Save:    func() { saved++ },
+		Discard: func() { discarded++ },
+
 		SetAutostart: func(on bool) {
 			if on {
 				autostart++
@@ -293,6 +293,10 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 			if on {
 				verbose++
 			}
+		},
+		DuplicateProfile: func() {
+			state.DuplicateProfile()
+			copied++
 		},
 	}
 
@@ -313,12 +317,13 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 	}
 
 	openPage(t, tester, "多账户")
-	// New makes the draft differ from the file, which is what shows Save.
-	if err := tester.Click("新建"); err != nil {
-		t.Fatalf("click new: %v", err)
+	// Copy is the only way to add an account; it makes the draft differ from
+	// the file, which is what shows Save.
+	if err := tester.Click("复制"); err != nil {
+		t.Fatalf("click copy: %v", err)
 	}
-	if created != 1 {
-		t.Fatalf("new profile calls = %d", created)
+	if copied != 1 {
+		t.Fatalf("copy profile calls = %d", copied)
 	}
 	tester.Frame()
 	if !tester.HasText("有未保存修改") {
@@ -341,8 +346,8 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 	if err := tester.Click("登录系统时启动"); err != nil {
 		t.Fatalf("click autostart: %v", err)
 	}
-	if !state.Draft.App.Autostart || autostart != 1 {
-		t.Fatalf("autostart = %v calls = %d", state.Draft.App.Autostart, autostart)
+	if !edited(&state.Draft).App.Autostart || autostart != 1 {
+		t.Fatalf("autostart = %v calls = %d", edited(&state.Draft).App.Autostart, autostart)
 	}
 
 	openPage(t, tester, "设置")
@@ -371,8 +376,8 @@ func TestShellRendersPagesAndCallsActions(t *testing.T) {
 	if err := tester.Click("详细日志"); err != nil {
 		t.Fatalf("click verbose: %v", err)
 	}
-	if !state.Draft.Logging.Verbose || verbose != 1 {
-		t.Fatalf("verbose = %v calls = %d", state.Draft.Logging.Verbose, verbose)
+	if !edited(&state.Draft).Log.Verbose || verbose != 1 {
+		t.Fatalf("verbose = %v calls = %d", edited(&state.Draft).Log.Verbose, verbose)
 	}
 
 	// The title strip's Close window hides the window; there is no second window
@@ -413,7 +418,7 @@ func TestSettingsChangedFollowsTheSavedFile(t *testing.T) {
 	}
 
 	// Switching the picker is an edit: saving is what makes the switch happen.
-	if _, err := cfg.AddProfile("工作"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
 	cfg.ActiveProfile = config.DefaultProfileName
@@ -480,7 +485,7 @@ func TestSidebarSwitchesPages(t *testing.T) {
 // account, which is what the other pages then edit.
 func TestAccountsPageRowsMarkTheLiveAccountAndSelect(t *testing.T) {
 	cfg := config.Default()
-	if _, err := cfg.AddProfile("工作"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add account: %v", err)
 	}
 	cfg.ActiveProfile = config.DefaultProfileName
@@ -588,7 +593,7 @@ func TestTerminalsPageShowsEmptyCardsOffline(t *testing.T) {
 
 func TestAccountPageHintsAtTheProfileSwitch(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
-	state.AddProfile()
+	state.DuplicateProfile()
 
 	_, tester := newShell(t, state, SettingsActions{}, PageAccount)
 	if !tester.HasText("保存后将切换到账户") {
@@ -657,7 +662,7 @@ func TestSettingsMethodOptionsKeepAStalePair(t *testing.T) {
 	}
 
 	state.SetMethods([]session.AuthMethod{{Name: "密码登录", Type: "auth/psw", Domain: "local"}}, "vpn.example.com|443", "ok", false)
-	state.AddProfile()
+	state.DuplicateProfile()
 	if state.Methods != nil {
 		t.Fatal("the method list survived a profile switch")
 	}
@@ -744,7 +749,6 @@ func TestSettingsReloadKeepsMethodsForTheSameGateway(t *testing.T) {
 // drive the real state through the real buttons.
 func settingsActionsFor(state *SettingsState) SettingsActions {
 	return SettingsActions{
-		NewProfile:       func() { state.AddProfile() },
 		DuplicateProfile: func() { state.DuplicateProfile() },
 		DeleteProfile:    func() { state.DeleteProfile() },
 		SelectProfile:    func(index int) { state.Select(index) },
@@ -753,14 +757,14 @@ func settingsActionsFor(state *SettingsState) SettingsActions {
 }
 
 // Deleting the selected profile shrinks the draft from inside the frame. The
-// rest of that frame must not index the profile that disappeared: the old
-// code read Gateways[1] after New → Delete and panicked on the GTK main thread.
+// rest of that frame must not index the profile that disappeared: the old code
+// read Gateways[1] after Copy → Delete and panicked on the GTK main thread.
 func TestProfilesPageDeletesWithoutAPanic(t *testing.T) {
 	state := NewSettingsState(config.Default(), "/tmp/logs")
 	_, tester := newShell(t, state, settingsActionsFor(state), PageProfiles)
 
-	if err := tester.Click("新建"); err != nil {
-		t.Fatalf("click new: %v", err)
+	if err := tester.Click("复制"); err != nil {
+		t.Fatalf("click copy: %v", err)
 	}
 	if len(state.Draft.Profiles) != 2 || state.Selected != 1 {
 		t.Fatalf("profiles = %v selected = %d", state.Draft.ProfileNames(), state.Selected)
@@ -858,10 +862,10 @@ func TestSettingsDuplicateCopiesTheEditedBuffers(t *testing.T) {
 func threeProfileState(t *testing.T) *SettingsState {
 	t.Helper()
 	cfg := config.Default()
-	if _, err := cfg.AddProfile("B"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "B"); err != nil {
 		t.Fatalf("add B: %v", err)
 	}
-	if _, err := cfg.AddProfile("C"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "C"); err != nil {
 		t.Fatalf("add C: %v", err)
 	}
 	b := cfg.ProfileIndex("B")
@@ -1065,8 +1069,8 @@ func TestLogPageFiltersCopiesAndToggles(t *testing.T) {
 	if err := tester.Click("详细日志"); err != nil {
 		t.Fatalf("click verbose: %v", err)
 	}
-	if verbose != 1 || !state.Draft.Logging.Verbose {
-		t.Fatalf("verbose calls = %d state = %v", verbose, state.Draft.Logging.Verbose)
+	if verbose != 1 || !edited(&state.Draft).Log.Verbose {
+		t.Fatalf("verbose calls = %d state = %v", verbose, edited(&state.Draft).Log.Verbose)
 	}
 	if err := tester.Click("打开目录"); err != nil {
 		t.Fatalf("open the log directory: %v", err)
@@ -1086,7 +1090,7 @@ func TestLogPageFiltersCopiesAndToggles(t *testing.T) {
 // file and identity, and About with the pages the project lives on.
 func TestSettingsPageShowsLocalDataAndAbout(t *testing.T) {
 	cfg := config.Default()
-	cfg.Identity.DeviceID = "6f1c9a2e4b7d"
+	activeValue(cfg).Ident.DeviceID = "6f1c9a2e4b7d"
 	state := NewSettingsState(cfg, "/tmp/logs")
 	var opened []string
 	actions := SettingsActions{
@@ -1225,3 +1229,18 @@ func TestResetLoginDataRowAsksTwice(t *testing.T) {
 		t.Fatalf("reset calls = %d, want 1", reset)
 	}
 }
+
+// edited is the profile the settings window shows.
+func edited(c *config.Config) *config.Profile {
+	if index := c.ActiveIndex(); index >= 0 {
+		return &c.Profiles[index]
+	}
+	return nil
+}
+
+// active is the live profile a saved draft would activate. A value takes its
+// address so a caller can read a field of it in one expression.
+func active(c *config.Config) *config.Profile { return c.ActiveProfileRef() }
+
+// activeValue is active for a value the caller cannot address inline.
+func activeValue(c config.Config) *config.Profile { return c.ActiveProfileRef() }

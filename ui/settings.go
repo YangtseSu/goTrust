@@ -149,8 +149,9 @@ func (s *SettingsState) ClientDataChanges() []ClientDataChange {
 type SettingsActions struct {
 	Save func()
 	// Discard throws the draft away and shows the saved settings again.
-	Discard          func()
-	NewProfile       func()
+	Discard func()
+	// DuplicateProfile adds an account by copying the selected one; there is no
+	// blank-new entry point, because a blank account would present a new device.
 	DuplicateProfile func()
 	DeleteProfile    func()
 	SelectProfile    func(int)
@@ -389,21 +390,6 @@ func (s *SettingsState) Target() (config.Profile, error) {
 	return target, nil
 }
 
-// AddProfile appends a blank profile and selects it.
-func (s *SettingsState) AddProfile() {
-	name := locales.ProfileBaseName()
-	for suffix := 2; s.Draft.ProfileIndex(name) >= 0; suffix++ {
-		name = locales.ProfileBaseNameN(suffix)
-	}
-	if _, err := s.Draft.AddProfile(name); err != nil {
-		s.SetStatus(err.Error(), true)
-		return
-	}
-	s.refresh()
-	s.Select(s.Draft.ProfileIndex(name))
-	s.SetStatus(locales.ProfileCreated(name), false)
-}
-
 // DuplicateProfile copies the selected profile.
 func (s *SettingsState) DuplicateProfile() {
 	s.refresh()
@@ -512,9 +498,9 @@ func (s *SettingsState) Apply() (config.Config, error) {
 	profile.Keep.Interval = interval
 	profile.Keep.Targets = splitTargets(s.Targets[index])
 
-	cfg.Proxy.SOCKS5Bind = strings.TrimSpace(cfg.Proxy.SOCKS5Bind)
-	cfg.Proxy.HTTPBind = strings.TrimSpace(cfg.Proxy.HTTPBind)
-	socks5, httpBind := cfg.ProxyAddresses()
+	cfg.Profiles[index].Proxy.SOCKS5Bind = strings.TrimSpace(cfg.Profiles[index].Proxy.SOCKS5Bind)
+	cfg.Profiles[index].Proxy.HTTPBind = strings.TrimSpace(cfg.Profiles[index].Proxy.HTTPBind)
+	socks5, httpBind := cfg.Profiles[index].ProxyAddresses()
 	if socks5 == "" && httpBind == "" {
 		return cfg, errors.New(locales.ErrProxyBoth())
 	}
@@ -571,8 +557,8 @@ func (s *SettingsState) folded() config.Config {
 	profile.Auth.AuthType = strings.TrimSpace(profile.Auth.AuthType)
 	profile.Keep.Interval = strings.TrimSpace(profile.Keep.Interval)
 	profile.Keep.Targets = splitTargets(s.Targets[index])
-	cfg.Proxy.SOCKS5Bind = strings.TrimSpace(cfg.Proxy.SOCKS5Bind)
-	cfg.Proxy.HTTPBind = strings.TrimSpace(cfg.Proxy.HTTPBind)
+	cfg.Profiles[index].Proxy.SOCKS5Bind = strings.TrimSpace(cfg.Profiles[index].Proxy.SOCKS5Bind)
+	cfg.Profiles[index].Proxy.HTTPBind = strings.TrimSpace(cfg.Profiles[index].Proxy.HTTPBind)
 	cfg.ActiveProfile = profile.Name
 	cfg.Version = config.CurrentVersion
 	return cfg
@@ -693,16 +679,22 @@ func securitySection(c *ui.Context, state *SettingsState, actions Actions, profi
 	})
 }
 
+// proxySection edits the listeners of the account being edited: the ports are
+// part of a profile, so two accounts may listen on different ones.
 func proxySection(c *ui.Context, state *SettingsState) {
+	_, profile := state.selection()
+	if profile == nil {
+		return
+	}
 	formColumn(c, func() {
 		formField(c, locales.Socks5Listen(), func() {
-			ui.TextInput(c, &state.Draft.Proxy.SOCKS5Bind).Placeholder("127.0.0.1:1080")
+			ui.TextInput(c, &profile.Proxy.SOCKS5Bind).Placeholder("127.0.0.1:1080")
 		})
 		formField(c, locales.HttpListen(), func() {
-			ui.TextInput(c, &state.Draft.Proxy.HTTPBind).Placeholder("127.0.0.1:1081")
+			ui.TextInput(c, &profile.Proxy.HTTPBind).Placeholder("127.0.0.1:1081")
 		})
-		if strings.TrimSpace(state.Draft.Proxy.SOCKS5Bind) == "" &&
-			strings.TrimSpace(state.Draft.Proxy.HTTPBind) == "" {
+		if strings.TrimSpace(profile.Proxy.SOCKS5Bind) == "" &&
+			strings.TrimSpace(profile.Proxy.HTTPBind) == "" {
 			captionTone(c, locales.ProxyHint(), toneDanger)
 		}
 	})
@@ -724,35 +716,34 @@ func keepAliveSection(c *ui.Context, state *SettingsState, profile *config.Profi
 	})
 }
 
+// startupSection edits how this account starts and whether it reconnects. Both
+// belong to the account, so the page follows the one being edited.
 func startupSection(c *ui.Context, state *SettingsState, actions SettingsActions) {
+	_, profile := state.selection()
+	if profile == nil {
+		return
+	}
 	card(c).Gap(rowGap).Children(func() {
-		if switchRow(c, &state.Draft.App.Autostart, locales.Autostart()) && actions.SetAutostart != nil {
-			actions.SetAutostart(state.Draft.App.Autostart)
+		if switchRow(c, &profile.App.Autostart, locales.Autostart()) && actions.SetAutostart != nil {
+			actions.SetAutostart(profile.App.Autostart)
 		}
 		ui.Divider(c)
-		switchRow(c, &state.Draft.App.AutoConnect, locales.AutoConnect())
+		switchRow(c, &profile.App.AutoConnect, locales.AutoConnect())
 		ui.Divider(c)
-		switchRow(c, &state.Draft.App.StartHidden, locales.StartHidden())
+		switchRow(c, &profile.App.StartHidden, locales.StartHidden())
 		ui.Divider(c)
-		if index := state.Draft.ActiveIndex(); index >= 0 {
-			switchRow(c, &state.Draft.Profiles[index].AutoReconnect, locales.AutoReconnect())
-		}
+		switchRow(c, &profile.AutoReconnect, locales.AutoReconnect())
 	})
 }
 
 func localDataSection(c *ui.Context, state *SettingsState, profile *config.Profile, actions SettingsActions) {
 	card(c).Gap(rowGap).Children(func() {
 		sectionHeading(c, locales.LocalData())
-		formColumn(c, func() {
-			formField(c, locales.ClientData(), func() {
-				input := ui.TextInput(c, &profile.Debug.ClientData)
-				if resolved, err := state.Draft.ClientDataPathFor(*profile); err == nil {
-					input.Placeholder(shortPath(resolved))
-				}
-			})
-		})
+		if resolved, err := state.Draft.ClientDataPathFor(*profile); err == nil {
+			rowLine(c, locales.ClientData(), shortPath(resolved), nil)
+		}
 		ui.Divider(c)
-		deviceID := state.Draft.Identity.DeviceID
+		deviceID := profile.Ident.DeviceID
 		if deviceID == "" {
 			deviceID = locales.NotGenerated()
 		}

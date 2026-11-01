@@ -15,31 +15,13 @@ goTrust 的设置保存在 `config.toml`，位置随系统：
 ## 完整示例
 
 ```toml
-version = 3
-active_profile = "默认"
-
-[app]
-autostart = false
-start_hidden = true
-auto_connect = false
-
-[proxy]
-socks5_bind = "127.0.0.1:1080"
-http_bind = "127.0.0.1:1081"
-
-[handoff]
-listen = "127.0.0.1:1082"
-
-[logging]
-verbose = false
-
-[identity]
-device_id = "…"
-mac_addresses = ["…"]
+version = 4
+active_profile = "工作"
 
 [[profiles]]
 id = "…"
-name = "默认"
+name = "工作"
+auto_reconnect = false
 
 [profiles.server]
 address = "vpn.example.com"
@@ -52,14 +34,41 @@ domain = "local"
 store_password = true
 password = "…"
 
+[profiles.app]
+autostart = false
+start_hidden = true
+auto_connect = false
+
+[profiles.proxy]
+socks5_bind = "127.0.0.1:1080"
+http_bind = "127.0.0.1:1081"
+
+[profiles.handoff]
+listen = "127.0.0.1:1082"
+
+[profiles.logging]
+verbose = false
+
+[profiles.identity]
+device_id = "…"
+mac_addresses = ["…"]
+os_family = "linux"
+
 [profiles.keepalive]
 enabled = true
 interval = "90s"
 targets = []
 
-[profiles.debug]
-client_data_path = ""
+[[profiles]]
+name = "个人"
+# 其余段落省略，账户按需取默认值。
 ```
+
+## 一个账户就是一套完整配置
+
+同一时刻只有一个账户在线，因此会话用到的每一项设置都属于某个账户。全局段只保留文件自身的结构信息。两个账户因此可以使用不同的监听端口、不同的日志级别、呈现不同的客户端；生效的永远是当前账户的那一份。
+
+新增账户只有“复制”一种方式（设置 → 多账户 → 复制）。复制会保留来源账户的身份，所以同一台机器上的第二个账户在网关看来仍是同一台设备。想让它成为独立设备，手工修改 `device_id`。
 
 ## 字段说明
 
@@ -67,81 +76,41 @@ client_data_path = ""
 
 | 字段 | 说明 |
 |---|---|
-| `version` | 配置格式版本，当前为 3。比程序新的版本会被拒绝读取，而不是按旧格式改写 |
+| `version` | 配置格式版本，当前为 4。3 及更早版本的文件会在读取时迁移：共享设置复制进每个账户。比程序新的版本会被拒绝读取 |
 | `active_profile` | 当前使用的账户名，对应某个 `[[profiles]]` 的 `name` |
-
-### `[app]`
-
-| 字段 | 默认 | 说明 |
-|---|---|---|
-| `autostart` | `false` | 登录系统时启动。在“启动”页修改后立即写入系统的自启动项 |
-| `start_hidden` | `true` | 启动时只显示托盘，不弹出窗口 |
-| `auto_connect` | `false` | 启动后自动登录。需要已保存的密码 |
-
-### `[proxy]`
-
-| 字段 | 默认 | 说明 |
-|---|---|---|
-| `socks5_bind` | `127.0.0.1:1080` | SOCKS5 监听地址；留空表示关闭该监听 |
-| `http_bind` | `127.0.0.1:1081` | HTTP 代理监听地址；留空表示关闭该监听 |
-
-两个监听只能绑定回环地址（`127.0.0.1`、`::1`、`localhost`），端口 1–65535。填 `0.0.0.0:1080` 这类地址会在登录前被拒绝，保存时也会提示同一条规则。至少保留一个监听。
-
-### `[handoff]`
-
-| 字段 | 默认 | 说明 |
-|---|---|---|
-| `listen` | `127.0.0.1:1082` | 提供 `/proxy.pac` 的回环监听；留空表示关闭该端点 |
-
-端点只接受 `GET` 和 `HEAD`，每次请求按当前会话的授权重新生成 PAC，不缓存。断线时返回全 `DIRECT`。和代理监听一样只能绑定回环地址；修改后下次启动生效。托盘版和命令行版同时运行（使用不同配置）时，两者默认都占 `127.0.0.1:1082`；后启动的一方绑定失败并记入日志，应改端口或留空关闭。
-
-### `[logging]`
-
-| 字段 | 默认 | 说明 |
-|---|---|---|
-| `verbose` | `false` | 输出协议层调试日志。“日志”页的“详细日志”开关会立即生效并写入这里 |
-
-### `[identity]`
-
-一般不需要手动改，“设置 → 本机数据”只读显示设备标识。
-
-| 字段 | 说明 |
-|---|---|
-| `device_id` | 32 位十六进制设备标识。首次启动生成，之后注入到每个账户的登录数据中，切换账号不会被门户看成新设备。手工改成门户读不懂的形式会在启动时被拒绝 |
-| `mac_addresses` | 网关记录的本机硬件地址。首次启动生成一个本地管理地址，并写入每个账号的登录数据：它标识的是这台机器，而不是账号。手工填写的值优先 |
-| `client_version` | 请求中上报的客户端版本。留空使用程序内置的默认值 |
-| `os_family` | `linux`（默认）、`uos`、`windows`。决定 User-Agent 的措辞；后两者使用门户对应的取值 |
-| `os_arch` | User-Agent 里的架构名 |
-| `user_agent` | 直接覆盖整个 User-Agent |
-| `process_name` / `process_path` / `process_version` | 隧道进程块。留空则沿用客户端自己的值 |
 
 ### `[[profiles]]`
 
-每个账户对应一个登录账号。
+每个 `[[profiles]]` 是一个账户，承载该账户用到的全部设置。
 
-| 字段 | 说明 |
-|---|---|
-| `id` | 账户的稳定标识。首次读取时生成，重命名不变；只在本地使用，不发给网关。复制到另一个账户会被改成新的值 |
-| `name` | 账户名，也是“多账户”页里显示的名字 |
-| `server.address` / `server.port` | 网关地址和端口。窗口里是一个“网关”字段，填 `host:port`；只写主机名时使用 443 |
-| `auth.username` | 用户名 |
-| `auth.auth_type` / `auth.domain` | 认证方式与登录域。留空表示自动：网关只提供一种就用它，提供多种时询问并记住答案 |
-| `auth.store_password` | 是否把密码写进配置文件 |
-| `auth.password` | 保存的密码；`store_password = false` 时留空 |
-| `auth.totp_secret` | TOTP 密钥。只有用户在一次性验证码面板里主动选择保存时才写入；关闭保存密码会一并清除 |
-| `keepalive.enabled` | 是否发送保活请求 |
-| `keepalive.interval` | 保活间隔，默认 `90s`，最小 10 s |
-| `keepalive.targets` | 手工保活目标，一行一个，优先级高于自动推导的目标。自动推导使用授权资源的 80、443、22 端口，以及只给出域名、没有地址的授权 |
-| `auto_reconnect` | 该账户会话中断后自动重连：1/2/4/8/16 秒，最多 5 次。它属于账户：完整登录会更换设备令牌并踢掉该账户的其他客户端 |
-| `debug.client_data_path` | 自定义登录数据文件路径。留空时使用配置目录下的 `client_data-<账户名>.json` |
-| `identity.device_id` / `identity.mac_addresses` | 该账户呈现的设备。留空则跟随 `[identity]`，因此不填的账户共用一台设备。填写后该账户在网关侧成为独立设备；上一个设备的 sign key 与 ticket 会被清除，下次登录重新签发 |
-| `identity.os_family` / `identity.client_version` / `identity.os_arch` / `identity.user_agent` | 该账户自我描述的方式。留空则跟随 `[identity]`：可以一个账户表现为官方客户端，另一个表现为本程序 |
-| `identity.process_name` / `identity.process_path` / `identity.process_version` | 该账户上报的隧道进程块。留空则跟随 `[identity]` |
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `id` | 自动生成 | 本地稳定标识。重命名不变，不发给网关，只用于本地状态索引 |
+| `name` | `默认` | 账户名，也是账户页显示的名字和登录数据文件名的主干 |
+| `auto_reconnect` | `false` | 断线后按 1/2/4/8/16 秒重试，最多 5 次。默认关闭：完整登录会更换设备令牌并踢掉该账户的其他客户端 |
+| `server.address` / `server.port` | — / `443` | 网关地址与端口。界面上是一个接受 `host:port` 的“网关”字段 |
+| `auth.username` | — | 用户名 |
+| `auth.auth_type` / `auth.domain` | 自动 / `local` | 认证方式与登录域。留空表示自动：只有一种方式时直接使用，多种时询问 |
+| `auth.store_password` | `true` | 是否把密码写入文件 |
+| `auth.password` | — | 已保存的密码；`store_password = false` 时为空 |
+| `auth.totp_secret` | — | TOTP 密钥，仅在用户选择保存时写入 |
+| `app.autostart` | `false` | 登录系统时启动。在“启动”页修改后立即写入系统自启动项 |
+| `app.start_hidden` | `true` | 启动时只显示托盘，不弹出窗口 |
+| `app.auto_connect` | `false` | 启动后自动登录。需要已保存的密码 |
+| `proxy.socks5_bind` / `proxy.http_bind` | `127.0.0.1:1080` / `127.0.0.1:1081` | 监听地址；留空则关闭该监听。只能绑定回环地址，端口 1–65535，至少保留一个 |
+| `handoff.listen` | `127.0.0.1:1082` | 提供 `/proxy.pac` 的回环监听；留空则关闭 |
+| `logging.verbose` | `false` | 输出协议级调试日志。日志页的开关立即生效 |
+| `keepalive.enabled` / `keepalive.interval` / `keepalive.targets` | 开 / `90s` / 无 | 应用流量保活。手工目标优先于自动推导（授权端口 80、443、22，以及只有域名的授权） |
+| `identity.device_id` | 自动生成 | 32 位十六进制的设备标识，写入该账户的登录数据 |
+| `identity.mac_addresses` | 自动生成 | 网关为该账户记录的硬件地址 |
+| `identity.client_version` | — | 请求中上报的客户端版本。留空使用程序内置默认值 |
+| `identity.os_family` | `linux` | `linux`、`uos` 或 `windows`。决定 User-Agent 措辞；后两者使用网关期望的写法 |
+| `identity.os_arch` | 本机 | User-Agent 中的架构名 |
+| `identity.user_agent` | 推导 | 直接覆盖整个 User-Agent |
+| `identity.process_name` / `process_path` / `process_version` | 客户端自身 | 该账户上报的隧道进程块 |
 
-窗口的“网关”字段接受 `host:port`、`https://host:port`、只写主机名（使用 443）、带结尾路径或斜杠的粘贴内容，以及方括号形式的 IPv6 地址（可带端口）。其他协议、空主机名和 1–65535 之外的端口会被拒绝。保存时窗口把字段拆成 `server.address` 和 `server.port` 两个键，文件格式不变。
-
-`client_data*.json` 保存 cookies、设备 MAC 和会话票据，权限同样是 0600。重命名账户会移动它，删除账户会删除它，两者都在保存设置之后才发生。设置页的“重置登录数据”和 `gotrust-cli --reset-login-data` 会删除它，让下次登录从零开始：这就是网关不再接受已存记录时的恢复步骤。
+PAC 端点只接受 `GET` 与 `HEAD`，每次请求即时生成当前会话的 PAC，不缓存；未连接时返回全 `DIRECT` 文件。代理与 PAC 监听都只能绑定回环地址，修改在下次启动生效。
 
 ## 兼容性
 
-旧版 JSON 格式（`config.json`）不做迁移，存在也直接忽略，可以删掉。version 2 的文件在第一次读取时补上每个账户的 `id` 并写回 version 3；`id` 是本地标识，不会发给网关。配置里出现程序不认识的键会被拒绝：拼错的键不应该悄悄退回默认值。
+3 及更早版本写出的文件在读取时迁移：共享的 `[app]`、`[proxy]`、`[handoff]`、`[logging]`、`[identity]` 设置复制进每个账户，因此升级后的第一次启动仍然监听应用已经指向的端口，也仍然呈现网关已经认识的设备。文件会在下次保存时按新结构重写。旧 JSON 格式（`config.json`）不做迁移，存在时也不会被读取，可以直接删除。无法识别的字段会导致拒载：拼错的键不应静默退回默认值。

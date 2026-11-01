@@ -194,7 +194,7 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 		ResourceCachePath: config.ResourcesPath(configPath),
 	})
 
-	if listen := strings.TrimSpace(cfg.Handoff.Listen); listen != "" {
+	if listen := cfg.Active().Hand.Address(); listen != "" {
 		pac := handoff.New(listen, func() handoff.Snapshot {
 			return handoff.FromState(cfg, manager.State())
 		}, logf)
@@ -219,7 +219,7 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 	}
 	defer manager.Logout()
 
-	socks5, httpBind := cfg.ProxyAddresses()
+	socks5, httpBind := cfg.Active().ProxyAddresses()
 	proxyCtx, cancelProxy := context.WithCancel(context.Background())
 	defer cancelProxy()
 
@@ -290,7 +290,7 @@ func saveChangedPassword(cfg *config.Config, configPath, profile, newPassword st
 // stderr instead of stopping the login.
 func openLog(cfg config.Config, stderr io.Writer) (func(string, ...any), func()) {
 	logger, err := logging.New(logging.Options{
-		Verbose: cfg.Logging.Verbose,
+		Verbose: cfg.Active().Log.Verbose,
 		Mirror:  stderr,
 	})
 	if err != nil {
@@ -301,7 +301,7 @@ func openLog(cfg config.Config, stderr io.Writer) (func(string, ...any), func())
 	// The aTrust client logs through the standard library's global logger, so
 	// pointing that at the same writer is the whole bridge.
 	log.SetOutput(logger)
-	if cfg.Logging.Verbose {
+	if cfg.Active().Log.Verbose {
 		session.SetProtocolDebug(true)
 	}
 	return logger.Printf, func() {

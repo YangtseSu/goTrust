@@ -260,7 +260,7 @@ func renderStates(t *testing.T, dir, lang string) {
 	t.Run("settings-accounts", func(t *testing.T) {
 		view := renderPageState(cfg, PageProfiles)
 		state := view.Settings
-		if _, err := state.Draft.AddProfile("工作"); err != nil {
+		if _, err := state.Draft.DuplicateProfile(0, "工作"); err != nil {
 			t.Fatalf("add account: %v", err)
 		}
 		state.Draft.Profiles[1].Server.Address = "vpn2.example.com"

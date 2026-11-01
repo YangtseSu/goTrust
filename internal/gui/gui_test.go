@@ -22,7 +22,7 @@ import (
 
 func TestDecideAutoConnect(t *testing.T) {
 	ready := config.Default()
-	ready.App.AutoConnect = true
+	activeValue(ready).App.AutoConnect = true
 	ready.Profiles[0].Server.Address = "vpn.example.com"
 	ready.Profiles[0].Auth.Username = "alice"
 
@@ -34,7 +34,7 @@ func TestDecideAutoConnect(t *testing.T) {
 	}{
 		{
 			name:   "option off",
-			mutate: func(cfg *config.Config) { cfg.App.AutoConnect = false },
+			mutate: func(cfg *config.Config) { cfgRef(cfg).App.AutoConnect = false },
 		},
 		{
 			name:   "no gateway",
@@ -94,7 +94,7 @@ func TestDecideAutoConnect(t *testing.T) {
 func TestActiveProfileFeedsTheSession(t *testing.T) {
 	cfg := config.Default()
 	cfg.Profiles[0].Server.Address = "first.example.com"
-	if _, err := cfg.AddProfile("工作"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
 	cfg.Profiles[1].Server.Address = "second.example.com"
@@ -287,8 +287,8 @@ func testProxyApp(t *testing.T) (*app, *gotrustproxy.Server) {
 	}
 
 	cfg := config.Default()
-	cfg.Proxy.SOCKS5Bind = server.Listeners()[0].Address
-	cfg.Proxy.HTTPBind = ""
+	cfgRef(cfg).Proxy.SOCKS5Bind = server.Listeners()[0].Address
+	cfgRef(cfg).Proxy.HTTPBind = ""
 
 	application := &app{
 		cfg:     cfg,
@@ -493,7 +493,7 @@ func TestSavingProfileChangesMovesItsClientData(t *testing.T) {
 	configPath := filepath.Join(dir, "config.toml")
 
 	cfg := config.Default()
-	if _, err := cfg.AddProfile("工作"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
 	if err := config.SaveFile(configPath, cfg); err != nil {
@@ -597,8 +597,8 @@ func TestAProxyBoundAfterReleaseClosesItself(t *testing.T) {
 	_ = listener.Close()
 
 	cfg := config.Default()
-	cfg.Proxy.SOCKS5Bind = address
-	cfg.Proxy.HTTPBind = ""
+	cfgRef(cfg).Proxy.SOCKS5Bind = address
+	cfgRef(cfg).Proxy.HTTPBind = ""
 	application := &app{cfg: cfg}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -794,4 +794,23 @@ func TestRejectedDraftSelectsTheAccountPage(t *testing.T) {
 	if application.currentConfig().Active().Server.Address != "" {
 		t.Fatal("a rejected save changed the live settings")
 	}
+}
+
+// active is the profile a session runs with. A value takes its address so a
+// caller can read a field of it in one expression.
+func active(c *config.Config) *config.Profile { return c.ActiveProfileRef() }
+
+// activeValue is active for a value the caller cannot address inline.
+func activeValue(c config.Config) *config.Profile { return c.ActiveProfileRef() }
+
+// cfgRef accepts either a value or a pointer, so a table entry reads the same
+// whichever shape its caller holds.
+func cfgRef(c any) *config.Profile {
+	switch typed := c.(type) {
+	case *config.Config:
+		return typed.ActiveProfileRef()
+	case config.Config:
+		return typed.ActiveProfileRef()
+	}
+	return nil
 }

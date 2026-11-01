@@ -15,31 +15,13 @@ The file mode is 0600, because it may hold a password. The window's save bar wri
 ## Complete example
 
 ```toml
-version = 3
+version = 4
 active_profile = "work"
-
-[app]
-autostart = false
-start_hidden = true
-auto_connect = false
-
-[proxy]
-socks5_bind = "127.0.0.1:1080"
-http_bind = "127.0.0.1:1081"
-
-[handoff]
-listen = "127.0.0.1:1082"
-
-[logging]
-verbose = false
-
-[identity]
-device_id = "…"
-mac_addresses = ["…"]
 
 [[profiles]]
 id = "…"
 name = "work"
+auto_reconnect = false
 
 [profiles.server]
 address = "vpn.example.com"
@@ -52,14 +34,47 @@ domain = "local"
 store_password = true
 password = "…"
 
+[profiles.app]
+autostart = false
+start_hidden = true
+auto_connect = false
+
+[profiles.proxy]
+socks5_bind = "127.0.0.1:1080"
+http_bind = "127.0.0.1:1081"
+
+[profiles.handoff]
+listen = "127.0.0.1:1082"
+
+[profiles.logging]
+verbose = false
+
+[profiles.identity]
+device_id = "…"
+mac_addresses = ["…"]
+os_family = "linux"
+
 [profiles.keepalive]
 enabled = true
 interval = "90s"
 targets = []
 
-[profiles.debug]
-client_data_path = ""
+[[profiles]]
+name = "personal"
+# Every other block is omitted: an account takes the defaults it needs.
 ```
+
+## One account is one complete configuration
+
+Exactly one account is connected at a time, so every setting a session uses
+belongs to a profile. The global section holds only the file's own framing.
+Two accounts may therefore listen on different ports, log at different levels
+and present different clients; the ones in use are always the active account's.
+
+Copies are the only way to add an account (Settings → Profiles → Copy). A copy
+keeps the identity of the account it came from, so a second account on one
+machine is still one device to the portal. Change `device_id` by hand to make an
+account a separate device.
 
 ## Field descriptions
 
@@ -67,81 +82,49 @@ client_data_path = ""
 
 | Field | Description |
 |---|---|
-| `version` | Configuration format version, currently 3. A version newer than the program is refused rather than rewritten in the old format |
+| `version` | Configuration format version, currently 4. A file from version 3 or older is migrated on load: the shared settings are copied into every account. A version newer than the program is refused rather than rewritten |
 | `active_profile` | Name of the account in use, matching the `name` of some `[[profiles]]` entry |
-
-### `[app]`
-
-| Field | Default | Description |
-|---|---|---|
-| `autostart` | `false` | Start when logging in to the system. Changing it on the Startup page immediately updates the system autostart entry |
-| `start_hidden` | `true` | On startup show only the tray icon, without opening a window |
-| `auto_connect` | `false` | Log in automatically after startup. Requires a saved password |
-
-### `[proxy]`
-
-| Field | Default | Description |
-|---|---|---|
-| `socks5_bind` | `127.0.0.1:1080` | SOCKS5 listen address; empty disables this listener |
-| `http_bind` | `127.0.0.1:1081` | HTTP proxy listen address; empty disables this listener |
-
-Both listeners can bind only to loopback addresses (`127.0.0.1`, `::1`, `localhost`), with ports 1–65535. An address such as `0.0.0.0:1080` is rejected before login, and saving shows the same rule. Keep at least one listener.
-
-### `[handoff]`
-
-| Field | Default | Description |
-|---|---|---|
-| `listen` | `127.0.0.1:1082` | Loopback listener serving `/proxy.pac`; empty disables the endpoint |
-
-The endpoint accepts only `GET` and `HEAD`, and regenerates the PAC for the current session on every request without caching. While disconnected it returns an all-`DIRECT` file. Like the proxy listeners it can bind only to a loopback address, and changes take effect on the next start. When the tray version and the command-line version run at the same time (with different configurations), both occupy `127.0.0.1:1082` by default; the one that starts later fails to bind and logs it, so change the port or leave it empty to disable it.
-
-### `[logging]`
-
-| Field | Default | Description |
-|---|---|---|
-| `verbose` | `false` | Emit protocol-level debug logs. The Verbose log switch on the Logs page takes effect immediately and writes here |
-
-### `[identity]`
-
-Usually there is no need to edit this by hand; Settings → Local data shows the device identifier read-only.
-
-| Field | Description |
-|---|---|
-| `device_id` | 32-digit hexadecimal device identifier. Generated on first start and afterwards injected into every configuration's login data, so switching accounts is not seen by the portal as a new device. Changing it by hand to something the portal cannot read is rejected at startup |
-| `mac_addresses` | Hardware addresses the portal records for this installation. One locally administered address is generated on first start and injected into every account's login data, because it names the machine rather than the account. A hand-set list wins |
-| `client_version` | Client version reported in requests. Empty uses the default built into the program |
-| `os_family` | `linux` (default), `uos`, `windows`. Determines the User-Agent wording; the latter two use the values expected by the portal |
-| `os_arch` | Architecture name in the User-Agent |
-| `user_agent` | Overrides the whole User-Agent directly |
-| `process_name` / `process_path` / `process_version` | Tunnel process block. Empty keeps the client's own values |
 
 ### `[[profiles]]`
 
-Each `[[profiles]]` entry is one account.
+Each `[[profiles]]` entry is one account, and carries everything that account
+uses.
 
-| Field | Description |
-|---|---|
-| `id` | Stable identifier of the account. Generated on first read and unchanged by renaming; it is used only locally and not sent to the gateway. Copying it into another account replaces it with a new value |
-| `name` | Account name, also the name shown on the Accounts page |
-| `server.address` / `server.port` | Gateway address and port. The window has one Gateway field taking `host:port`; a bare host uses 443 |
-| `auth.username` | Username |
-| `auth.auth_type` / `auth.domain` | Authentication method and login domain. Empty means automatic: use the only method the gateway offers, and when several are offered, ask and remember the answer |
-| `auth.store_password` | Whether to write the password into the configuration file |
-| `auth.password` | The saved password; empty when `store_password = false` |
-| `auth.totp_secret` | TOTP secret. Written only when the user explicitly chooses to save it in the one-time code panel; turning off password storage clears it as well |
-| `keepalive.enabled` | Whether to send keepalive requests |
-| `keepalive.interval` | Keepalive interval, `90s` by default, minimum 10 s |
-| `keepalive.targets` | Manual keepalive targets, one per line, taking precedence over automatically derived targets. Derived targets come from granted ports 80, 443 and 22, and from name-only grants, which have no address to derive from |
-| `auto_reconnect` | Reconnect this account automatically after the session drops: 1/2/4/8/16 seconds, up to 5 attempts. It belongs to the account because a full login rotates the device token and drops the account's other clients |
-| `debug.client_data_path` | Custom login data file path. When empty, `client_data-<name>.json` in the configuration directory is used |
-| `identity.device_id` / `identity.mac_addresses` | The device this account presents. Empty follows `[identity]`, so accounts that say nothing share one device. Setting these makes the account a separate device to the portal; the stored sign key and ticket of the previous device are dropped and the next login mints new ones |
-| `identity.os_family` / `identity.client_version` / `identity.os_arch` / `identity.user_agent` | How this account describes its client. Empty fields follow `[identity]`, so one account can present the vendor's client while another presents this program |
-| `identity.process_name` / `identity.process_path` / `identity.process_version` | The tunnel process block this account reports. Empty follows `[identity]` |
+| Field | Default | Description |
+|---|---|---|
+| `id` | generated | Stable local identifier. Unchanged by renaming, never sent to the gateway, and used only to key local state |
+| `name` | `默认` | Account name, also the name shown on the Accounts page and the stem of the account's login data file |
+| `auto_reconnect` | `false` | Retry a lost session on the 1/2/4/8/16 s ladder, at most five times. Off by default: a full login rotates the device token and drops the account's other clients |
+| `server.address` / `server.port` | — / `443` | Gateway address and port. The window has one Gateway field taking `host:port` |
+| `auth.username` | — | Username |
+| `auth.auth_type` / `auth.domain` | automatic / `local` | Authentication method and login domain. Empty means automatic: use the only method offered, and ask when several are |
+| `auth.store_password` | `true` | Whether to write the password into the file |
+| `auth.password` | — | The saved password; empty when `store_password = false` |
+| `auth.totp_secret` | — | TOTP secret, written only when the user chooses to save it |
+| `app.autostart` | `false` | Start when logging in to the system. Changing it on the Startup page updates the system autostart entry immediately |
+| `app.start_hidden` | `true` | On startup show only the tray icon |
+| `app.auto_connect` | `false` | Log in automatically after startup. Requires a saved password |
+| `proxy.socks5_bind` / `proxy.http_bind` | `127.0.0.1:1080` / `127.0.0.1:1081` | Listen addresses; empty disables that listener. Loopback only, ports 1–65535, at least one enabled |
+| `handoff.listen` | `127.0.0.1:1082` | Loopback listener serving `/proxy.pac`; empty disables it |
+| `logging.verbose` | `false` | Emit protocol-level debug logs. The Logs page switch takes effect immediately |
+| `keepalive.enabled` / `keepalive.interval` / `keepalive.targets` | on / `90s` / none | Application-traffic probes. Targets take precedence over the automatically derived ones (granted ports 80, 443 and 22, plus name-only grants) |
+| `identity.device_id` | generated | 32-digit hexadecimal device identifier, seeded into this account's login data |
+| `identity.mac_addresses` | generated | Hardware addresses the portal records for this account |
+| `identity.client_version` | — | Client version reported in requests. Empty uses the default built into the program |
+| `identity.os_family` | `linux` | `linux`, `uos` or `windows`. Selects the User-Agent wording; the latter two send the vocabulary the portal expects |
+| `identity.os_arch` | host | Architecture name in the User-Agent |
+| `identity.user_agent` | derived | Overrides the whole User-Agent |
+| `identity.process_name` / `process_path` / `process_version` | client's own | Tunnel process block this account reports |
 
-The window's Gateway field accepts `host:port`, `https://host:port`, a bare host (443), a pasted path or trailing slash, and a bracketed IPv6 address with or without a port. Other schemes, an empty host and ports outside 1–65535 are rejected. On save the field is split back into `server.address` and `server.port`; the file format does not change.
+The PAC endpoint accepts only `GET` and `HEAD`, and regenerates the PAC for the
+current session on every request without caching. While disconnected it returns
+an all-`DIRECT` file. Both the proxy and PAC listeners can bind only to a
+loopback address, and a change takes effect on the next start.
 
-`client_data*.json` holds cookies, the device MAC and session tickets, also with mode 0600. Renaming an account moves it and deleting an account removes it, both only after settings are saved. Reset login data on the Settings page, or `gotrust-cli --reset-login-data`, removes it and makes the next login start from nothing: that is the recovery step for a stored record the portal no longer accepts.
+The window's Gateway field accepts `host:port`, `https://host:port`, a bare host (443), a pasted path or trailing slash, and a bracketed IPv6 address with or without a port. Other schemes, an empty host and ports outside 1–65535 are rejected. On save the field is split back into `server.address` and `server.port`.
+
+`client_data-<name>.json` holds the account's cookies, device identity and session tickets, also with mode 0600. The path is derived from the account name and cannot be configured: two accounts sharing one file would overwrite each other's sign key and ticket. Renaming an account moves the file and deleting an account removes it, both only after settings are saved. Reset login data on the Settings page, or `gotrust-cli --reset-login-data`, removes it and makes the next login start from nothing: that is the recovery step for a stored record the portal no longer accepts.
 
 ## Compatibility
 
-The old JSON format (`config.json`) is not migrated and is ignored if present, so it can be deleted. Files with version 2 gain an `id` for each configuration on first read and are written back as version 3; `id` is a local identifier and is never sent to the gateway. Unrecognized keys in the configuration cause a refusal: a misspelled key should not silently fall back to a default.
+A file written by version 3 or earlier is migrated on load: the shared `[app]`, `[proxy]`, `[handoff]`, `[logging]` and `[identity]` settings are copied into every account, so the first launch after the upgrade listens where the applications already point and presents the device the portal already knows. The file is rewritten in the new shape on the next save. The old JSON format (`config.json`) is not migrated and is ignored if present, so it can be deleted. Unrecognized keys cause a refusal: a misspelled key should not silently fall back to a default.

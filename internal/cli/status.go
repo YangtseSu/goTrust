@@ -11,7 +11,6 @@ import (
 	"io/fs"
 	"net"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/YangtseSu/goTrust/core/config"
@@ -139,7 +138,7 @@ func writeJSON(w io.Writer, value any) {
 // reportPACURL prints the address the running front-end serves the PAC from.
 // It does not start a server: the URL is useful only while goTrust is running.
 func reportPACURL(stdout, stderr io.Writer, cfg config.Config) int {
-	listen := strings.TrimSpace(cfg.Handoff.Listen)
+	listen := cfg.Active().Hand.Address()
 	if listen == "" {
 		fmt.Fprintf(stderr, "handoff: the PAC endpoint is disabled in the settings\n")
 		return ExitFailure

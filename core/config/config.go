@@ -31,7 +31,7 @@ import (
 
 // CurrentVersion is the schema version this build writes. A file from a newer
 // build is refused rather than rewritten with fields this build would drop.
-const CurrentVersion = 3
+const CurrentVersion = 4
 
 // DefaultProfileName is the profile a fresh install uses.
 const DefaultProfileName = "默认"
@@ -48,15 +48,14 @@ const (
 )
 
 // Config is the on-disk settings file.
+//
+// Only the file's own framing is global. Everything a session uses lives in
+// one profile, because exactly one account is connected at a time: a second
+// copy of a listener port or a log level could only disagree with the first.
 type Config struct {
-	Version       int            `toml:"version"`
-	ActiveProfile string         `toml:"active_profile"`
-	App           AppConfig      `toml:"app"`
-	Proxy         ProxyConfig    `toml:"proxy"`
-	Handoff       HandoffConfig  `toml:"handoff"`
-	Logging       LoggingConfig  `toml:"logging"`
-	Identity      IdentityConfig `toml:"identity"`
-	Profiles      []Profile      `toml:"profiles"`
+	Version       int       `toml:"version"`
+	ActiveProfile string    `toml:"active_profile"`
+	Profiles      []Profile `toml:"profiles"`
 
 	// path is the settings file this configuration was read from, empty for a
 	// configuration that was never loaded. It is not encoded: the profiles'
@@ -67,8 +66,9 @@ type Config struct {
 	path string
 }
 
-// AppConfig holds the launch and lifecycle choices that belong to the
-// application rather than to one account.
+// AppConfig holds when the account connects and how the window starts. It is
+// part of a profile because a user may want one account to connect on start and
+// another to wait.
 type AppConfig struct {
 	// Autostart mirrors the desktop's own start-at-login entry. The setting is
 	// reconciled with the system at every launch (see the README).
@@ -81,14 +81,15 @@ type AppConfig struct {
 	AutoConnect bool `toml:"auto_connect"`
 }
 
-// LoggingConfig is global: one log file serves every profile.
+// LoggingConfig is the account's log level. The log file is one per process, so
+// the level in effect is the connected account's.
 type LoggingConfig struct {
 	Verbose bool `toml:"verbose"`
 }
 
-// IdentityConfig is what the portal learns about this installation. It is one
-// identity per install, not per profile: switching accounts must not look like
-// a second device.
+// IdentityConfig is what the portal learns about this account's client. Two
+// accounts may present the same device (a copy carries the identity over) or
+// different ones; the file says which.
 //
 // The value is hand-edited only; the settings window shows it read-only and can
 // open the file.
@@ -134,8 +135,8 @@ const (
 const defaultClientVersion = "2.5.16.41"
 
 // NewIdentity returns the derived part of a fresh identity. The random half
-// (the device id) is filled by EnsureIdentity so that a file without it is
-// only generated once, when the caller can persist it.
+// (the device id and the hardware address) is filled by EnsureIdentity so that
+// it is generated once per account rather than once per launch.
 func NewIdentity() IdentityConfig {
 	return IdentityConfig{
 		OSFamily: IdentityOSLinux,
@@ -143,35 +144,43 @@ func NewIdentity() IdentityConfig {
 	}
 }
 
-// EnsureIdentity fills the install-stable halves and reports whether anything
-// changed. The caller persists the file, so the same id survives every launch.
-// A hand-edited value wins: an existing non-empty id is never replaced.
+// EnsureIdentity fills every account's device identity and reports whether
+// anything changed. The caller persists the file, so the same id survives every
+// launch. A hand-edited value wins: an existing non-empty id is never replaced.
+//
+// An account that already logged in has a device id in its client data. That
+// value is adopted instead of minting a second device, so upgrading does not
+// invalidate the session material already on disk.
 func (c *Config) EnsureIdentity() bool {
 	changed := false
-	fill := func(field *string, value string) {
-		if strings.TrimSpace(*field) == "" {
-			*field = value
+	for index := range c.Profiles {
+		if c.ensureProfileIdentity(&c.Profiles[index]) {
 			changed = true
 		}
 	}
-	defaults := NewIdentity()
-	fill(&c.Identity.OSFamily, defaults.OSFamily)
-	fill(&c.Identity.OSArch, defaults.OSArch)
+	return changed
+}
 
-	if strings.TrimSpace(c.Identity.DeviceID) == "" {
-		// A profile that logged in before this setting existed already has a
-		// device the portal knows. Adopt it instead of minting a second
-		// device, so the first run after the upgrade does not invalidate the
-		// stored session material.
-		if stored := c.storedDeviceID(); stored != "" {
-			c.Identity.DeviceID = stored
+func (c *Config) ensureProfileIdentity(profile *Profile) bool {
+	changed := false
+	if strings.TrimSpace(profile.Ident.OSFamily) == "" {
+		profile.Ident.OSFamily = IdentityOSLinux
+		changed = true
+	}
+	if strings.TrimSpace(profile.Ident.OSArch) == "" {
+		profile.Ident.OSArch = archName()
+		changed = true
+	}
+	if strings.TrimSpace(profile.Ident.DeviceID) == "" {
+		if stored := c.storedDeviceID(*profile); stored != "" {
+			profile.Ident.DeviceID = stored
 		} else {
-			c.Identity.DeviceID = randomHexID()
+			profile.Ident.DeviceID = randomHexID()
 		}
 		changed = true
 	}
-	if len(c.Identity.MACAddresses) == 0 {
-		c.Identity.MACAddresses = []string{randomMACAddress()}
+	if len(profile.Ident.MACAddresses) == 0 {
+		profile.Ident.MACAddresses = []string{randomMACAddress()}
 		changed = true
 	}
 	return changed
@@ -193,11 +202,11 @@ func randomMACAddress() string {
 // or an empty string. The client data file is written by the session, not by
 // this package, so the read is deliberately tolerant: a missing or malformed
 // file just means "no previous device".
-func (c *Config) storedDeviceID() string {
-	if c.path == "" || len(c.Profiles) == 0 {
+func (c *Config) storedDeviceID(profile Profile) string {
+	if c.path == "" {
 		return ""
 	}
-	path, err := c.ClientDataPathFor(c.Active())
+	path, err := c.ClientDataPathFor(profile)
 	if err != nil {
 		return ""
 	}
@@ -254,60 +263,6 @@ func validateMACAddresses(addresses []string) error {
 		}
 	}
 	return nil
-}
-
-// validate refuses an account-level client description the client cannot use.
-// An empty field means "follow [identity]", so only a set value is checked.
-func (i ProfileIdentity) validate() error {
-	if id := strings.TrimSpace(i.DeviceID); id != "" {
-		if err := validateDeviceID(id); err != nil {
-			return err
-		}
-	}
-	if err := validateMACAddresses(i.MACAddresses); err != nil {
-		return err
-	}
-	switch family := i.OSFamily; family {
-	case "", IdentityOSLinux, IdentityOSUOS, IdentityOSWindows:
-	default:
-		return fmt.Errorf("os_family %q is not one of %q, %q or %q",
-			family, IdentityOSLinux, IdentityOSUOS, IdentityOSWindows)
-	}
-	return nil
-}
-
-// IdentityFor returns the identity the named account presents: the install
-// identity with the account's own fields applied, one field at a time.
-func (c Config) IdentityFor(profile Profile) IdentityConfig {
-	resolved := c.Identity
-	if id := strings.TrimSpace(profile.Client.DeviceID); id != "" {
-		resolved.DeviceID = id
-	}
-	if len(profile.Client.MACAddresses) > 0 {
-		resolved.MACAddresses = profile.Client.MACAddresses
-	}
-	if version := strings.TrimSpace(profile.Client.ClientVersion); version != "" {
-		resolved.ClientVersion = version
-	}
-	if family := strings.TrimSpace(profile.Client.OSFamily); family != "" {
-		resolved.OSFamily = family
-	}
-	if arch := strings.TrimSpace(profile.Client.OSArch); arch != "" {
-		resolved.OSArch = arch
-	}
-	if agent := strings.TrimSpace(profile.Client.UserAgent); agent != "" {
-		resolved.UserAgent = agent
-	}
-	if name := strings.TrimSpace(profile.Client.ProcessName); name != "" {
-		resolved.ProcessName = name
-	}
-	if path := strings.TrimSpace(profile.Client.ProcessPath); path != "" {
-		resolved.ProcessPath = path
-	}
-	if version := strings.TrimSpace(profile.Client.ProcessVersion); version != "" {
-		resolved.ProcessVersion = version
-	}
-	return resolved
 }
 
 // UserAgentString is the UA the portal sees. An explicit user_agent wins.
@@ -397,11 +352,25 @@ type ProxyConfig struct {
 	HTTPBind   string `toml:"http_bind"`
 }
 
-// HandoffConfig holds the loopback endpoint that serves the PAC. An empty
-// listen disables it; the default is set when the file names no handoff
-// section at all, so an explicit empty value stays disabled.
+// HandoffConfig holds the loopback endpoint that serves the PAC. A missing
+// listen takes the default; an explicit empty value disables the endpoint, so
+// the pointer is what keeps those two apart.
 type HandoffConfig struct {
-	Listen string `toml:"listen"`
+	Listen *string `toml:"listen,omitempty"`
+}
+
+// Address is the endpoint the PAC is served on, empty to disable it.
+func (h HandoffConfig) Address() string {
+	if h.Listen == nil {
+		return defaultHandoffBind
+	}
+	return strings.TrimSpace(*h.Listen)
+}
+
+// SetListen stores an explicit endpoint, empty to disable it.
+func (h *HandoffConfig) SetListen(address string) {
+	address = strings.TrimSpace(address)
+	h.Listen = &address
 }
 
 // Profile is one account: the gateway, the credentials, the keep-alive and
@@ -411,51 +380,21 @@ type Profile struct {
 	// across renames, and never reused, so per-profile state can key off it
 	// instead of the mutable name. A hand-edited value stays unless another
 	// profile already owns it.
-	ID     string          `toml:"id"`
-	Name   string          `toml:"name"`
-	Server ServerConfig    `toml:"server"`
-	Auth   AuthConfig      `toml:"auth"`
-	Keep   KeepConfig      `toml:"keepalive"`
-	Debug  DebugConfig     `toml:"debug"`
-	Client ProfileIdentity `toml:"identity,omitempty"`
+	ID     string         `toml:"id"`
+	Name   string         `toml:"name"`
+	Server ServerConfig   `toml:"server"`
+	Auth   AuthConfig     `toml:"auth"`
+	App    AppConfig      `toml:"app"`
+	Proxy  ProxyConfig    `toml:"proxy"`
+	Log    LoggingConfig  `toml:"logging"`
+	Hand   HandoffConfig  `toml:"handoff"`
+	Keep   KeepConfig     `toml:"keepalive"`
+	Ident  IdentityConfig `toml:"identity"`
 	// AutoReconnect retries this account's lost session on the 1/2/4/8/16 s
 	// ladder, five attempts at most. It belongs to the account rather than the
 	// process: a full login rotates the device token and drops the account's
 	// other clients, which one account may accept and another may not.
-	AutoReconnect bool `toml:"auto_reconnect,omitempty"`
-}
-
-// ProfileIdentity overrides how this account presents itself: the identity the
-// portal reads, and the process block the tunnel reports for it. A gateway may
-// expect one account to look like the vendor's client and another to look like
-// this program, and two accounts may need two identities to be counted as two
-// devices. Every field falls back to [identity] independently, so an empty
-// field follows the install value and a file that says nothing presents one
-// device as before.
-type ProfileIdentity struct {
-	// DeviceID is the 32-hex device id this account reports. Empty follows
-	// [identity].
-	DeviceID string `toml:"device_id,omitempty"`
-	// MACAddresses is the hardware address this account reports. Empty
-	// follows [identity].
-	MACAddresses []string `toml:"mac_addresses,omitempty"`
-	// ClientVersion is the version the User-Agent reports. Empty follows
-	// [identity].
-	ClientVersion string `toml:"client_version,omitempty"`
-	// OSFamily selects the User-Agent vocabulary: linux, uos or windows.
-	// Empty follows [identity].
-	OSFamily string `toml:"os_family,omitempty"`
-	// OSArch is the uname -m spelling the User-Agent carries. Empty follows
-	// [identity].
-	OSArch string `toml:"os_arch,omitempty"`
-	// UserAgent overrides the whole string. Empty derives it from the three
-	// fields above.
-	UserAgent string `toml:"user_agent,omitempty"`
-	// ProcessName, ProcessPath and ProcessVersion replace the tunnel process
-	// block this account reports. Empty follows [identity].
-	ProcessName    string `toml:"process_name,omitempty"`
-	ProcessPath    string `toml:"process_path,omitempty"`
-	ProcessVersion string `toml:"process_version,omitempty"`
+	AutoReconnect bool `toml:"auto_reconnect"`
 }
 
 // ServerConfig identifies the aTrust gateway.
@@ -501,24 +440,22 @@ func (k KeepConfig) IsEnabled() bool { return k.Enabled == nil || *k.Enabled }
 // SetEnabled stores an explicit on or off.
 func (k *KeepConfig) SetEnabled(on bool) { k.Enabled = &on }
 
-// DebugConfig turns on diagnostics that are useful when a gateway behaves
-// differently from the one this project was written against.
-type DebugConfig struct {
-	ClientData string `toml:"client_data_path"`
-}
-
 // NewProfile returns the settings one profile starts from. A new account
 // stores its password unless the user unticks Save password: the settings file is
 // mode 0600, and a stored password is what lets auto-connect work. An existing
 // profile keeps whatever its file says.
 func NewProfile(name string) Profile {
 	enabled := true
+	listen := defaultHandoffBind
 	return Profile{
 		ID:     newProfileID(),
 		Name:   name,
 		Server: ServerConfig{Port: defaultServerPort},
 		Auth:   AuthConfig{Domain: defaultLoginDomain, StorePass: true},
+		Proxy:  ProxyConfig{SOCKS5Bind: defaultSocksBind, HTTPBind: defaultHTTPBind},
+		Hand:   HandoffConfig{Listen: &listen},
 		Keep:   KeepConfig{Enabled: &enabled, Interval: defaultKeepAlivePeriod.String()},
+		Ident:  NewIdentity(),
 	}
 }
 
@@ -550,12 +487,7 @@ func Default() Config {
 	return Config{
 		Version:       CurrentVersion,
 		ActiveProfile: DefaultProfileName,
-		Proxy: ProxyConfig{
-			SOCKS5Bind: defaultSocksBind,
-			HTTPBind:   defaultHTTPBind,
-		},
-		Handoff:  HandoffConfig{Listen: defaultHandoffBind},
-		Profiles: []Profile{NewProfile(DefaultProfileName)},
+		Profiles:      []Profile{NewProfile(DefaultProfileName)},
 	}
 }
 
@@ -595,6 +527,172 @@ func Load() (Config, error) {
 	return LoadFile(path)
 }
 
+// legacyV3 is the shape this build used to write: one set of application,
+// proxy, handoff, logging and identity settings beside the accounts. Reading it
+// is the whole migration, and the fields are kept as written so that a value the
+// user set is not silently replaced by a default.
+type legacyV3 struct {
+	Version       int            `toml:"version"`
+	ActiveProfile string         `toml:"active_profile"`
+	App           legacyApp      `toml:"app"`
+	Proxy         ProxyConfig    `toml:"proxy"`
+	Handoff       legacyHandoff  `toml:"handoff"`
+	Logging       LoggingConfig  `toml:"logging"`
+	Identity      IdentityConfig `toml:"identity"`
+	Profiles      []legacyV3Prof `toml:"profiles"`
+
+	// path is where the file was read from; LoadFile fills it after decoding.
+	path string
+}
+
+// legacyApp accepted an auto-reconnect key that now belongs to the account.
+// Reading it here is what lets a file written by the previous build load; the
+// value is discarded rather than moved, because that build only ever wrote the
+// default and there is no account it could be attributed to.
+type legacyApp struct {
+	Autostart     bool `toml:"autostart"`
+	StartHidden   bool `toml:"start_hidden"`
+	AutoConnect   bool `toml:"auto_connect"`
+	AutoReconnect bool `toml:"auto_reconnect"`
+}
+
+func (l legacyApp) app() AppConfig {
+	return AppConfig{Autostart: l.Autostart, StartHidden: l.StartHidden, AutoConnect: l.AutoConnect}
+}
+
+type legacyHandoff struct {
+	Listen *string `toml:"listen"`
+}
+
+type legacyV3Prof struct {
+	ID            string         `toml:"id"`
+	Name          string         `toml:"name"`
+	Server        ServerConfig   `toml:"server"`
+	Auth          AuthConfig     `toml:"auth"`
+	Keep          KeepConfig     `toml:"keepalive"`
+	AutoReconnect bool           `toml:"auto_reconnect"`
+	Client        IdentityConfig `toml:"identity"`
+	// Debug held the custom client data path. The field is read so that a file
+	// carrying it still loads, and then dropped: the path is derived from the
+	// account name now.
+	Debug struct {
+		ClientData string `toml:"client_data_path"`
+	} `toml:"debug"`
+}
+
+// migrateV3 copies the shared settings into every account. The values are
+// stamped in as written, so an account keeps exactly the behaviour it had
+// before the file was split.
+func (l legacyV3) migrateV3() Config {
+	cfg := Config{Version: CurrentVersion, ActiveProfile: l.ActiveProfile}
+	cfg.Profiles = make([]Profile, 0, len(l.Profiles))
+	// A file without a hardware address predates the field. Every account then
+	// takes the same generated value: the shared identity is what the file
+	// described, and minting one per account would make one machine look like
+	// several devices on the first launch after the upgrade.
+	if len(l.Identity.MACAddresses) == 0 {
+		l.Identity.MACAddresses = []string{randomMACAddress()}
+	}
+	for _, profile := range l.Profiles {
+		identity := l.Identity
+		// An account-level identity wins field by field; empty means "the
+		// shared value", which is now the starting point.
+		if id := strings.TrimSpace(profile.Client.DeviceID); id != "" {
+			identity.DeviceID = id
+		}
+		if len(profile.Client.MACAddresses) > 0 {
+			identity.MACAddresses = profile.Client.MACAddresses
+		}
+		if v := strings.TrimSpace(profile.Client.ClientVersion); v != "" {
+			identity.ClientVersion = v
+		}
+		if v := strings.TrimSpace(profile.Client.OSFamily); v != "" {
+			identity.OSFamily = v
+		}
+		if v := strings.TrimSpace(profile.Client.OSArch); v != "" {
+			identity.OSArch = v
+		}
+		if v := strings.TrimSpace(profile.Client.UserAgent); v != "" {
+			identity.UserAgent = v
+		}
+		if v := strings.TrimSpace(profile.Client.ProcessName); v != "" {
+			identity.ProcessName = v
+		}
+		if v := strings.TrimSpace(profile.Client.ProcessPath); v != "" {
+			identity.ProcessPath = v
+		}
+		if v := strings.TrimSpace(profile.Client.ProcessVersion); v != "" {
+			identity.ProcessVersion = v
+		}
+		cfg.Profiles = append(cfg.Profiles, Profile{
+			ID:            profile.ID,
+			Name:          profile.Name,
+			Server:        profile.Server,
+			Auth:          profile.Auth,
+			App:           l.App.app(),
+			Proxy:         l.Proxy,
+			Log:           l.Logging,
+			Hand:          HandoffConfig{Listen: l.Handoff.Listen},
+			Keep:          profile.Keep,
+			Ident:         identity,
+			AutoReconnect: profile.AutoReconnect,
+		})
+	}
+	return cfg
+}
+
+// decode reads one settings file. A file this build wrote is decoded straight
+// into Config; only a file from before the settings moved into the accounts has
+// its keys read through the old shape and distributed.
+func decode(raw []byte) (Config, error) {
+	var head struct {
+		Version int `toml:"version"`
+	}
+	if _, err := toml.Decode(string(raw), &head); err != nil {
+		return Config{}, err
+	}
+	if head.Version > CurrentVersion {
+		return Config{}, fmt.Errorf("settings version %d is newer than this build understands (%d)",
+			head.Version, CurrentVersion)
+	}
+
+	if head.Version >= CurrentVersion {
+		var cfg Config
+		meta, err := toml.Decode(string(raw), &cfg)
+		if err != nil {
+			return Config{}, err
+		}
+		if err := rejectUnknown(meta); err != nil {
+			return Config{}, err
+		}
+		return cfg, nil
+	}
+
+	var legacy legacyV3
+	meta, err := toml.Decode(string(raw), &legacy)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := rejectUnknown(meta); err != nil {
+		return Config{}, err
+	}
+	return legacy.migrateV3(), nil
+}
+
+// rejectUnknown refuses a key the schema does not know: it is a typo or a hand
+// edit, and running a configuration the file does not describe is worse.
+func rejectUnknown(meta toml.MetaData) error {
+	undecoded := meta.Undecoded()
+	if len(undecoded) == 0 {
+		return nil
+	}
+	keys := make([]string, len(undecoded))
+	for index, key := range undecoded {
+		keys[index] = key.String()
+	}
+	return fmt.Errorf("unknown settings: %s", strings.Join(keys, ", "))
+}
+
 // LoadFile reads one settings file. Missing files yield Default(). Profile ids
 // are left as read; LoadOrCreate repairs them and persists the result, because
 // an id minted for a read-only load would be lost on the next launch.
@@ -609,30 +707,9 @@ func LoadFile(path string) (Config, error) {
 		return Config{}, fmt.Errorf("read %s: %w", path, err)
 	}
 
-	var cfg Config
-	meta, err := toml.Decode(string(raw), &cfg)
+	cfg, err := decode(raw)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse %s: %w", path, err)
-	}
-	// A field this build does not know is a typo or a hand edit, and silently
-	// ignoring it would run a configuration the file does not describe.
-	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
-		keys := make([]string, len(undecoded))
-		for index, key := range undecoded {
-			keys[index] = key.String()
-		}
-		return Config{}, fmt.Errorf("%s has settings this build does not know: %s",
-			path, strings.Join(keys, ", "))
-	}
-	if cfg.Version > CurrentVersion {
-		return Config{}, fmt.Errorf(
-			"%s uses settings version %d, which this build does not understand (latest %d)",
-			path, cfg.Version, CurrentVersion)
-	}
-	// A file written before the handoff section existed gets the endpoint on by
-	// default; a file that names an empty listen keeps it disabled.
-	if !meta.IsDefined("handoff", "listen") {
-		cfg.Handoff.Listen = defaultHandoffBind
 	}
 	cfg.path = path
 	cfg.normalise()
@@ -738,12 +815,7 @@ func (c Config) Clone() Config {
 	clone := c
 	clone.Profiles = make([]Profile, len(c.Profiles))
 	for index, profile := range c.Profiles {
-		clone.Profiles[index] = profile
-		clone.Profiles[index].Keep.Targets = append([]string(nil), profile.Keep.Targets...)
-		if profile.Keep.Enabled != nil {
-			enabled := *profile.Keep.Enabled
-			clone.Profiles[index].Keep.Enabled = &enabled
-		}
+		clone.Profiles[index] = cloneProfile(profile)
 	}
 	return clone
 }
@@ -761,6 +833,19 @@ func (c Config) ForDisk() Config {
 		}
 	}
 	return disk
+}
+
+// ActiveProfileRef is the active profile for editing: a pointer into the slice,
+// so a caller can change one field of it. Active() returns a copy, which is what
+// a reader wants but a writer cannot use.
+func (c *Config) ActiveProfileRef() *Profile {
+	if index := c.ActiveIndex(); index >= 0 {
+		return &c.Profiles[index]
+	}
+	if len(c.Profiles) > 0 {
+		return &c.Profiles[0]
+	}
+	return nil
 }
 
 // ProfileIndex reports where name sits in Profiles, or -1.
@@ -798,20 +883,6 @@ func (c Config) ProfileNames() []string {
 	return names
 }
 
-// AddProfile appends a new profile with default settings and makes it active.
-func (c *Config) AddProfile(name string) (int, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return -1, errors.New("the profile name is empty")
-	}
-	if c.ProfileIndex(name) >= 0 {
-		return -1, fmt.Errorf("profile %q already exists", name)
-	}
-	c.Profiles = append(c.Profiles, NewProfile(name))
-	c.ActiveProfile = name
-	return len(c.Profiles) - 1, nil
-}
-
 // DuplicateProfile copies the profile at index under newName.
 func (c *Config) DuplicateProfile(index int, newName string) (int, error) {
 	if index < 0 || index >= len(c.Profiles) {
@@ -824,17 +895,33 @@ func (c *Config) DuplicateProfile(index int, newName string) (int, error) {
 	if c.ProfileIndex(newName) >= 0 {
 		return -1, fmt.Errorf("profile %q already exists", newName)
 	}
-	clone := c.Profiles[index]
+	// The copy keeps the identity of the profile it came from: a copied account
+	// is the same machine to the portal, which is what a second account on one
+	// host means. Only the name and the local id are new, so the copy owns its
+	// own client data file and its own place in the list.
+	clone := cloneProfile(c.Profiles[index])
 	clone.ID = newProfileID()
 	clone.Name = newName
-	clone.Keep.Targets = append([]string(nil), clone.Keep.Targets...)
-	if clone.Keep.Enabled != nil {
-		enabled := *clone.Keep.Enabled
-		clone.Keep.Enabled = &enabled
-	}
 	c.Profiles = append(c.Profiles, clone)
 	c.ActiveProfile = newName
 	return len(c.Profiles) - 1, nil
+}
+
+// cloneProfile deep-copies one profile, so editing the copy cannot reach into
+// the slice it came from.
+func cloneProfile(profile Profile) Profile {
+	clone := profile
+	clone.Keep.Targets = append([]string(nil), profile.Keep.Targets...)
+	if profile.Keep.Enabled != nil {
+		enabled := *profile.Keep.Enabled
+		clone.Keep.Enabled = &enabled
+	}
+	clone.Ident.MACAddresses = append([]string(nil), profile.Ident.MACAddresses...)
+	if profile.Hand.Listen != nil {
+		listen := *profile.Hand.Listen
+		clone.Hand.Listen = &listen
+	}
+	return clone
 }
 
 // DeleteProfile removes the profile at index. The last profile cannot be
@@ -892,15 +979,14 @@ func (c Config) ServerAddress() string { return c.Active().ServerAddress() }
 // ServerAddress trims the stored host.
 func (p Profile) ServerAddress() string { return strings.TrimSpace(p.Server.Address) }
 
-// ClientDataPathFor resolves one profile's client data file. Profiles must not
-// share it: a stored ticket restores whatever account obtained it. The file
-// lives beside the settings file that names the profile, so --config moves the
-// account material too; a configuration that was never loaded falls back to the
-// user config directory.
+// ClientDataPathFor resolves one profile's client data file. The path is
+// derived from the name, never configured: two accounts that pointed at one
+// file would overwrite each other's sign key and ticket, and the result is a
+// tunnel that comes up while every authorization through it is refused. The
+// file lives beside the settings file that names the profile, so --config moves
+// the account material too; a configuration that was never loaded falls back to
+// the user config directory.
 func (c Config) ClientDataPathFor(profile Profile) (string, error) {
-	if custom := strings.TrimSpace(profile.Debug.ClientData); custom != "" {
-		return custom, nil
-	}
 	dir := ""
 	if c.path != "" {
 		dir = filepath.Dir(c.path)
@@ -918,27 +1004,25 @@ func (c Config) ClientDataPathFor(profile Profile) (string, error) {
 	return filepath.Join(dir, "client_data-"+profileSlug(profile.Name)+".json"), nil
 }
 
-// ProxyAddresses reports the listeners this configuration asks for.
-func (c Config) ProxyAddresses() (socks5, http string) {
-	return strings.TrimSpace(c.Proxy.SOCKS5Bind), strings.TrimSpace(c.Proxy.HTTPBind)
+// ProxyAddresses reports the listeners this account asks for.
+func (p Profile) ProxyAddresses() (socks5, http string) {
+	return strings.TrimSpace(p.Proxy.SOCKS5Bind), strings.TrimSpace(p.Proxy.HTTPBind)
 }
 
 // Validate reports settings that cannot log in, before anything is dialled.
 func (c Config) Validate() error {
-	if err := c.Identity.validate(); err != nil {
-		return err
-	}
 	// Every account is checked, not only the active one: a typo in an account
 	// that is not in use yet must not surface as a failed login later.
 	for _, profile := range c.Profiles {
-		if err := profile.Client.validate(); err != nil {
+		if err := profile.Validate(); err != nil {
 			return fmt.Errorf("account %q: %w", profile.Name, err)
 		}
 	}
-	if err := c.Active().Validate(); err != nil {
-		return err
+	if len(c.Profiles) == 0 {
+		return errors.New("the file has no account")
 	}
-	socks5, http := c.ProxyAddresses()
+	active := c.Active()
+	socks5, http := active.ProxyAddresses()
 	if socks5 == "" && http == "" {
 		return errors.New("both proxy listeners are disabled")
 	}
@@ -953,7 +1037,7 @@ func (c Config) Validate() error {
 			return fmt.Errorf("%s proxy bind: %w", listener.name, err)
 		}
 	}
-	if listen := strings.TrimSpace(c.Handoff.Listen); listen != "" {
+	if listen := active.Hand.Address(); listen != "" {
 		if err := ValidateBind(listen); err != nil {
 			return fmt.Errorf("handoff bind: %w", err)
 		}
@@ -990,8 +1074,11 @@ func ValidateBind(bind string) error {
 	return nil
 }
 
-// Validate reports the login fields the aTrust client needs.
+// Validate reports the fields the aTrust client and the listeners need.
 func (p Profile) Validate() error {
+	if err := p.Ident.validate(); err != nil {
+		return err
+	}
 	if p.ServerAddress() == "" {
 		return errors.New("server address is empty")
 	}
@@ -1008,13 +1095,13 @@ func (p Profile) Validate() error {
 // behaves like a complete one instead of silently disabling a listener.
 func (c *Config) normalise() {
 	c.Version = CurrentVersion
-	if c.Proxy.SOCKS5Bind == "" && c.Proxy.HTTPBind == "" {
-		c.Proxy.SOCKS5Bind = defaultSocksBind
-		c.Proxy.HTTPBind = defaultHTTPBind
-	}
 	if len(c.Profiles) == 0 {
 		c.Profiles = []Profile{NewProfile(DefaultProfileName)}
 	}
+	// A file that predates the split carried one identity and one set of
+	// listeners for the whole install. The migration stamps them into every
+	// account, so a launch right after the upgrade presents the device the
+	// portal already knows rather than a new one per account.
 
 	used := make(map[string]bool, len(c.Profiles))
 	for index := range c.Profiles {
@@ -1031,6 +1118,16 @@ func (c *Config) normalise() {
 func (p *Profile) normalise() {
 	if strings.TrimSpace(p.Name) == "" {
 		p.Name = DefaultProfileName
+	}
+	if p.Proxy.SOCKS5Bind == "" && p.Proxy.HTTPBind == "" {
+		p.Proxy.SOCKS5Bind = defaultSocksBind
+		p.Proxy.HTTPBind = defaultHTTPBind
+	}
+	if strings.TrimSpace(p.Ident.OSFamily) == "" {
+		p.Ident.OSFamily = IdentityOSLinux
+	}
+	if strings.TrimSpace(p.Ident.OSArch) == "" {
+		p.Ident.OSArch = archName()
 	}
 	if p.Server.Port == 0 {
 		p.Server.Port = defaultServerPort

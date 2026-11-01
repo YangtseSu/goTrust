@@ -74,7 +74,7 @@ func FromCache(cfg config.Config, cached session.ResourceSnapshot) Snapshot {
 }
 
 func build(cfg config.Config, profile, gateway, tunnelIP string, online bool, resources session.Resources) Snapshot {
-	socks5, httpBind := cfg.ProxyAddresses()
+	socks5, httpBind := cfg.Active().ProxyAddresses()
 	return Snapshot{
 		Generated: time.Now(),
 		Profile:   profile,

@@ -158,7 +158,7 @@ func TestPACOfflineIsDirect(t *testing.T) {
 
 func TestPACFallsBackToSOCKS5(t *testing.T) {
 	cfg := testConfig()
-	cfg.Proxy.HTTPBind = ""
+	active(&cfg).Proxy.HTTPBind = ""
 	snapshot := FromState(cfg, session.State{Phase: session.PhaseOnline, Resources: testResources()})
 	if !strings.Contains(snapshot.PAC(), "SOCKS5 127.0.0.1:1080") {
 		t.Fatalf("PAC did not fall back to SOCKS5:\n%s", snapshot.PAC())
@@ -199,7 +199,7 @@ func TestClashFragmentOrder(t *testing.T) {
 
 func TestClashHTTPOnly(t *testing.T) {
 	cfg := testConfig()
-	cfg.Proxy.SOCKS5Bind = ""
+	active(&cfg).Proxy.SOCKS5Bind = ""
 	snapshot := FromState(cfg, session.State{Phase: session.PhaseOnline})
 	fragment, err := snapshot.Clash()
 	if err != nil {
@@ -212,8 +212,8 @@ func TestClashHTTPOnly(t *testing.T) {
 
 func TestClashWithoutListenersFails(t *testing.T) {
 	cfg := testConfig()
-	cfg.Proxy.SOCKS5Bind = ""
-	cfg.Proxy.HTTPBind = ""
+	active(&cfg).Proxy.SOCKS5Bind = ""
+	active(&cfg).Proxy.HTTPBind = ""
 	snapshot := FromState(cfg, session.State{Phase: session.PhaseOnline})
 	if _, err := snapshot.Clash(); !errors.Is(err, ErrNoProxy) {
 		t.Fatalf("error = %v, want ErrNoProxy", err)
@@ -289,3 +289,6 @@ func TestClashConfigIsStandalone(t *testing.T) {
 }
 
 func index(text, needle string) int { return strings.Index(text, needle) }
+
+// active is the profile a session runs with.
+func active(c *config.Config) *config.Profile { return c.ActiveProfileRef() }

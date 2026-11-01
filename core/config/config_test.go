@@ -4,6 +4,7 @@
 package config
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -20,7 +21,7 @@ func TestDefaultHasOneProfileAndBothListeners(t *testing.T) {
 	if len(cfg.Profiles) != 1 || cfg.ActiveProfile != DefaultProfileName {
 		t.Fatalf("profiles = %v, active = %q", cfg.ProfileNames(), cfg.ActiveProfile)
 	}
-	socks5, httpBind := cfg.ProxyAddresses()
+	socks5, httpBind := active(&cfg).ProxyAddresses()
 	if socks5 == "" || httpBind == "" {
 		t.Fatalf("defaults disable a listener: socks5=%q http=%q", socks5, httpBind)
 	}
@@ -44,14 +45,14 @@ func TestTOMLRoundTrip(t *testing.T) {
 
 	want := Default()
 	want.ActiveProfile = "工作"
-	want.App.Autostart = true
-	want.App.AutoConnect = true
-	want.Logging.Verbose = true
-	want.Proxy.HTTPBind = ""
-	if _, err := want.AddProfile("工作"); err != nil {
+	if _, err := want.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
 	index := want.ProfileIndex("工作")
+	want.Profiles[index].App.Autostart = true
+	want.Profiles[index].App.AutoConnect = true
+	want.Profiles[index].Log.Verbose = true
+	want.Profiles[index].Proxy.HTTPBind = ""
 	want.Profiles[index].Server.Address = "vpn.example.com"
 	want.Profiles[index].Server.Port = 4430
 	want.Profiles[index].Auth.Username = "alice"
@@ -61,7 +62,6 @@ func TestTOMLRoundTrip(t *testing.T) {
 	want.Profiles[index].Keep.SetEnabled(false)
 	want.Profiles[index].Keep.Interval = "90s"
 	want.Profiles[index].Keep.Targets = []string{"http://192.0.2.5/health"}
-	want.Profiles[index].Debug.ClientData = "/tmp/custom-client-data.json"
 
 	if err := SaveFile(path, want); err != nil {
 		t.Fatalf("save: %v", err)
@@ -100,14 +100,14 @@ func TestTOMLRoundTrip(t *testing.T) {
 	if len(profile.Keep.Targets) != 1 || profile.Keep.Targets[0] != "http://192.0.2.5/health" {
 		t.Fatalf("targets = %v", profile.Keep.Targets)
 	}
-	if got.Proxy.HTTPBind != "" {
-		t.Fatalf("http bind = %q, want empty (disabled)", got.Proxy.HTTPBind)
+	if got.Active().Proxy.HTTPBind != "" {
+		t.Fatalf("http bind = %q, want empty (disabled)", got.Active().Proxy.HTTPBind)
 	}
-	if socks5, _ := got.ProxyAddresses(); socks5 == "" {
+	if socks5, _ := got.Active().ProxyAddresses(); socks5 == "" {
 		t.Fatal("socks bind was lost")
 	}
-	if !got.Logging.Verbose || !got.App.Autostart || !got.App.AutoConnect {
-		t.Fatalf("global settings lost: %+v %+v", got.App, got.Logging)
+	if !got.Active().Log.Verbose || !got.Active().App.Autostart || !got.Active().App.AutoConnect {
+		t.Fatalf("account settings lost: %+v %+v", got.Active().App, got.Active().Log)
 	}
 }
 
@@ -144,7 +144,7 @@ username = "alice"
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	socks5, httpBind := cfg.ProxyAddresses()
+	socks5, httpBind := active(&cfg).ProxyAddresses()
 	if socks5 == "" || httpBind == "" {
 		t.Fatalf("partial file disabled a listener: socks5=%q http=%q", socks5, httpBind)
 	}
@@ -228,13 +228,13 @@ func TestNewerVersionIsRefused(t *testing.T) {
 
 func TestProfileOperations(t *testing.T) {
 	cfg := Default()
-	if _, err := cfg.AddProfile("工作"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	if cfg.ActiveProfile != "工作" {
 		t.Fatalf("active = %q, want the new profile", cfg.ActiveProfile)
 	}
-	if _, err := cfg.AddProfile("工作"); err == nil {
+	if _, err := cfg.DuplicateProfile(0, "工作"); err == nil {
 		t.Fatal("duplicate name accepted")
 	}
 
@@ -344,8 +344,8 @@ func TestProfileIDSurvivesSaveLoadAndRename(t *testing.T) {
 	if loaded.Profiles[0].ID != id {
 		t.Fatalf("id = %q, want %q after a rename round-trip", loaded.Profiles[0].ID, id)
 	}
-	if loaded.Version != 3 {
-		t.Fatalf("version = %d, want 3", loaded.Version)
+	if loaded.Version != CurrentVersion {
+		t.Fatalf("version = %d, want %d", loaded.Version, CurrentVersion)
 	}
 }
 
@@ -378,7 +378,7 @@ name = "b"
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	if !strings.Contains(string(raw), "version = 3") ||
+	if !strings.Contains(string(raw), fmt.Sprintf("version = %d", CurrentVersion)) ||
 		!strings.Contains(string(raw), first.Profiles[0].ID) {
 		t.Fatalf("the generated ids were not persisted:\n%s", raw)
 	}
@@ -495,11 +495,15 @@ func TestClientDataPathIsPerProfile(t *testing.T) {
 		t.Fatalf("path %q is outside the config directory", first)
 	}
 
+	// There is no override: two accounts resolving to one file would overwrite
+	// each other's sign key and ticket.
 	custom := NewProfile("custom")
-	custom.Debug.ClientData = "/tmp/custom.json"
 	got, err := cfg.ClientDataPathFor(custom)
-	if err != nil || got != "/tmp/custom.json" {
-		t.Fatalf("override = %q, %v", got, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == first {
+		t.Fatalf("two accounts resolve to one file: %q", got)
 	}
 }
 
@@ -532,7 +536,7 @@ func TestClientDataFollowsTheLoadedSettingsFile(t *testing.T) {
 		t.Fatalf("path = %q, the default directory was used", first)
 	}
 
-	if _, err := cfg.AddProfile("工作"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
 	work, err := cfg.ClientDataPathFor(cfg.Active())
@@ -614,7 +618,7 @@ func TestValidateRejectsUnusableSettings(t *testing.T) {
 	}
 
 	noListener := valid.Clone()
-	noListener.Proxy = ProxyConfig{}
+	noListener.ActiveProfileRef().Proxy = ProxyConfig{}
 	if err := noListener.Validate(); err == nil {
 		t.Fatal("disabling both listeners was accepted")
 	}
@@ -625,7 +629,7 @@ func TestForDiskClearsUnstoredCredentials(t *testing.T) {
 	cfg.Profiles[0].Auth.StorePass = true
 	cfg.Profiles[0].Auth.Password = "stored"
 	cfg.Profiles[0].Auth.TOTPSecret = "stored-secret"
-	if _, err := cfg.AddProfile("工作"); err != nil {
+	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
 	cfg.Profiles[1].Auth.StorePass = false
@@ -649,8 +653,8 @@ func TestCloneDoesNotShareState(t *testing.T) {
 	clone := cfg.Clone()
 	clone.Profiles[0].Name = "changed"
 	clone.Profiles[0].Keep.Targets = append(clone.Profiles[0].Keep.Targets, "http://192.0.2.5/")
-	clone.App.AutoConnect = true
-	if cfg.Profiles[0].Name != DefaultProfileName || len(cfg.Profiles[0].Keep.Targets) != 0 || cfg.App.AutoConnect {
+	clone.Profiles[0].App.AutoConnect = true
+	if cfg.Profiles[0].Name != DefaultProfileName || len(cfg.Profiles[0].Keep.Targets) != 0 || cfg.Profiles[0].App.AutoConnect {
 		t.Fatal("clone shares state with the original")
 	}
 }
@@ -687,13 +691,13 @@ func TestValidateBindKeepsTheProxyOnLoopback(t *testing.T) {
 	}
 
 	exposed := valid.Clone()
-	exposed.Proxy.HTTPBind = "0.0.0.0:1081"
+	exposed.ActiveProfileRef().Proxy.HTTPBind = "0.0.0.0:1081"
 	if err := exposed.Validate(); err == nil {
 		t.Fatal("a non-loopback HTTP bind passed validation")
 	}
 
 	malformed := valid.Clone()
-	malformed.Proxy.SOCKS5Bind = "127.0.0.1"
+	malformed.ActiveProfileRef().Proxy.SOCKS5Bind = "127.0.0.1"
 	if err := malformed.Validate(); err == nil {
 		t.Fatal("a malformed SOCKS5 bind passed validation")
 	}
@@ -753,30 +757,30 @@ func TestInstallIdentityIsGeneratedOnce(t *testing.T) {
 	if !cfg.EnsureIdentity() {
 		t.Fatal("a fresh identity reported no changes")
 	}
-	id := cfg.Identity.DeviceID
+	id := active(&cfg).Ident.DeviceID
 	if len(id) != 32 || strings.ToUpper(id) != id {
 		t.Fatalf("device id %q is not 32 uppercase hex", id)
 	}
 	if cfg.EnsureIdentity() {
 		t.Fatal("a second call replaced the stored id")
 	}
-	if cfg.Identity.DeviceID != id {
-		t.Fatalf("device id = %q, want it stable", cfg.Identity.DeviceID)
+	if active(&cfg).Ident.DeviceID != id {
+		t.Fatalf("device id = %q, want it stable", active(&cfg).Ident.DeviceID)
 	}
 }
 
 func TestIdentityHandEditsWin(t *testing.T) {
 	cfg := Default()
-	cfg.Identity.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	active(&cfg).Ident.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
 	cfg.EnsureIdentity()
-	if cfg.Identity.DeviceID != "0123456789ABCDEF0123456789ABCDEF" {
-		t.Fatalf("device id = %q, want the hand-edited value", cfg.Identity.DeviceID)
+	if active(&cfg).Ident.DeviceID != "0123456789ABCDEF0123456789ABCDEF" {
+		t.Fatalf("device id = %q, want the hand-edited value", active(&cfg).Ident.DeviceID)
 	}
-	cfg.Identity.ClientVersion = "9.9.9.9"
-	cfg.Identity.OSFamily = IdentityOSWindows
+	active(&cfg).Ident.ClientVersion = "9.9.9.9"
+	active(&cfg).Ident.OSFamily = IdentityOSWindows
 	cfg.EnsureIdentity()
-	if cfg.Identity.ClientVersion != "9.9.9.9" || cfg.Identity.OSFamily != IdentityOSWindows {
-		t.Fatalf("identity = %+v, want the hand-edited values", cfg.Identity)
+	if active(&cfg).Ident.ClientVersion != "9.9.9.9" || active(&cfg).Ident.OSFamily != IdentityOSWindows {
+		t.Fatalf("identity = %+v, want the hand-edited values", cfg.Active().Ident)
 	}
 }
 
@@ -793,8 +797,8 @@ func TestIdentityRoundTripPersistsTheID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if loaded.Identity.DeviceID != cfg.Identity.DeviceID {
-		t.Fatalf("device id = %q, want %q", loaded.Identity.DeviceID, cfg.Identity.DeviceID)
+	if loaded.Active().Ident.DeviceID != cfg.Active().Ident.DeviceID {
+		t.Fatalf("device id = %q, want %q", loaded.Active().Ident.DeviceID, cfg.Active().Ident.DeviceID)
 	}
 }
 
@@ -827,8 +831,8 @@ func TestEnsureIdentityAdoptsTheStoredProfileDevice(t *testing.T) {
 		t.Fatalf("write client data: %v", err)
 	}
 	cfg.EnsureIdentity()
-	if cfg.Identity.DeviceID != "0123456789ABCDEF0123456789ABCDEF" {
-		t.Fatalf("device id = %q, want the stored profile's", cfg.Identity.DeviceID)
+	if active(&cfg).Ident.DeviceID != "0123456789ABCDEF0123456789ABCDEF" {
+		t.Fatalf("device id = %q, want the stored profile's", active(&cfg).Ident.DeviceID)
 	}
 }
 
@@ -866,21 +870,21 @@ func TestUserAgentPresetsAreExplicit(t *testing.T) {
 
 func TestEnsureIdentityFillsTheDerivedFields(t *testing.T) {
 	cfg := Default()
-	cfg.Identity.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
-	cfg.Identity.ClientVersion = ""
-	cfg.Identity.OSFamily = ""
-	cfg.Identity.OSArch = ""
+	active(&cfg).Ident.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	active(&cfg).Ident.ClientVersion = ""
+	active(&cfg).Ident.OSFamily = ""
+	active(&cfg).Ident.OSArch = ""
 	if !cfg.EnsureIdentity() {
 		t.Fatal("an empty derived identity reported no change")
 	}
-	if cfg.Identity.OSFamily != IdentityOSLinux || cfg.Identity.OSArch == "" {
-		t.Fatalf("identity = %+v", cfg.Identity)
+	if active(&cfg).Ident.OSFamily != IdentityOSLinux || active(&cfg).Ident.OSArch == "" {
+		t.Fatalf("identity = %+v", cfg.Active().Ident)
 	}
-	if cfg.Identity.ClientVersion != "" {
-		t.Fatalf("a client version was invented: %q", cfg.Identity.ClientVersion)
+	if active(&cfg).Ident.ClientVersion != "" {
+		t.Fatalf("a client version was invented: %q", active(&cfg).Ident.ClientVersion)
 	}
-	if cfg.Identity.ProcessName != "" || cfg.Identity.ProcessPath != "" {
-		t.Fatalf("a process block was invented: %+v", cfg.Identity)
+	if active(&cfg).Ident.ProcessName != "" || active(&cfg).Ident.ProcessPath != "" {
+		t.Fatalf("a process block was invented: %+v", cfg.Active().Ident)
 	}
 }
 
@@ -903,8 +907,8 @@ func TestLoadOrCreatePersistsTheIdentityOnce(t *testing.T) {
 	if got != path {
 		t.Fatalf("path = %q, want %q", got, path)
 	}
-	if first.Identity.DeviceID == "" {
-		t.Fatal("the install identity was not generated")
+	if first.Active().Ident.DeviceID == "" {
+		t.Fatal("the account's device id was not generated")
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("the settings file was not written: %v", err)
@@ -914,20 +918,20 @@ func TestLoadOrCreatePersistsTheIdentityOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second LoadOrCreate() error = %v", err)
 	}
-	if second.Identity.DeviceID != first.Identity.DeviceID {
-		t.Fatalf("device id = %q, want the stored %q", second.Identity.DeviceID, first.Identity.DeviceID)
+	if second.Active().Ident.DeviceID != first.Active().Ident.DeviceID {
+		t.Fatalf("device id = %q, want the stored %q", second.Active().Ident.DeviceID, first.Active().Ident.DeviceID)
 	}
 }
 
 func TestHandoffDefaultsToLoopback(t *testing.T) {
-	if got := Default().Handoff.Listen; got != defaultHandoffBind {
+	if got := Default().Active().Hand.Address(); got != defaultHandoffBind {
 		t.Fatalf("handoff listen = %q, want %q", got, defaultHandoffBind)
 	}
 }
 
 func TestHandoffCanBeDisabledExplicitly(t *testing.T) {
 	cfg := Default()
-	cfg.Handoff.Listen = ""
+	cfg.ActiveProfileRef().Hand.SetListen("")
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := SaveFile(path, cfg); err != nil {
 		t.Fatalf("save settings: %v", err)
@@ -936,8 +940,8 @@ func TestHandoffCanBeDisabledExplicitly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load settings: %v", err)
 	}
-	if loaded.Handoff.Listen != "" {
-		t.Fatalf("handoff listen = %q, want it disabled", loaded.Handoff.Listen)
+	if got := loaded.Active().Hand.Address(); got != "" {
+		t.Fatalf("handoff listen = %q, want it disabled", got)
 	}
 }
 
@@ -951,8 +955,8 @@ func TestAnOlderFileGetsTheHandoffDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load settings: %v", err)
 	}
-	if loaded.Handoff.Listen != defaultHandoffBind {
-		t.Fatalf("handoff listen = %q, want the default %q", loaded.Handoff.Listen, defaultHandoffBind)
+	if got := loaded.Active().Hand.Address(); got != defaultHandoffBind {
+		t.Fatalf("handoff listen = %q, want the default %q", got, defaultHandoffBind)
 	}
 }
 
@@ -960,7 +964,7 @@ func TestHandoffBindMustStayOnLoopback(t *testing.T) {
 	cfg := Default()
 	cfg.Profiles[0].Server.Address = "vpn.example.com"
 	cfg.Profiles[0].Auth.Username = "alice"
-	cfg.Handoff.Listen = "0.0.0.0:1082"
+	cfg.ActiveProfileRef().Hand.SetListen("0.0.0.0:1082")
 	err := cfg.Validate()
 	if err == nil || !strings.Contains(err.Error(), "handoff bind") {
 		t.Fatalf("validate error = %v, want a handoff bind error", err)
@@ -972,15 +976,15 @@ func TestHandoffBindMustStayOnLoopback(t *testing.T) {
 // value wins.
 func TestEnsureIdentityGeneratesOneHardwareAddress(t *testing.T) {
 	cfg := Default()
-	cfg.Identity.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
-	cfg.Identity.MACAddresses = nil
+	active(&cfg).Ident.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	active(&cfg).Ident.MACAddresses = nil
 	if !cfg.EnsureIdentity() {
 		t.Fatal("a missing hardware address reported no change")
 	}
-	if len(cfg.Identity.MACAddresses) != 1 {
-		t.Fatalf("mac addresses = %v, want one", cfg.Identity.MACAddresses)
+	if len(active(&cfg).Ident.MACAddresses) != 1 {
+		t.Fatalf("mac addresses = %v, want one", active(&cfg).Ident.MACAddresses)
 	}
-	generated := cfg.Identity.MACAddresses[0]
+	generated := active(&cfg).Ident.MACAddresses[0]
 	address, err := net.ParseMAC(generated)
 	if err != nil {
 		t.Fatalf("generated address %q: %v", generated, err)
@@ -991,56 +995,82 @@ func TestEnsureIdentityGeneratesOneHardwareAddress(t *testing.T) {
 
 	// A second launch keeps it: the portal binds the endpoint to this value.
 	if cfg.EnsureIdentity() {
-		t.Fatalf("the identity changed on a second launch: %+v", cfg.Identity)
+		t.Fatalf("the identity changed on a second launch: %+v", cfg.Active().Ident)
 	}
-	if len(cfg.Identity.MACAddresses) != 1 || cfg.Identity.MACAddresses[0] != generated {
-		t.Fatalf("mac addresses = %v, want %q", cfg.Identity.MACAddresses, generated)
+	if len(active(&cfg).Ident.MACAddresses) != 1 || active(&cfg).Ident.MACAddresses[0] != generated {
+		t.Fatalf("mac addresses = %v, want %q", active(&cfg).Ident.MACAddresses, generated)
 	}
 
-	chosen := IdentityConfig{MACAddresses: []string{"02:00:5e:10:00:42"}}
-	cfg.Identity = chosen
+	cfg.ActiveProfileRef().Ident.MACAddresses = []string{"02:00:5e:10:00:42"}
 	cfg.EnsureIdentity()
-	if cfg.Identity.MACAddresses[0] != "02:00:5e:10:00:42" {
-		t.Fatalf("a hand-set address was replaced: %v", cfg.Identity.MACAddresses)
+	if active(&cfg).Ident.MACAddresses[0] != "02:00:5e:10:00:42" {
+		t.Fatalf("a hand-set address was replaced: %v", active(&cfg).Ident.MACAddresses)
 	}
 }
 
-// TestIdentityForFollowsTheAccount: one installation may present the vendor's
-// client for one account and its own for another. The fields an account leaves
-// empty follow [identity], and the machine identifiers never change.
-func TestIdentityForFollowsTheAccount(t *testing.T) {
+// TestAccountsCarryTheirOwnIdentity: one file may hold an account that presents
+// the vendor's client beside one that presents this program, because the whole
+// identity lives in the profile.
+func TestAccountsCarryTheirOwnIdentity(t *testing.T) {
 	cfg := Default()
-	cfg.Identity.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
-	cfg.Identity.MACAddresses = []string{"02:00:5e:10:00:01"}
-	cfg.Identity.OSFamily = IdentityOSLinux
-	cfg.Identity.OSArch = "x86_64"
+	cfg.ActiveProfileRef().Ident = IdentityConfig{
+		DeviceID: "0123456789ABCDEF0123456789ABCDEF",
+		MACAddresses: []string{
+			"02:00:5e:10:00:01",
+		},
+		OSFamily: IdentityOSLinux,
+		OSArch:   "x86_64",
+	}
+	if _, err := cfg.DuplicateProfile(0, "vendor"); err != nil {
+		t.Fatal(err)
+	}
+	index := cfg.ProfileIndex("vendor")
+	cfg.Profiles[index].Ident.OSFamily = IdentityOSUOS
+	cfg.Profiles[index].Ident.ClientVersion = "2.5.16.41"
+	cfg.Profiles[index].Ident.ProcessName = "google-chrome-stable"
 
-	vendor := Profile{Name: "vendor", Client: ProfileIdentity{
-		OSFamily:      IdentityOSUOS,
-		ClientVersion: "2.5.16.41",
-	}}
-	own := Profile{Name: "own"}
-
-	vendorIdentity := cfg.IdentityFor(vendor)
-	if vendorIdentity.OSFamily != IdentityOSUOS {
-		t.Fatalf("vendor family = %q", vendorIdentity.OSFamily)
+	if ua := cfg.Profiles[index].Ident.UserAgentString(); !strings.Contains(ua, "aTrustTray/2.5.16.41") {
+		t.Fatalf("vendor UA = %q", ua)
 	}
-	if !strings.Contains(vendorIdentity.UserAgentString(), "aTrustTray/2.5.16.41") {
-		t.Fatalf("vendor UA = %q", vendorIdentity.UserAgentString())
+	if ua := cfg.Profiles[0].Ident.UserAgentString(); strings.Contains(ua, "aTrustTray") {
+		t.Fatalf("the other account inherited the vendor vocabulary: %q", ua)
 	}
-	if vendorIdentity.DeviceID != cfg.Identity.DeviceID || len(vendorIdentity.MACAddresses) != 1 {
-		t.Fatalf("an account override changed the machine identity: %+v", vendorIdentity)
+	if cfg.Profiles[0].Ident.ProcessName != "" {
+		t.Fatalf("the other account inherited a process block: %q", cfg.Profiles[0].Ident.ProcessName)
 	}
 
-	// The account without an override presents the install identity, which is
-	// the truthful default.
-	ownIdentity := cfg.IdentityFor(own)
-	truthful := cfg.Identity.UserAgentString()
-	if ownIdentity.OSFamily != IdentityOSLinux || ownIdentity.UserAgentString() != truthful {
-		t.Fatalf("own UA = %q, want %q", ownIdentity.UserAgentString(), truthful)
+	// The copy starts as the same device, which is what a second account on one
+	// host means.
+	if got := cfg.Profiles[index].Ident.DeviceID; got != cfg.Profiles[0].Ident.DeviceID {
+		t.Fatalf("copy device id = %q, want the original %q", got, cfg.Profiles[0].Ident.DeviceID)
 	}
-	if strings.Contains(ownIdentity.UserAgentString(), "aTrustTray") {
-		t.Fatalf("an account inherited the vendor vocabulary: %q", ownIdentity.UserAgentString())
+}
+
+// TestAccountsCarryTheirOwnListeners: a listener port is part of a profile, so
+// two accounts may listen on different ones.
+func TestAccountsCarryTheirOwnListeners(t *testing.T) {
+	cfg := Default()
+	if _, err := cfg.DuplicateProfile(0, "second"); err != nil {
+		t.Fatal(err)
+	}
+	index := cfg.ProfileIndex("second")
+	cfg.Profiles[index].Proxy.SOCKS5Bind = "127.0.0.1:2080"
+	cfg.Profiles[index].Proxy.HTTPBind = "127.0.0.1:2081"
+	cfg.Profiles[index].Hand.SetListen("127.0.0.1:2082")
+	cfg.Profiles[index].Log.Verbose = true
+	cfg.Profiles[index].AutoReconnect = true
+
+	if socks5, _ := cfg.Profiles[0].ProxyAddresses(); socks5 != defaultSocksBind {
+		t.Fatalf("the original account moved: %q", socks5)
+	}
+	if got := cfg.Profiles[0].Hand.Address(); got != defaultHandoffBind {
+		t.Fatalf("the original PAC endpoint moved: %q", got)
+	}
+	if cfg.Profiles[0].Log.Verbose || cfg.Profiles[0].AutoReconnect {
+		t.Fatal("a per-account switch leaked into another account")
+	}
+	if socks5, httpBind := cfg.Profiles[index].ProxyAddresses(); socks5 != "127.0.0.1:2080" || httpBind != "127.0.0.1:2081" {
+		t.Fatalf("copy listeners = %q %q", socks5, httpBind)
 	}
 }
 
@@ -1048,112 +1078,152 @@ func TestValidateRejectsAnUnknownAccountFamily(t *testing.T) {
 	cfg := Default()
 	cfg.Profiles[0].Server.Address = "vpn.example.com"
 	cfg.Profiles[0].Auth.Username = "student"
-	cfg.Profiles[0].Client.OSFamily = "beos"
+	cfg.Profiles[0].Ident.OSFamily = "beos"
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("an unknown account os_family was accepted")
 	}
-	cfg.Profiles[0].Client.OSFamily = IdentityOSUOS
+	cfg.Profiles[0].Ident.OSFamily = IdentityOSUOS
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("a known account family was refused: %v", err)
 	}
 }
 
-// TestIdentityForAcceptsTheMachineFields: an account may present itself as a
-// separate device. Empty fields follow [identity], so two accounts that say
-// nothing are still one device.
-func TestIdentityForAcceptsTheMachineFields(t *testing.T) {
+// TestDuplicateKeepsTheDevice: copying an account must not mint a device, or the
+// portal would see one machine as several. Changing the id by hand is how a user
+// asks for a separate device.
+func TestDuplicateKeepsTheDevice(t *testing.T) {
 	cfg := Default()
-	cfg.Identity.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
-	cfg.Identity.MACAddresses = []string{"02:00:5e:10:00:01"}
-
-	separate := Profile{
-		Name: "separate",
-		Client: ProfileIdentity{
-			DeviceID:     "FEDCBA9876543210FEDCBA9876543210",
-			MACAddresses: []string{"02:00:5e:10:00:02"},
-		},
+	cfg.ActiveProfileRef().Ident.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	cfg.ActiveProfileRef().Ident.MACAddresses = []string{"02:00:5e:10:00:01"}
+	if _, err := cfg.DuplicateProfile(0, "copy"); err != nil {
+		t.Fatal(err)
 	}
-	inherited := Profile{Name: "inherited"}
-
-	got := cfg.IdentityFor(separate)
-	if got.DeviceID != "FEDCBA9876543210FEDCBA9876543210" {
-		t.Fatalf("device id = %q, want the account's", got.DeviceID)
+	index := cfg.ProfileIndex("copy")
+	if cfg.Profiles[index].ID == cfg.Profiles[0].ID {
+		t.Fatal("the copy reused the profile id")
 	}
-	if len(got.MACAddresses) != 1 || got.MACAddresses[0] != "02:00:5e:10:00:02" {
-		t.Fatalf("mac = %v, want the account's", got.MACAddresses)
+	if cfg.Profiles[index].Ident.DeviceID != cfg.Profiles[0].Ident.DeviceID {
+		t.Fatalf("copy device id = %q, want %q", cfg.Profiles[index].Ident.DeviceID, cfg.Profiles[0].Ident.DeviceID)
 	}
-
-	base := cfg.IdentityFor(inherited)
-	if base.DeviceID != cfg.Identity.DeviceID || len(base.MACAddresses) != 1 ||
-		base.MACAddresses[0] != "02:00:5e:10:00:01" {
-		t.Fatalf("an account without an override changed the device: %+v", base)
+	if len(cfg.Profiles[index].Ident.MACAddresses) != 1 ||
+		cfg.Profiles[index].Ident.MACAddresses[0] != cfg.Profiles[0].Ident.MACAddresses[0] {
+		t.Fatalf("copy mac = %v", cfg.Profiles[index].Ident.MACAddresses)
 	}
 }
 
-func TestValidateRejectsAnUnreadableAccountIdentity(t *testing.T) {
-	cfg := Default()
-	cfg.Profiles[0].Server.Address = "vpn.example.com"
-	cfg.Profiles[0].Auth.Username = "student"
+// active is the profile a session runs with: every setting lives there now.
+func active(c *Config) *Profile { return c.ActiveProfileRef() }
 
-	cfg.Profiles[0].Client.DeviceID = "not-hex"
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("a device id the portal cannot read was accepted")
-	}
-	cfg.Profiles[0].Client.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("a valid device id was refused: %v", err)
+// TestMigratesASharedSettingsFile: a file from before the split carried one
+// identity, one set of listeners and one log level for the whole install. The
+// migration stamps them into every account, so the first launch after the
+// upgrade presents the device the portal already knows and listens where the
+// applications already point.
+func TestMigratesASharedSettingsFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	raw := `version = 3
+active_profile = "work"
+
+[app]
+autostart = true
+start_hidden = true
+auto_connect = true
+auto_reconnect = false
+
+[proxy]
+socks5_bind = "127.0.0.1:1180"
+http_bind = "127.0.0.1:1181"
+
+[handoff]
+listen = "127.0.0.1:1182"
+
+[logging]
+verbose = true
+
+[identity]
+device_id = "0123456789ABCDEF0123456789ABCDEF"
+mac_addresses = ["02:00:5e:10:00:01"]
+os_family = "uos"
+os_arch = "x86_64"
+
+[[profiles]]
+name = "home"
+[profiles.server]
+address = "vpn.example.com"
+port = 443
+[profiles.auth]
+username = "alice"
+[profiles.debug]
+client_data_path = "/tmp/custom.json"
+
+[[profiles]]
+name = "work"
+[profiles.server]
+address = "vpn.example.com"
+port = 443
+[profiles.auth]
+username = "bob"
+`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
 	}
 
-	cfg.Profiles[0].Client.MACAddresses = []string{"not-a-mac"}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("a hardware address the portal cannot read was accepted")
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("a v3 file was refused: %v", err)
 	}
-	cfg.Profiles[0].Client.MACAddresses = []string{"02:00:5e:10:00:03"}
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("a valid hardware address was refused: %v", err)
+	if cfg.Version != CurrentVersion || cfg.ActiveProfile != "work" || len(cfg.Profiles) != 2 {
+		t.Fatalf("migrated head = %d %q %d", cfg.Version, cfg.ActiveProfile, len(cfg.Profiles))
+	}
+	for _, profile := range cfg.Profiles {
+		if profile.Ident.DeviceID != "0123456789ABCDEF0123456789ABCDEF" {
+			t.Fatalf("%s device id = %q", profile.Name, profile.Ident.DeviceID)
+		}
+		if len(profile.Ident.MACAddresses) != 1 || profile.Ident.MACAddresses[0] != "02:00:5e:10:00:01" {
+			t.Fatalf("%s mac = %v", profile.Name, profile.Ident.MACAddresses)
+		}
+		if profile.Ident.OSFamily != IdentityOSUOS {
+			t.Fatalf("%s family = %q", profile.Name, profile.Ident.OSFamily)
+		}
+		if socks, httpBind := profile.ProxyAddresses(); socks != "127.0.0.1:1180" || httpBind != "127.0.0.1:1181" {
+			t.Fatalf("%s listeners = %q %q", profile.Name, socks, httpBind)
+		}
+		if got := profile.Hand.Address(); got != "127.0.0.1:1182" {
+			t.Fatalf("%s pac = %q", profile.Name, got)
+		}
+		if !profile.Log.Verbose || !profile.App.Autostart || !profile.App.AutoConnect || !profile.App.StartHidden {
+			t.Fatalf("%s app/log = %+v %+v", profile.Name, profile.App, profile.Log)
+		}
 	}
 }
 
-// TestIdentityForAcceptsTheProcessBlock: the tunnel reports the process a
-// connection comes from, and a gateway may key its policy on that name. It is
-// part of how an account presents itself, so it follows the same fallback.
-func TestIdentityForAcceptsTheProcessBlock(t *testing.T) {
-	cfg := Default()
-	cfg.Identity.ProcessName = "goTrust"
-	cfg.Identity.ProcessPath = "/usr/bin/gotrust"
+// A shared file with no hardware address takes one generated value for every
+// account: minting one each would make one machine look like several devices on
+// the first launch after the upgrade.
+func TestMigrationSharesOneGeneratedAddress(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	raw := `version = 3
+[identity]
+device_id = "0123456789ABCDEF0123456789ABCDEF"
+os_family = "linux"
 
-	vendor := Profile{Name: "vendor", Client: ProfileIdentity{
-		ProcessName:    "google-chrome-stable",
-		ProcessPath:    "/usr/bin/google-chrome-stable",
-		ProcessVersion: "120.0",
-	}}
-	own := Profile{Name: "own"}
-
-	got := cfg.IdentityFor(vendor)
-	if got.ProcessName != "google-chrome-stable" || got.ProcessPath != "/usr/bin/google-chrome-stable" || got.ProcessVersion != "120.0" {
-		t.Fatalf("process block = %+v, want the account's", got)
+[[profiles]]
+name = "a"
+[[profiles]]
+name = "b"
+`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
 	}
-
-	base := cfg.IdentityFor(own)
-	if base.ProcessName != "goTrust" || base.ProcessPath != "/usr/bin/gotrust" || base.ProcessVersion != "" {
-		t.Fatalf("process block = %+v, want the install's", base)
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-// TestAutoReconnectBelongsToTheAccount: a full login rotates the device token and
-// drops the account's other clients, which one account may accept and another
-// may not, so the switch cannot be one process-wide value.
-func TestAutoReconnectBelongsToTheAccount(t *testing.T) {
-	cfg := Default()
-	cfg.Profiles[0].AutoReconnect = true
-	if !cfg.Active().AutoReconnect {
-		t.Fatal("the active account's auto_reconnect was lost")
+	first := cfg.Profiles[0].Ident.MACAddresses
+	if len(first) != 1 {
+		t.Fatalf("mac = %v", first)
 	}
-
-	second := NewProfile("other")
-	cfg.Profiles = append(cfg.Profiles, second)
-	cfg.ActiveProfile = second.Name
-	if cfg.Active().AutoReconnect {
-		t.Fatal("an account without the flag inherited another account's setting")
+	if got := cfg.Profiles[1].Ident.MACAddresses; len(got) != 1 || got[0] != first[0] {
+		t.Fatalf("second account mac = %v, want %v", got, first)
 	}
 }

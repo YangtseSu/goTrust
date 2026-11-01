@@ -67,7 +67,7 @@ func Run(configPath string) error {
 	}
 
 	fileLog, logErr := logging.New(logging.Options{
-		Verbose: cfg.Logging.Verbose,
+		Verbose: cfg.Active().Log.Verbose,
 	})
 	if logErr != nil {
 		// A tray app with no log file is still better than no app.
@@ -84,7 +84,7 @@ func Run(configPath string) error {
 		// The aTrust client logs through the standard library's global logger,
 		// so pointing that at the same writer is the whole bridge.
 		log.SetOutput(fileLog)
-		if cfg.Logging.Verbose {
+		if cfg.Active().Log.Verbose {
 			session.SetProtocolDebug(true)
 		}
 	}
@@ -127,7 +127,7 @@ func Run(configPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if listen := strings.TrimSpace(cfg.Handoff.Listen); listen != "" {
+	if listen := cfg.Active().Hand.Address(); listen != "" {
 		pac := handoff.New(listen, application.pacSnapshot, application.logf)
 		if err := pac.Start(ctx); err != nil {
 			application.logf("handoff: %v", err)
@@ -247,7 +247,7 @@ func (a *app) runUI(ctx context.Context) error {
 		a.mu.Unlock()
 		a.reconcileAutostart()
 
-		hidden := a.cfg.App.StartHidden || mygo.App.WasOpenedAtLogin()
+		hidden := a.cfg.Active().App.StartHidden || mygo.App.WasOpenedAtLogin()
 		a.openWindow(hidden)
 		if !a.openTray() {
 			// Without a tray icon a hidden window would leave no way back in.
@@ -293,7 +293,7 @@ func (a *app) runUI(ctx context.Context) error {
 // startup page applies a toggle immediately; this repairs a divergence after a
 // crash or a manual edit.
 func (a *app) reconcileAutostart() {
-	if err := mygo.App.SetOpenAtLogin(a.cfg.App.Autostart); err != nil {
+	if err := mygo.App.SetOpenAtLogin(a.cfg.Active().App.Autostart); err != nil {
 		a.logf("autostart: %v", err)
 	}
 }
@@ -597,9 +597,6 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 				state.Reload(cfg)
 				state.SetStatus(locales.SettingsDiscarded(), false)
 			})
-		},
-		NewProfile: func() {
-			mutate(func(state *gotrustui.SettingsState) { state.AddProfile() })
 		},
 		DuplicateProfile: func() {
 			mutate(func(state *gotrustui.SettingsState) { state.DuplicateProfile() })
@@ -1235,7 +1232,7 @@ func (a *app) releaseProxy() {
 }
 
 func (a *app) startProxy(ctx context.Context, cancel context.CancelFunc) error {
-	socks5, httpBind := a.currentConfig().ProxyAddresses()
+	socks5, httpBind := a.currentConfig().Active().ProxyAddresses()
 
 	// The resolver resolves names inside the tunnel: a SOCKS5 client sends the
 	// hostname, and the system resolver knows nothing about intranet names. The
@@ -1478,7 +1475,7 @@ func (a *app) selectProfile(name string) {
 	a.applyConfig(cfg)
 	if online {
 		a.disconnect()
-		if cfg.App.AutoConnect {
+		if cfg.Active().App.AutoConnect {
 			a.async(a.connect)
 		}
 	}
@@ -1505,7 +1502,7 @@ func (a *app) reconcileProfileSwitch(previous, next config.Config) {
 	a.mu.RUnlock()
 	if online {
 		a.disconnect()
-		if next.App.AutoConnect {
+		if next.Active().App.AutoConnect {
 			a.async(a.connect)
 		}
 	}
@@ -1514,14 +1511,10 @@ func (a *app) reconcileProfileSwitch(previous, next config.Config) {
 // applyClientDataChanges moves or removes the stored account material the saved
 // draft changed. It runs only after the settings file was written: a window
 // closed without saving must leave every file where the stored profiles still
-// point. A profile with a custom client data path owns that file, so the user's
-// choice is never moved or deleted here.
+// point. The path is derived from the name, so a rename moves the file and a
+// deletion removes it.
 func (a *app) applyClientDataChanges(cfg config.Config, changes []gotrustui.ClientDataChange) {
 	for _, change := range changes {
-		if strings.TrimSpace(change.From.Debug.ClientData) != "" ||
-			strings.TrimSpace(change.To.Debug.ClientData) != "" {
-			continue
-		}
 		from, err := cfg.ClientDataPathFor(change.From)
 		if err != nil {
 			a.logf("locate the client data of %q: %v", change.From.Name, err)
@@ -1577,7 +1570,11 @@ func (a *app) setAutostart(on bool) {
 		a.logf("autostart: %v", err)
 		return
 	}
-	a.persistFlag(func(cfg *config.Config) { cfg.App.Autostart = on })
+	a.persistFlag(func(cfg *config.Config) {
+		if index := cfg.ActiveIndex(); index >= 0 {
+			cfg.Profiles[index].App.Autostart = on
+		}
+	})
 	if state != nil {
 		status := locales.AutostartOn()
 		if !on {
@@ -1594,7 +1591,11 @@ func (a *app) setVerbose(on bool) {
 		a.log.SetVerbose(on)
 	}
 	session.SetProtocolDebug(on)
-	a.persistFlag(func(cfg *config.Config) { cfg.Logging.Verbose = on })
+	a.persistFlag(func(cfg *config.Config) {
+		if index := cfg.ActiveIndex(); index >= 0 {
+			cfg.Profiles[index].Log.Verbose = on
+		}
+	})
 }
 
 func (a *app) persistFlag(mutate func(*config.Config)) {
@@ -1733,7 +1734,7 @@ type autoConnectDecision struct {
 }
 
 func decideAutoConnect(cfg config.Config) autoConnectDecision {
-	if !cfg.App.AutoConnect {
+	if !cfg.Active().App.AutoConnect {
 		return autoConnectDecision{}
 	}
 	profile := cfg.Active()
