@@ -11,6 +11,9 @@ const (
 	CodeSMS    CodeKind = "sms"
 	CodeTOTP   CodeKind = "totp"
 	CodeRadius CodeKind = "radius"
+	// CodeDevice asks for the numbers of trusted devices to unbind when the
+	// account has reached its trusted-endpoint limit.
+	CodeDevice CodeKind = "device"
 )
 
 type CodeChallenge struct {

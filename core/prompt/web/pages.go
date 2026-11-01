@@ -44,11 +44,6 @@ type passwordData struct {
 	Rules       []string
 }
 
-type bindData struct {
-	pageData
-	DeviceID string
-}
-
 type methodData struct {
 	pageData
 	Methods []session.AuthMethod
@@ -295,15 +290,6 @@ p { margin: 0; color: #555; }
   {{if .CanSkip}}
   <button type="submit" class="secondary" name="skip" value="1" formnovalidate>{{.T.SkipButton}}</button>
   {{end}}
-</form>
-{{template "foot"}}{{end}}
-
-{{define "bind"}}{{template "head" .}}
-<p class="message">{{.T.BindMessage}}</p>
-<p class="hint">{{.T.DeviceIDLabel}}<span class="mono">{{.DeviceID}}</span></p>
-<form method="post">
-  <button type="submit" name="decision" value="allow">{{.T.AllowBind}}</button>
-  <button type="submit" class="secondary" name="decision" value="deny">{{.T.DenyBind}}</button>
 </form>
 {{template "foot"}}{{end}}
 

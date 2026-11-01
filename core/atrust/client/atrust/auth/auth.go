@@ -59,6 +59,11 @@ type ClientAuthData struct {
 	Cookies           []Cookie        `json:"cookies"`
 	DeviceID          string          `json:"device_id"`
 	ServerVersionInfo json.RawMessage `json:"server_version_info,omitempty"`
+	// MACAddresses is the installation's hardware address as the portal records
+	// it during reportEnv. It is generated once and reused: the portal binds the
+	// trusted endpoint to it, and a fresh value per login makes every login look
+	// like a new device.
+	MACAddresses []string `json:"mac_addresses,omitempty"`
 	// CSRFToken comes from the last authConfig and is what the restore path
 	// (sessionIdExchange) has to send, so a cold restore needs it.
 	CSRFToken string `json:"csrf_token,omitempty"`
@@ -119,6 +124,11 @@ type Session struct {
 	deviceID   string
 	username   string
 	totpSecret string
+	// macAddresses is what reportEnv reports as the installation's hardware
+	// address; signKey is the anti-MITM key reportEnv signs the request with.
+	// Both come from the caller, which stores them with the device id.
+	macAddresses []string
+	signKey      []byte
 
 	baseHost string
 	baseURL  string
@@ -136,9 +146,8 @@ type Session struct {
 	// userAgent is the UA every request of this session carries. It starts as
 	// the package default and a caller may replace it once, before the first
 	// request (see SetUserAgent).
-	userAgent         string
-	challengeHandler  authchallenge.Handler
-	deviceBindHandler DeviceBindHandler
+	userAgent        string
+	challengeHandler authchallenge.Handler
 	// passwordChange is the forced-change demand the password answer carried,
 	// and passwordChangeHandler is how the caller answers it. The notifier is
 	// called only after the portal accepted the new password.
@@ -256,13 +265,13 @@ type AuthInfo struct {
 }
 
 type LoginOptions struct {
-	DeviceID         string
+	DeviceID string
+	// MACAddresses is the installation's hardware address as reportEnv sends
+	// it. The caller generates and stores it once with the device id.
+	MACAddresses     []string
 	Cookies          []Cookie
 	TOTPSecret       string
 	ChallengeHandler authchallenge.Handler
-	// DeviceBindHandler confirms auth/bindAuthDevice. Nil keeps the automatic
-	// answer, which is what a headless caller wants.
-	DeviceBindHandler DeviceBindHandler
 	// PasswordChangeHandler answers a forced password change. Without one, Login
 	// returns a *PasswordChangeRequiredError instead of failing generically.
 	PasswordChangeHandler PasswordChangeHandler
@@ -357,45 +366,89 @@ func (s *Session) GetAuthInfoList() ([]AuthInfo, error) {
 	return list, err
 }
 
+// authStepHandlers is the one list of terminal steps the login loop can run:
+// the loop dispatches through it, and authCheck asks it whether a non-zero
+// answer still names a step worth following. auth/authCheck is absent because
+// the loop runs it itself (it is the loop's re-entry point); auth/token is
+// absent because the portal names it when the list carried no second factor
+// the client can run.
+var authStepHandlers = map[string]func(*Session, authStep) (authStep, error){
+	"auth/sms": func(s *Session, step authStep) (authStep, error) {
+		return s.completeSMS(step)
+	},
+	"auth/customSms": func(s *Session, _ authStep) (authStep, error) {
+		return s.completeCustomSMS()
+	},
+	"auth/totp": func(s *Session, _ authStep) (authStep, error) {
+		return s.completeTOTP()
+	},
+	"auth/radius": func(s *Session, _ authStep) (authStep, error) {
+		return s.completeRadius("auth/token")
+	},
+	"auth/challenge": func(s *Session, _ authStep) (authStep, error) {
+		return s.completeRadius("auth/challenge")
+	},
+	"auth/accessCheck": func(s *Session, _ authStep) (authStep, error) {
+		return s.accessCheck()
+	},
+	"auth/preEnhancedAuth": func(s *Session, step authStep) (authStep, error) {
+		return s.completeEnhancedAuth(step)
+	},
+	"auth/enhancedConfirm": func(s *Session, step authStep) (authStep, error) {
+		return s.completeEnhancedAuth(step)
+	},
+	"auth/enhancedDone": func(s *Session, step authStep) (authStep, error) {
+		return s.completeEnhancedAuth(step)
+	},
+	"auth/bindAuthDevice": func(s *Session, _ authStep) (authStep, error) {
+		return s.bindAuthDevice()
+	},
+	"auth/modifyPwd": func(s *Session, _ authStep) (authStep, error) {
+		return s.completePasswordChange()
+	},
+}
+
+// followableAuthStep reports whether continueAuth can run service: one of the
+// terminal steps above, or authCheck itself, which the loop runs on its own.
+func followableAuthStep(service string) bool {
+	if service == "auth/authCheck" {
+		return true
+	}
+	_, ok := authStepHandlers[service]
+	return ok
+}
+
 func (s *Session) continueAuth(step authStep) error {
-	for attempt := 0; attempt < maxAuthSteps; attempt++ {
+	for range maxAuthSteps {
 		log.DebugPrintf("Continue authentication: service=%s smsMode=%d", step.Service, step.SMSMode)
 
-		var err error
-		switch step.Service {
-		case "":
+		if step.Service == "" {
 			return nil
-		case "auth/authCheck":
-			step, err = s.authCheck()
-		case "auth/sms":
-			step, err = s.completeSMS(step)
-		case "auth/customSms":
-			step, err = s.completeCustomSMS()
-		case "auth/totp":
-			step, err = s.completeTOTP()
-		case "auth/radius":
-			step, err = s.completeRadius("auth/token")
-		case "auth/challenge":
-			step, err = s.completeRadius("auth/challenge")
-		case "auth/accessCheck":
-			step, err = s.accessCheck()
-		case "auth/preEnhancedAuth", "auth/enhancedConfirm", "auth/enhancedDone":
-			step, err = s.completeEnhancedAuth(step)
-		case "auth/bindAuthDevice":
-			step, err = s.bindAuthDevice(step)
-		case "auth/modifyPwd":
-			step, err = s.completePasswordChange()
-		case "auth/token":
-			return fmt.Errorf("token authentication type is missing")
-		default:
-			return fmt.Errorf("unsupported next authentication service: %s", step.Service)
 		}
+		next, err := s.runAuthStep(step)
 		if err != nil {
 			return err
 		}
+		step = next
 	}
 
 	return fmt.Errorf("authentication chain exceeded %d steps", maxAuthSteps)
+}
+
+// runAuthStep runs one step of the chain. authCheck is not a terminal step: the
+// loop runs it to learn the next one.
+func (s *Session) runAuthStep(step authStep) (authStep, error) {
+	if step.Service == "auth/authCheck" {
+		return s.authCheck()
+	}
+	if step.Service == "auth/token" {
+		return authStep{}, fmt.Errorf("token authentication type is missing")
+	}
+	handler, ok := authStepHandlers[step.Service]
+	if !ok {
+		return authStep{}, fmt.Errorf("unsupported next authentication service: %s", step.Service)
+	}
+	return handler(s, step)
 }
 
 func (s *Session) completeSMS(step authStep) (authStep, error) {
@@ -444,9 +497,9 @@ func (s *Session) Login(method LoginMethod, opts LoginOptions) (LoginResult, err
 	}
 
 	s.deviceID = opts.DeviceID
+	s.macAddresses = opts.MACAddresses
 	s.totpSecret = opts.TOTPSecret
 	s.challengeHandler = opts.ChallengeHandler
-	s.deviceBindHandler = opts.DeviceBindHandler
 	s.stateMu.Lock()
 	s.passwordChange = nil
 	s.passwordChangeHandler = opts.PasswordChangeHandler

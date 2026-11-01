@@ -285,36 +285,6 @@ func TestPasswordPageRequiresTheNewAccountName(t *testing.T) {
 	}
 }
 
-func TestBindPage(t *testing.T) {
-	challenge := session.DeviceBindChallenge{DeviceID: "device-0001", AuthID: "auth-1"}
-	p := newBindPage(challenge, testToken, english)
-
-	body := getPage(p.mux, "/"+testToken+"/").Body.String()
-	for _, want := range []string{"device-0001", `value="allow"`, `value="deny"`} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("page = %q, want %q", body, want)
-		}
-	}
-	if code := postForm(p.mux, "/"+testToken+"/", url.Values{"decision": {"maybe"}}).Code; code != http.StatusBadRequest {
-		t.Fatalf("bad decision = %d", code)
-	}
-	if code := postForm(p.mux, "/"+testToken+"/", url.Values{"decision": {"allow"}}).Code; code != http.StatusOK {
-		t.Fatalf("allow = %d", code)
-	}
-	allowed, ok := answered(p)
-	if !ok || !allowed {
-		t.Fatalf("answer = %v ok=%v", allowed, ok)
-	}
-
-	deny := newBindPage(challenge, testToken, english)
-	if code := postForm(deny.mux, "/"+testToken+"/", url.Values{"decision": {"deny"}}).Code; code != http.StatusOK {
-		t.Fatalf("deny = %d", code)
-	}
-	if allowed, ok := answered(deny); !ok || allowed {
-		t.Fatalf("answer = %v ok=%v", allowed, ok)
-	}
-}
-
 func TestMethodPage(t *testing.T) {
 	methods := []session.AuthMethod{
 		{Name: "Password", Type: "auth/psw", Domain: "local"},

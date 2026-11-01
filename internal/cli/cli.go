@@ -164,12 +164,11 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 	prompter := web.New(promptOptions)
 
 	manager := session.New(session.Options{
-		Config:            func() config.Config { return cfg },
-		Logf:              logf,
-		Prompt:            prompter.Handler,
-		ChooseAuth:        prompter.ChooseAuth,
-		ChangePassword:    prompter.ChangePassword,
-		ConfirmDeviceBind: prompter.ConfirmDeviceBind,
+		Config:         func() config.Config { return cfg },
+		Logf:           logf,
+		Prompt:         prompter.Handler,
+		ChooseAuth:     prompter.ChooseAuth,
+		ChangePassword: prompter.ChangePassword,
 		// A forced change leaves the pending login unusable, so the manager
 		// retries with this credential. The retry reads Config, which is why
 		// the new password is stored before it runs.

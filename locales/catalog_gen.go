@@ -1140,26 +1140,6 @@ func (msgs Messages) CallbackField() string {
 	return Catalog.Format(msgs.locale, "callbackField", nil)
 }
 
-// BindTitle says "绑定此设备"
-// in the language the app shows.
-func BindTitle() string { return In(i18n.Locale()).BindTitle() }
-
-// BindTitle says "绑定此设备"
-// in the language of msgs.
-func (msgs Messages) BindTitle() string {
-	return Catalog.Format(msgs.locale, "bindTitle", nil)
-}
-
-// BindHint says "网关要求把这台设备绑定到当前账号。确认后，它会出现在终端管理的设备列表中。"
-// in the language the app shows.
-func BindHint() string { return In(i18n.Locale()).BindHint() }
-
-// BindHint says "网关要求把这台设备绑定到当前账号。确认后，它会出现在终端管理的设备列表中。"
-// in the language of msgs.
-func (msgs Messages) BindHint() string {
-	return Catalog.Format(msgs.locale, "bindHint", nil)
-}
-
 // DeviceID says "设备标识"
 // in the language the app shows.
 func DeviceID() string { return In(i18n.Locale()).DeviceID() }
@@ -1168,16 +1148,6 @@ func DeviceID() string { return In(i18n.Locale()).DeviceID() }
 // in the language of msgs.
 func (msgs Messages) DeviceID() string {
 	return Catalog.Format(msgs.locale, "deviceID", nil)
-}
-
-// BindAllow says "允许绑定"
-// in the language the app shows.
-func BindAllow() string { return In(i18n.Locale()).BindAllow() }
-
-// BindAllow says "允许绑定"
-// in the language of msgs.
-func (msgs Messages) BindAllow() string {
-	return Catalog.Format(msgs.locale, "bindAllow", nil)
 }
 
 // ChoiceTitle says "选择认证方式"
@@ -2958,16 +2928,6 @@ func (msgs Messages) ChooseMethod() string {
 	return Catalog.Format(msgs.locale, "chooseMethod", nil)
 }
 
-// BindRequested says "网关要求绑定此设备"
-// in the language the app shows.
-func BindRequested() string { return In(i18n.Locale()).BindRequested() }
-
-// BindRequested says "网关要求绑定此设备"
-// in the language of msgs.
-func (msgs Messages) BindRequested() string {
-	return Catalog.Format(msgs.locale, "bindRequested", nil)
-}
-
 // PasswordRequested says "网关要求重置密码"
 // in the language the app shows.
 func PasswordRequested() string { return In(i18n.Locale()).PasswordRequested() }
@@ -3390,4 +3350,104 @@ func AboutTagline() string { return In(i18n.Locale()).AboutTagline() }
 // in the language of msgs.
 func (msgs Messages) AboutTagline() string {
 	return Catalog.Format(msgs.locale, "aboutTagline", nil)
+}
+
+// CodeTitleDevice says "解绑已信任设备"
+// in the language the app shows.
+func CodeTitleDevice() string { return In(i18n.Locale()).CodeTitleDevice() }
+
+// CodeTitleDevice says "解绑已信任设备"
+// in the language of msgs.
+func (msgs Messages) CodeTitleDevice() string {
+	return Catalog.Format(msgs.locale, "codeTitleDevice", nil)
+}
+
+// CodeFieldDevice says "设备编号"
+// in the language the app shows.
+func CodeFieldDevice() string { return In(i18n.Locale()).CodeFieldDevice() }
+
+// CodeFieldDevice says "设备编号"
+// in the language of msgs.
+func (msgs Messages) CodeFieldDevice() string {
+	return Catalog.Format(msgs.locale, "codeFieldDevice", nil)
+}
+
+// CodePlaceholderDevice says "例如 2，或 1, 3"
+// in the language the app shows.
+func CodePlaceholderDevice() string { return In(i18n.Locale()).CodePlaceholderDevice() }
+
+// CodePlaceholderDevice says "例如 2，或 1, 3"
+// in the language of msgs.
+func (msgs Messages) CodePlaceholderDevice() string {
+	return Catalog.Format(msgs.locale, "codePlaceholderDevice", nil)
+}
+
+// KeepAliveDirect says "直连（未续期）· {target}"
+// in the language the app shows.
+func KeepAliveDirect(target string) string { return In(i18n.Locale()).KeepAliveDirect(target) }
+
+// KeepAliveDirect says "直连（未续期）· {target}"
+// in the language of msgs.
+func (msgs Messages) KeepAliveDirect(target string) string {
+	return Catalog.Format(msgs.locale, "keepAliveDirect", map[string]any{"target": target})
+}
+
+// ResetLoginData says "重置登录数据"
+// in the language the app shows.
+func ResetLoginData() string { return In(i18n.Locale()).ResetLoginData() }
+
+// ResetLoginData says "重置登录数据"
+// in the language of msgs.
+func (msgs Messages) ResetLoginData() string {
+	return Catalog.Format(msgs.locale, "resetLoginData", nil)
+}
+
+// ResetLoginDataDesc says "删除此账号已保存的 Cookie、签名密钥和恢复票据"
+// in the language the app shows.
+func ResetLoginDataDesc() string { return In(i18n.Locale()).ResetLoginDataDesc() }
+
+// ResetLoginDataDesc says "删除此账号已保存的 Cookie、签名密钥和恢复票据"
+// in the language of msgs.
+func (msgs Messages) ResetLoginDataDesc() string {
+	return Catalog.Format(msgs.locale, "resetLoginDataDesc", nil)
+}
+
+// ResetLoginDataConfirm says "确认删除"
+// in the language the app shows.
+func ResetLoginDataConfirm() string { return In(i18n.Locale()).ResetLoginDataConfirm() }
+
+// ResetLoginDataConfirm says "确认删除"
+// in the language of msgs.
+func (msgs Messages) ResetLoginDataConfirm() string {
+	return Catalog.Format(msgs.locale, "resetLoginDataConfirm", nil)
+}
+
+// ResetLoginDataDone says "已删除保存的登录数据"
+// in the language the app shows.
+func ResetLoginDataDone() string { return In(i18n.Locale()).ResetLoginDataDone() }
+
+// ResetLoginDataDone says "已删除保存的登录数据"
+// in the language of msgs.
+func (msgs Messages) ResetLoginDataDone() string {
+	return Catalog.Format(msgs.locale, "resetLoginDataDone", nil)
+}
+
+// ResetLoginDataFailed says "删除保存的登录数据失败：{error}"
+// in the language the app shows.
+func ResetLoginDataFailed(error string) string { return In(i18n.Locale()).ResetLoginDataFailed(error) }
+
+// ResetLoginDataFailed says "删除保存的登录数据失败：{error}"
+// in the language of msgs.
+func (msgs Messages) ResetLoginDataFailed(error string) string {
+	return Catalog.Format(msgs.locale, "resetLoginDataFailed", map[string]any{"error": error})
+}
+
+// ResetLoginDataAction says "重置"
+// in the language the app shows.
+func ResetLoginDataAction() string { return In(i18n.Locale()).ResetLoginDataAction() }
+
+// ResetLoginDataAction says "重置"
+// in the language of msgs.
+func (msgs Messages) ResetLoginDataAction() string {
+	return Catalog.Format(msgs.locale, "resetLoginDataAction", nil)
 }

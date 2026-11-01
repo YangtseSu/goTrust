@@ -33,6 +33,9 @@ const (
 	CodeTOTP = authchallenge.CodeTOTP
 	// CodeRadius is a RADIUS/token-server passcode.
 	CodeRadius = authchallenge.CodeRadius
+	// CodeDevice is the trusted-device list: the account reached its limit and
+	// numbers from this list have to be unbound before the login continues.
+	CodeDevice = authchallenge.CodeDevice
 )
 
 // The challenge and response values are aliases, not copies: Prompter is the

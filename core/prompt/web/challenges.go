@@ -166,27 +166,6 @@ func newPasswordPage(challenge session.PasswordChangeChallenge, token string, t 
 	return p
 }
 
-// newBindPage asks whether the portal may bind this installation.
-func newBindPage(challenge session.DeviceBindChallenge, token string, t texts) *page[bool] {
-	p := newPage[bool](token)
-	addForm(p, t, func(failure string) []byte {
-		return renderPage("bind", bindData{
-			pageData: pageData{T: t, Title: t.BindTitle, Failure: failure},
-			DeviceID: challenge.DeviceID,
-		})
-	}, func(r *http.Request) (bool, error) {
-		switch r.FormValue("decision") {
-		case "allow":
-			return true, nil
-		case "deny":
-			return false, nil
-		default:
-			return false, errors.New(t.DecisionEmpty)
-		}
-	})
-	return p
-}
-
 // newMethodPage lists the methods the gateway offers.
 func newMethodPage(methods []session.AuthMethod, token string, t texts) *page[session.AuthMethod] {
 	p := newPage[session.AuthMethod](token)
@@ -214,6 +193,8 @@ func codeLabel(kind authchallenge.CodeKind, t texts) string {
 		return t.CodeTOTP
 	case authchallenge.CodeRadius:
 		return t.CodeRadius
+	case authchallenge.CodeDevice:
+		return t.CodeDevice
 	default:
 		return t.CodeGeneric
 	}

@@ -162,6 +162,12 @@ func (s *Session) authConfigContext(ctx context.Context, mod, needTicket, refres
 	if re.Data.AntiReplayRand != "" {
 		s.antiReplayRand = re.Data.AntiReplayRand
 	}
+	// reportEnv signs its request with the key this answer carries, using the
+	// same derivation the anti-MITM handshake uses. It is derived from every
+	// answer, including one without anti-MITM data, because a gateway that
+	// checks the header and one that ignores it must both see the same
+	// deterministic value.
+	s.signKey = antiMITMSignatureKey(re.Data.AntiMITM)
 	s.stateMu.Unlock()
 
 	isLogin := 0
@@ -264,7 +270,7 @@ func (s *Session) performAntiMITMRequestContext(ctx context.Context, data antiMI
 func (s *Session) reportEnv() error {
 	log.Println("Perform POST /controller/v1/public/reportEnv")
 
-	u := s.baseURL + "/controller/v1/public/reportEnv"
+	const endpointPath = "/controller/v1/public/reportEnv"
 
 	if s.ticket == "" {
 		return fmt.Errorf("ticket is empty")
@@ -279,16 +285,24 @@ func (s *Session) reportEnv() error {
 				"device": map[string]interface{}{
 					"type": "browser",
 				},
+				"mac_addresses": s.macAddresses,
 			},
 		},
 	}
 	body, _ := json.Marshal(payload)
 	log.DebugPrintf("Sending report env: %s", string(body))
-	req, _ := http.NewRequest("POST", u+"?"+WithSharedParams(nil).Encode(), bytes.NewReader(body))
+	signPath := endpointPath + "?" + WithSharedParams(nil).Encode()
+	req, _ := http.NewRequest("POST", s.baseURL+signPath, bytes.NewReader(body))
 	req.Header.Set("User-Agent", s.userAgent)
 	req.Header.Set("Content-Type", "application/json;charset=utf-8")
 	req.Header.Set("x-csrf-token", s.csrfToken)
 	req.Header.Set("x-sdp-traceid", s.randSdpId())
+	// The signature covers the path with its query and then the body, which is
+	// what the portal's anti-MITM check reads back.
+	s.stateMu.Lock()
+	signKey := s.signKey
+	s.stateMu.Unlock()
+	req.Header.Set("X-Request-Sig", antiMITMHMAC(signKey, append([]byte(signPath), body...)))
 
 	resp, err := s.request(req)
 	if err != nil {
@@ -429,12 +443,20 @@ func (s *Session) authCheck() (authStep, error) {
 	}
 	log.DebugPrintf("Parsed auth check: %+v", ac)
 
+	// A strict gateway answers a non-zero code and still names the step that
+	// finishes the login: the trusted-device bind is announced this way, with
+	// 75500503. Follow a step the loop can run; a code without one is the
+	// portal refusing, and its message is the reason.
+	step := authStepFromData(ac.Data)
 	if ac.Code != 0 {
-		return authStep{}, fmt.Errorf("authCheck failed with code %d: %s", ac.Code, ac.Message)
+		if !followableAuthStep(step.Service) {
+			return authStep{}, &PortalCodeError{Op: "authCheck", Code: ac.Code, Message: ac.Message}
+		}
+		log.Printf("authCheck answered code %d and named %s; following it", ac.Code, step.Service)
 	}
 
-	s.capturePasswordChange(ac.Data.NextService, ac.Data.passwordChangeData, s.loginUsername(), s.loginDomain)
-	return authStepFromData(ac.Data), nil
+	s.capturePasswordChange(step.Service, ac.Data.passwordChangeData, s.loginUsername(), s.loginDomain)
+	return step, nil
 }
 
 func (s *Session) phoneNumber(authID string) ([]string, error) {

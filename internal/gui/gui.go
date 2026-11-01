@@ -118,9 +118,8 @@ func Run(configPath string) error {
 		Prompt: func(ctx context.Context) session.Prompter {
 			return &uiPrompter{app: application, ctx: ctx}
 		},
-		ChooseAuth:        application.chooseAuth,
-		ChangePassword:    application.changePasswordPrompt,
-		ConfirmDeviceBind: application.confirmDeviceBind,
+		ChooseAuth:     application.chooseAuth,
+		ChangePassword: application.changePasswordPrompt,
 	}
 	sessionOptions.OnPasswordChanged = application.storeChangedPassword
 	application.manager = session.New(sessionOptions)
@@ -189,12 +188,11 @@ type app struct {
 	// captcha is the reply channel of the challenge the window is showing,
 	// nil when no login waits on the user. code, external and choice are the
 	// same for a one-time code, an SSO callback and the method chooser.
-	captcha    chan captchaResult
-	code       chan codeResult
-	external   chan externalResult
-	choice     chan choiceResult
-	password   chan passwordResult
-	deviceBind chan deviceBindResult
+	captcha  chan captchaResult
+	code     chan codeResult
+	external chan externalResult
+	choice   chan choiceResult
+	password chan passwordResult
 	// browser opens a URL; nil uses the desktop's default browser. Tests
 	// replace it because opening a browser is a visible side effect.
 	browser func(string) error
@@ -476,19 +474,15 @@ func (a *app) actions() gotrustui.Actions {
 		SubmitCaptcha:   a.submitCaptcha,
 		CancelCaptcha:   func() { a.cancelCaptcha(errors.New("captcha cancelled")) },
 
-		SubmitCode:      a.submitCode,
-		CancelCode:      func() { a.cancelCode(errors.New("code cancelled")) },
-		OpenExternal:    a.openExternal,
-		SubmitExternal:  a.submitExternal,
-		CancelExternal:  func() { a.cancelExternal(errors.New("external login cancelled")) },
-		ChooseAuth:      a.chooseAuthIndex,
-		CancelChoice:    func() { a.cancelChoice(errors.New("authentication method cancelled")) },
-		SubmitPassword:  a.submitPassword,
-		CancelPassword:  func() { a.cancelPassword(errors.New("password change cancelled")) },
-		AllowDeviceBind: a.allowDeviceBind,
-		CancelDeviceBind: func() {
-			a.cancelDeviceBind(errors.New("device binding cancelled"))
-		},
+		SubmitCode:     a.submitCode,
+		CancelCode:     func() { a.cancelCode(errors.New("code cancelled")) },
+		OpenExternal:   a.openExternal,
+		SubmitExternal: a.submitExternal,
+		CancelExternal: func() { a.cancelExternal(errors.New("external login cancelled")) },
+		ChooseAuth:     a.chooseAuthIndex,
+		CancelChoice:   func() { a.cancelChoice(errors.New("authentication method cancelled")) },
+		SubmitPassword: a.submitPassword,
+		CancelPassword: func() { a.cancelPassword(errors.New("password change cancelled")) },
 
 		OpenResource: a.openURL,
 		CopyResource: a.copyResource,

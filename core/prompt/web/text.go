@@ -57,20 +57,14 @@ type texts struct {
 	PasswordMismatch  string
 	NewUsernameEmpty  string
 
-	BindTitle     string
-	BindMessage   string
-	DeviceIDLabel string
-	AllowBind     string
-	DenyBind      string
-
 	MethodTitle   string
 	MethodMessage string
-	DecisionEmpty string
 	MethodEmpty   string
 
 	CodeSMS     string
 	CodeTOTP    string
 	CodeRadius  string
+	CodeDevice  string
 	CodeGeneric string
 	CodeMessage string
 
@@ -136,20 +130,14 @@ var chinese = texts{
 	PasswordMismatch:  "两次输入的新密码不一致",
 	NewUsernameEmpty:  "请输入新账号名",
 
-	BindTitle:     "绑定此设备",
-	BindMessage:   "网关要求把这台设备绑定到当前账号。绑定后它出现在终端管理里。",
-	DeviceIDLabel: "设备 ID：",
-	AllowBind:     "允许绑定",
-	DenyBind:      "拒绝",
-
 	MethodTitle:   "选择认证方式",
 	MethodMessage: "网关提供多种认证方式，请选择一种。",
-	DecisionEmpty: "请选择允许或拒绝",
 	MethodEmpty:   "请选择一种认证方式",
 
 	CodeSMS:     "短信验证码",
 	CodeTOTP:    "动态口令",
 	CodeRadius:  "令牌口令",
+	CodeDevice:  "设备编号",
 	CodeGeneric: "验证码",
 	CodeMessage: "网关要求输入一次性的%s。",
 
@@ -215,20 +203,14 @@ var english = texts{
 	PasswordMismatch:  "The new passwords do not match",
 	NewUsernameEmpty:  "Enter the new username",
 
-	BindTitle:     "Bind this device",
-	BindMessage:   "The gateway asks to bind this device to your account. It then appears in Terminals.",
-	DeviceIDLabel: "Device ID: ",
-	AllowBind:     "Allow",
-	DenyBind:      "Deny",
-
 	MethodTitle:   "Choose a sign-in method",
 	MethodMessage: "The gateway offers several methods; choose one.",
-	DecisionEmpty: "Choose allow or deny",
 	MethodEmpty:   "Choose a sign-in method",
 
 	CodeSMS:     "SMS code",
 	CodeTOTP:    "authenticator code",
 	CodeRadius:  "token code",
+	CodeDevice:  "device number",
 	CodeGeneric: "code",
 	CodeMessage: "The gateway asks for a one-time %s.",
 

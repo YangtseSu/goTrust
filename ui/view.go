@@ -77,9 +77,6 @@ type State struct {
 	Code     *CodePrompt
 	External *ExternalLogin
 	Choice   *AuthChoice
-	// DeviceBind is the gateway's device-binding request, shown before the
-	// login continues.
-	DeviceBind *DeviceBindPrompt
 	// Password is the gateway's forced password change, shown in the same slot.
 	Password *PasswordPrompt
 }
@@ -139,10 +136,6 @@ type Actions struct {
 	// ChooseAuth picks one of the offered authentication methods by index.
 	ChooseAuth   func(int)
 	CancelChoice func()
-	// AllowDeviceBind confirms the gateway's device-binding request; cancel
-	// abandons the login.
-	AllowDeviceBind  func()
-	CancelDeviceBind func()
 	// SubmitPassword answers the forced password change; CancelPassword
 	// abandons the login.
 	SubmitPassword func()
@@ -349,8 +342,6 @@ func panelBody(c *ui.Context, state *State, actions Actions) {
 			panelSlot(c, state, func() { codePanel(c, state, actions) })
 		case state.External != nil:
 			panelSlot(c, state, func() { externalPanel(c, state, actions) })
-		case state.DeviceBind != nil:
-			panelSlot(c, state, func() { deviceBindPanel(c, state, actions) })
 		case state.Password != nil:
 			panelSlot(c, state, func() { passwordPanel(c, state, actions) })
 		}
@@ -419,7 +410,7 @@ func windowShortcuts(c *ui.Context, state *State, actions Actions, searchFocus *
 // panelOpen reports whether a pre-login panel owns the window body.
 func panelOpen(state *State) bool {
 	return state.Choice != nil || state.Captcha != nil || state.Code != nil ||
-		state.External != nil || state.DeviceBind != nil || state.Password != nil
+		state.External != nil || state.Password != nil
 }
 
 // panelCancel is the way out of the panel on screen, in the order View shows
@@ -434,8 +425,6 @@ func panelCancel(state *State, actions Actions) func() {
 		return actions.CancelCode
 	case state.External != nil:
 		return actions.CancelExternal
-	case state.DeviceBind != nil:
-		return actions.CancelDeviceBind
 	case state.Password != nil:
 		return actions.CancelPassword
 	default:

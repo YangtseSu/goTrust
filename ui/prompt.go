@@ -48,6 +48,8 @@ func CodeTitle(kind session.CodeKind) string {
 		return locales.CodeTitleTOTP()
 	case session.CodeRadius:
 		return locales.CodeTitleRadius()
+	case session.CodeDevice:
+		return locales.CodeTitleDevice()
 	default:
 		return locales.CodeTitleGeneric()
 	}
@@ -78,15 +80,6 @@ func ExternalTitle(kind session.ExternalKind) string {
 // shown when several are offered and the profile stores none.
 type AuthChoice struct {
 	Methods []session.AuthMethod
-}
-
-// DeviceBindPrompt asks whether the portal may bind this installation to the
-// account. Binding is a user decision; a gateway without the step never shows
-// it.
-type DeviceBindPrompt struct {
-	DeviceID string
-	AuthID   string
-	Message  string
 }
 
 // MethodLabel is how a method is named in the chooser and on the account page.
@@ -125,8 +118,12 @@ func codePanel(c *ui.Context, state *State, actions Actions) {
 		})
 
 		formColumn(c, func() {
-			formField(c, locales.CodeField(), func() {
-				ui.TextInput(c, &prompt.Code).Placeholder(locales.CodePlaceholder()).
+			field, placeholder := locales.CodeField(), locales.CodePlaceholder()
+			if prompt.Kind == session.CodeDevice {
+				field, placeholder = locales.CodeFieldDevice(), locales.CodePlaceholderDevice()
+			}
+			formField(c, field, func() {
+				ui.TextInput(c, &prompt.Code).Placeholder(placeholder).
 					OnSubmit(func() {
 						if prompt.CanSubmit() && actions.SubmitCode != nil {
 							actions.SubmitCode()
@@ -193,38 +190,6 @@ func externalPanel(c *ui.Context, state *State, actions Actions) {
 			if ui.PrimaryButton(c, locales.CommonSubmit()).Disabled(strings.TrimSpace(prompt.Callback) == "").Clicked() &&
 				actions.SubmitExternal != nil {
 				actions.SubmitExternal()
-			}
-		})
-	})
-}
-
-// deviceBindPanel confirms a gateway device-binding request. Binding is what
-// puts this installation in Terminals as a trusted device, so it is a decision,
-// not a silent answer.
-func deviceBindPanel(c *ui.Context, state *State, actions Actions) {
-	prompt := state.DeviceBind
-
-	panelCard(c).Children(func() {
-		ui.Column(c).Gap(6).Children(func() {
-			panelHeading(c, locales.BindTitle())
-			caption(c, locales.BindHint())
-			if prompt.Message != "" {
-				caption(c, prompt.Message)
-			}
-		})
-
-		if prompt.DeviceID != "" {
-			formColumn(c, func() {
-				formField(c, locales.DeviceID(), func() {
-					ui.Text(c, prompt.DeviceID).FontSize(textSize(c, captionScale)).
-						TextColor(c.Theme().TextMuted)
-				})
-			})
-		}
-
-		panelActions(c, actions.CancelDeviceBind, func() {
-			if ui.PrimaryButton(c, locales.BindAllow()).Clicked() && actions.AllowDeviceBind != nil {
-				actions.AllowDeviceBind()
 			}
 		})
 	})

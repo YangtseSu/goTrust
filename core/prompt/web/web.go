@@ -111,14 +111,6 @@ func (p *Prompter) ChangePassword(ctx context.Context, challenge session.Passwor
 	})
 }
 
-// ConfirmDeviceBind is session.Options.ConfirmDeviceBind: binding is the
-// person's decision, so the login waits for the page.
-func (p *Prompter) ConfirmDeviceBind(ctx context.Context, challenge session.DeviceBindChallenge) (bool, error) {
-	return ask(ctx, p, "", func(token string) *page[bool] {
-		return newBindPage(challenge, token, p.texts)
-	})
-}
-
 func (a *attempt) HandleCodeChallenge(challenge authchallenge.CodeChallenge) (authchallenge.CodeResponse, error) {
 	return ask(a.ctx, a.prompter, "", func(token string) *page[authchallenge.CodeResponse] {
 		return newCodePage(challenge, token, a.prompter.texts)
