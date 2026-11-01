@@ -338,5 +338,7 @@
   "resetLoginDataConfirm": "确认删除",
   "resetLoginDataDone": "已删除保存的登录数据",
   "resetLoginDataFailed": "删除保存的登录数据失败：{error}",
-  "resetLoginDataAction": "重置"
+  "resetLoginDataAction": "重置",
+  "profileCreatedDevice": "已新建 {name}，网关会视其为新设备；保存后生效",
+  "accountNewHint": "“新建”创建的账户会被网关视为另一台设备；用同一台机器登录另一个账号请用“复制”。"
 }

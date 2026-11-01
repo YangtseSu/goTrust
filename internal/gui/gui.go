@@ -598,6 +598,9 @@ func (a *app) settingsActions() gotrustui.SettingsActions {
 				state.SetStatus(locales.SettingsDiscarded(), false)
 			})
 		},
+		NewProfile: func() {
+			mutate(func(state *gotrustui.SettingsState) { state.NewProfile() })
+		},
 		DuplicateProfile: func() {
 			mutate(func(state *gotrustui.SettingsState) { state.DuplicateProfile() })
 		},

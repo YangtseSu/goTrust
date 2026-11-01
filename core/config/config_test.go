@@ -1227,3 +1227,51 @@ name = "b"
 		t.Fatalf("second account mac = %v, want %v", got, first)
 	}
 }
+
+// TestNewAccountIsASeparateDevice: a blank account is an unrelated one, so it
+// presents a device of its own. Copying is what gives a second account on the
+// same machine the same device.
+func TestNewAccountIsASeparateDevice(t *testing.T) {
+	cfg := Default()
+	cfg.ActiveProfileRef().Ident.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	cfg.ActiveProfileRef().Ident.MACAddresses = []string{"02:00:5e:10:00:01"}
+	cfg.ActiveProfileRef().Proxy = ProxyConfig{SOCKS5Bind: "127.0.0.1:2080", HTTPBind: "127.0.0.1:2081"}
+	cfg.EnsureIdentity()
+
+	if _, err := cfg.NewProfileNamed("other"); err != nil {
+		t.Fatal(err)
+	}
+	index := cfg.ProfileIndex("other")
+	if index < 0 || cfg.ActiveProfile != "other" {
+		t.Fatalf("profiles = %v active = %q", cfg.ProfileNames(), cfg.ActiveProfile)
+	}
+	blank := cfg.Profiles[index]
+	if blank.Ident.DeviceID != "" || len(blank.Ident.MACAddresses) != 0 {
+		t.Fatalf("a blank account came with an identity: %+v", blank.Ident)
+	}
+	// The listeners carry over, so switching to the new account does not move
+	// the ports an application already points at.
+	if socks, httpBind := blank.ProxyAddresses(); socks != "127.0.0.1:2080" || httpBind != "127.0.0.1:2081" {
+		t.Fatalf("listeners = %q %q, want the current account's", socks, httpBind)
+	}
+
+	// Filling it in is what makes it a device, and it is a different one.
+	cfg.EnsureIdentity()
+	minted := cfg.Profiles[cfg.ProfileIndex("other")].Ident
+	if minted.DeviceID == cfg.Profiles[0].Ident.DeviceID {
+		t.Fatal("the new account reused the first account's device")
+	}
+	if len(minted.MACAddresses) != 1 || minted.MACAddresses[0] == cfg.Profiles[0].Ident.MACAddresses[0] {
+		t.Fatalf("the new account reused the first account's address: %v", minted.MACAddresses)
+	}
+}
+
+func TestNewAccountRefusesADuplicateName(t *testing.T) {
+	cfg := Default()
+	if _, err := cfg.NewProfileNamed(DefaultProfileName); err == nil {
+		t.Fatal("a duplicate name was accepted")
+	}
+	if _, err := cfg.NewProfileNamed("  "); err == nil {
+		t.Fatal("an empty name was accepted")
+	}
+}

@@ -883,6 +883,31 @@ func (c Config) ProfileNames() []string {
 	return names
 }
 
+// NewProfileNamed appends an account with default settings and its own device
+// identity, and makes it active. The new account presents a separate device to
+// the portal, which is what an unrelated account is; an account that should look
+// like the one already configured is added by copying it instead.
+func (c *Config) NewProfileNamed(name string) (int, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return -1, errors.New("the profile name is empty")
+	}
+	if c.ProfileIndex(name) >= 0 {
+		return -1, fmt.Errorf("profile %q already exists", name)
+	}
+	profile := NewProfile(name)
+	// A blank account starts with the listeners the current one uses, so
+	// switching to it does not move the ports an application already points at.
+	// The identity is left to EnsureIdentity, which mints a new device.
+	if active := c.ActiveProfileRef(); active != nil {
+		profile.Proxy = active.Proxy
+		profile.Hand = active.Hand
+	}
+	c.Profiles = append(c.Profiles, profile)
+	c.ActiveProfile = name
+	return len(c.Profiles) - 1, nil
+}
+
 // DuplicateProfile copies the profile at index under newName.
 func (c *Config) DuplicateProfile(index int, newName string) (int, error) {
 	if index < 0 || index >= len(c.Profiles) {

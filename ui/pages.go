@@ -410,10 +410,14 @@ func profilesPage(c *ui.Context, state *State, actions Actions) {
 					ui.TextInput(c, &settings.NameText)
 				})
 			})
+			// The two ways to add an account differ in what the gateway sees:
+			// New mints a device, Duplicate keeps the one already configured.
+			caption(c, locales.AccountNewHint())
 			ui.Row(c).Wrap().AlignItems(ui.Center).Gap(rowGap).Children(func() {
-				// Copy is the only way to add an account. A blank one would have
-				// to mint a device of its own, and an account the user just
-				// created has no reason to look like a second machine.
+				if ui.Button(c, locales.ProfileNew()).Description(locales.AccountNewHint()).Clicked() &&
+					actions.Settings.NewProfile != nil {
+					actions.Settings.NewProfile()
+				}
 				if ui.Button(c, locales.ProfileDuplicate()).Clicked() && actions.Settings.DuplicateProfile != nil {
 					actions.Settings.DuplicateProfile()
 				}

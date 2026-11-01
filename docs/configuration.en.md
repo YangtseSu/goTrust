@@ -71,10 +71,17 @@ belongs to a profile. The global section holds only the file's own framing.
 Two accounts may therefore listen on different ports, log at different levels
 and present different clients; the ones in use are always the active account's.
 
-Copies are the only way to add an account (Settings → Profiles → Copy). A copy
-keeps the identity of the account it came from, so a second account on one
-machine is still one device to the portal. Change `device_id` by hand to make an
-account a separate device.
+There are two ways to add an account (Settings → Profiles), and they differ in
+what the gateway sees:
+
+| Action | Device the portal records |
+|---|---|
+| New | A new device. The account gets its own `device_id` and hardware address on its first login, so the portal counts it as another machine |
+| Duplicate | The device of the account it was copied from. Signing in to a second account from the same machine is one device to the portal, and the copy shares its `device_id` and hardware address |
+
+Use New only for an account that really is another machine. Use Duplicate for a
+second account on this one, then change the username and password. To turn a
+copy into a separate device, edit `device_id` and `mac_addresses` by hand.
 
 ## Field descriptions
 

@@ -150,8 +150,9 @@ type SettingsActions struct {
 	Save func()
 	// Discard throws the draft away and shows the saved settings again.
 	Discard func()
-	// DuplicateProfile adds an account by copying the selected one; there is no
-	// blank-new entry point, because a blank account would present a new device.
+	// NewProfile adds an account that presents a new device; DuplicateProfile
+	// copies the selected one, so the portal sees the same device.
+	NewProfile       func()
 	DuplicateProfile func()
 	DeleteProfile    func()
 	SelectProfile    func(int)
@@ -388,6 +389,23 @@ func (s *SettingsState) Target() (config.Profile, error) {
 	target.Server.Address = address
 	target.Server.Port = port
 	return target, nil
+}
+
+// NewProfile appends a blank account and selects it. The account presents a
+// separate device to the portal: it is for an unrelated account, not for a
+// second one on the same machine (that is DuplicateProfile).
+func (s *SettingsState) NewProfile() {
+	name := locales.ProfileBaseName()
+	for suffix := 2; s.Draft.ProfileIndex(name) >= 0; suffix++ {
+		name = locales.ProfileBaseNameN(suffix)
+	}
+	if _, err := s.Draft.NewProfileNamed(name); err != nil {
+		s.SetStatus(err.Error(), true)
+		return
+	}
+	s.refresh()
+	s.Select(s.Draft.ProfileIndex(name))
+	s.SetStatus(locales.ProfileCreatedDevice(name), false)
 }
 
 // DuplicateProfile copies the selected profile.

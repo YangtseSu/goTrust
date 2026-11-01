@@ -1244,3 +1244,46 @@ func active(c *config.Config) *config.Profile { return c.ActiveProfileRef() }
 
 // activeValue is active for a value the caller cannot address inline.
 func activeValue(c config.Config) *config.Profile { return c.ActiveProfileRef() }
+
+// TestProfilesPageOffersBothWaysToAddAnAccount: the two buttons differ in what
+// the gateway sees, and the page has to say so.
+func TestProfilesPageOffersBothWaysToAddAnAccount(t *testing.T) {
+	state := NewSettingsState(config.Default(), "/tmp/logs")
+	var created, copied int
+	actions := settingsActionsFor(state)
+	actions.NewProfile = func() {
+		state.NewProfile()
+		created++
+	}
+	actions.DuplicateProfile = func() {
+		state.DuplicateProfile()
+		copied++
+	}
+
+	_, tester := newShell(t, state, actions, PageProfiles)
+	for _, wanted := range []string{"新建", "复制", "另一台设备", "请用"} {
+		if !tester.HasText(wanted) {
+			t.Fatalf("%q is missing from the profiles page", wanted)
+		}
+	}
+
+	if err := tester.Click("新建"); err != nil {
+		t.Fatalf("click new: %v", err)
+	}
+	tester.Frame()
+	if created != 1 || len(state.Draft.Profiles) != 2 {
+		t.Fatalf("created = %d profiles = %v", created, state.Draft.ProfileNames())
+	}
+	// The blank account is a separate device: no identity until it is filled in.
+	if got := state.Draft.Profiles[state.Selected].Ident.DeviceID; got != "" {
+		t.Fatalf("a new account came with a device id: %q", got)
+	}
+
+	if err := tester.Click("复制"); err != nil {
+		t.Fatalf("click copy: %v", err)
+	}
+	tester.Frame()
+	if copied != 1 || len(state.Draft.Profiles) != 3 {
+		t.Fatalf("copied = %d profiles = %v", copied, state.Draft.ProfileNames())
+	}
+}

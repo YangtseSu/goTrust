@@ -3451,3 +3451,23 @@ func ResetLoginDataAction() string { return In(i18n.Locale()).ResetLoginDataActi
 func (msgs Messages) ResetLoginDataAction() string {
 	return Catalog.Format(msgs.locale, "resetLoginDataAction", nil)
 }
+
+// ProfileCreatedDevice says "已新建 {name}，网关会视其为新设备；保存后生效"
+// in the language the app shows.
+func ProfileCreatedDevice(name string) string { return In(i18n.Locale()).ProfileCreatedDevice(name) }
+
+// ProfileCreatedDevice says "已新建 {name}，网关会视其为新设备；保存后生效"
+// in the language of msgs.
+func (msgs Messages) ProfileCreatedDevice(name string) string {
+	return Catalog.Format(msgs.locale, "profileCreatedDevice", map[string]any{"name": name})
+}
+
+// AccountNewHint says "…"
+// in the language the app shows.
+func AccountNewHint() string { return In(i18n.Locale()).AccountNewHint() }
+
+// AccountNewHint says "…"
+// in the language of msgs.
+func (msgs Messages) AccountNewHint() string {
+	return Catalog.Format(msgs.locale, "accountNewHint", nil)
+}

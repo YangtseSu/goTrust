@@ -338,5 +338,7 @@
   "resetLoginDataConfirm": "Remove it",
   "resetLoginDataDone": "Stored login data removed",
   "resetLoginDataFailed": "Removing the stored login data failed: {error}",
-  "resetLoginDataAction": "Reset"
+  "resetLoginDataAction": "Reset",
+  "profileCreatedDevice": "Created {name} as a new device; save to apply",
+  "accountNewHint": "New creates an account that the gateway sees as a separate device. To sign in to the same machine with another account, use Duplicate instead."
 }
