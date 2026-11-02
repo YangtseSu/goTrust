@@ -747,7 +747,7 @@ func TestStoredIdentityBeatsTheConfiguredDefault(t *testing.T) {
 	stub := newRecoveryStub(t)
 	c := NewClient(ClientOptions{Session: SessionOptions{
 		DeviceID:     "configured",
-		MACAddresses: []string{"02:00:5e:10:00:02"},
+		MACAddresses: []string{"00:1a:2b:3c:4d:5e"},
 	}})
 	t.Cleanup(c.Close)
 
@@ -756,11 +756,10 @@ func TestStoredIdentityBeatsTheConfiguredDefault(t *testing.T) {
 	c.sessionMu.Unlock()
 
 	clientAuthData := auth.ClientAuthData{
-		DeviceID:     "recorded",
-		MACAddresses: []string{"02:00:5e:10:00:01"},
-		SignKey:      "key",
-		SIDTicket:    strings.Repeat("t", 73),
-		CSRFToken:    "csrf",
+		DeviceID:  "recorded",
+		SignKey:   "key",
+		SIDTicket: strings.Repeat("t", 73),
+		CSRFToken: "csrf",
 	}
 	established, err := c.establishSession(context.Background(), c.session, SetupOptions{}, &clientAuthData, nil)
 	if err != nil {
@@ -772,7 +771,8 @@ func TestStoredIdentityBeatsTheConfiguredDefault(t *testing.T) {
 	if c.DeviceID != "recorded" {
 		t.Fatalf("client device id = %q, want the recorded one", c.DeviceID)
 	}
-	if len(c.MACAddresses) != 1 || c.MACAddresses[0] != "02:00:5e:10:00:01" {
-		t.Fatalf("client mac = %v, want the recorded one", c.MACAddresses)
+	// The address stays the caller's: it names the machine, not the record.
+	if len(c.MACAddresses) != 1 || c.MACAddresses[0] != "00:1a:2b:3c:4d:5e" {
+		t.Fatalf("client mac = %v, want the caller's address", c.MACAddresses)
 	}
 }

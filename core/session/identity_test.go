@@ -11,13 +11,10 @@ import (
 	"github.com/YangtseSu/goTrust/core/config"
 )
 
-const (
-	testDeviceID = "0123456789ABCDEF0123456789ABCDEF"
-	testMAC      = "02:00:5e:10:00:01"
-)
+const testDeviceID = "0123456789ABCDEF0123456789ABCDEF"
 
 func TestSeedDeviceIDAddsTheInstallID(t *testing.T) {
-	seeded, err := seedIdentity([]byte(`{"cookies":[{"name":"sid","value":"x"}]}`), testDeviceID, []string{testMAC})
+	seeded, err := seedIdentity([]byte(`{"cookies":[{"name":"sid","value":"x"}]}`), testDeviceID)
 	if err != nil {
 		t.Fatalf("seedIdentity() error = %v", err)
 	}
@@ -35,17 +32,10 @@ func TestSeedDeviceIDAddsTheInstallID(t *testing.T) {
 	if _, ok := record["cookies"]; !ok {
 		t.Fatal("the stored cookies were dropped")
 	}
-	var macs []string
-	if err := json.Unmarshal(record["mac_addresses"], &macs); err != nil {
-		t.Fatalf("mac addresses: %v", err)
-	}
-	if len(macs) != 1 || macs[0] != testMAC {
-		t.Fatalf("mac addresses = %v, want the install's", macs)
-	}
 }
 
 func TestSeedDeviceIDReplacesAnEarlierID(t *testing.T) {
-	seeded, err := seedIdentity([]byte(`{"device_id":"OLDPROFILEID"}`), testDeviceID, []string{testMAC})
+	seeded, err := seedIdentity([]byte(`{"device_id":"OLDPROFILEID"}`), testDeviceID)
 	if err != nil {
 		t.Fatalf("seedDeviceID() error = %v", err)
 	}
@@ -64,52 +54,62 @@ func TestSeedDeviceIDReplacesAnEarlierID(t *testing.T) {
 // corrupt file is an error rather than a silent replacement.
 func TestSeedDeviceIDWithoutAnIdentity(t *testing.T) {
 	original := []byte(`{"device_id":"PROFILEID"}`)
-	seeded, err := seedIdentity(original, "", nil)
+	seeded, err := seedIdentity(original, "")
 	if err != nil {
 		t.Fatalf("seedIdentity() error = %v", err)
 	}
 	if string(seeded) != string(original) {
 		t.Fatalf("stored session = %s, want it untouched", seeded)
 	}
-	if _, err := seedIdentity([]byte("not json"), testDeviceID, nil); err == nil {
+	if _, err := seedIdentity([]byte("not json"), testDeviceID); err == nil {
 		t.Fatal("a corrupt stored session was accepted")
 	}
 }
 
-// A profile that already reported a hardware address keeps it: the portal
-// bound that endpoint to the value, so replacing it would invent a new device.
-func TestSeedIdentityKeepsAStoredAddress(t *testing.T) {
-	seeded, err := seedIdentity([]byte(`{"mac_addresses":["02:00:5e:10:00:09"]}`), testDeviceID, []string{testMAC})
+// The hardware address belongs to the machine, not to the record: an older one
+// that still carries a value loses it, so the next login reads the real cards
+// instead of reporting whatever was frozen into the file.
+func TestSeedIdentityDropsAStoredAddress(t *testing.T) {
+	seeded, err := seedIdentity([]byte(`{"device_id":"OLD","mac_addresses":["02:00:5e:10:00:09"]}`), testDeviceID)
 	if err != nil {
 		t.Fatalf("seedIdentity() error = %v", err)
 	}
-	var record struct {
-		MACAddresses []string `json:"mac_addresses"`
-	}
+	var record map[string]json.RawMessage
 	if err := json.Unmarshal(seeded, &record); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if len(record.MACAddresses) != 1 || record.MACAddresses[0] != "02:00:5e:10:00:09" {
-		t.Fatalf("mac addresses = %v, want the stored one", record.MACAddresses)
+	if _, present := record["mac_addresses"]; present {
+		t.Fatalf("mac_addresses survived: %s", seeded)
+	}
+	var deviceID string
+	if err := json.Unmarshal(record["device_id"], &deviceID); err != nil {
+		t.Fatalf("device id: %v", err)
+	}
+	if deviceID != testDeviceID {
+		t.Fatalf("device id = %q, want the configured one", deviceID)
 	}
 }
 
-// A stored session without either field gains the configured pair, which is how
-// an account that has not logged in yet presents the device it is configured as.
+// A stored session without an identity gains the device id and nothing else:
+// the address is decided at login, not stored.
 func TestSeedIdentityFillsAStoredSessionWithoutAnIdentity(t *testing.T) {
-	seeded, err := seedIdentity([]byte(`{"cookies":[]}`), testDeviceID, []string{testMAC})
+	seeded, err := seedIdentity([]byte(`{"cookies":[]}`), testDeviceID)
 	if err != nil {
 		t.Fatalf("seedIdentity() error = %v", err)
 	}
-	var record struct {
-		DeviceID     string   `json:"device_id"`
-		MACAddresses []string `json:"mac_addresses"`
-	}
+	var record map[string]json.RawMessage
 	if err := json.Unmarshal(seeded, &record); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if record.DeviceID != testDeviceID || len(record.MACAddresses) != 1 || record.MACAddresses[0] != testMAC {
-		t.Fatalf("seeded = %+v", record)
+	var deviceID string
+	if err := json.Unmarshal(record["device_id"], &deviceID); err != nil {
+		t.Fatalf("device id: %v", err)
+	}
+	if deviceID != testDeviceID {
+		t.Fatalf("device id = %q, want %q", deviceID, testDeviceID)
+	}
+	if _, present := record["mac_addresses"]; present {
+		t.Fatalf("a hardware address was written into the record: %s", seeded)
 	}
 }
 
@@ -130,10 +130,7 @@ func TestClientProcessNamesTheRunningBinary(t *testing.T) {
 // dropped instead, and the login mints a fresh pair.
 func TestPrepareStoredIdentityDropsAnotherDevicesSession(t *testing.T) {
 	stored := []byte(`{"device_id":"OLDDEVICE","sign_key":"key","sid_ticket":"ticket","cookies":[{"name":"sid","value":"x"}],"csrf_token":"csrf"}`)
-	prepared, err := prepareStoredIdentity(stored, config.IdentityConfig{
-		DeviceID:     testDeviceID,
-		MACAddresses: []string{testMAC},
-	})
+	prepared, err := prepareStoredIdentity(stored, config.IdentityConfig{DeviceID: testDeviceID})
 	if err != nil {
 		t.Fatalf("prepareStoredIdentity() error = %v", err)
 	}
@@ -162,10 +159,7 @@ func TestPrepareStoredIdentityDropsAnotherDevicesSession(t *testing.T) {
 // the normal start, and dropping the key would turn every launch into a login.
 func TestPrepareStoredIdentityKeepsTheMatchingSession(t *testing.T) {
 	stored := []byte(`{"device_id":"` + testDeviceID + `","sign_key":"key","sid_ticket":"ticket"}`)
-	prepared, err := prepareStoredIdentity(stored, config.IdentityConfig{
-		DeviceID:     testDeviceID,
-		MACAddresses: []string{testMAC},
-	})
+	prepared, err := prepareStoredIdentity(stored, config.IdentityConfig{DeviceID: testDeviceID})
 	if err != nil {
 		t.Fatalf("prepareStoredIdentity() error = %v", err)
 	}

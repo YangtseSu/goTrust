@@ -51,7 +51,7 @@ verbose = false
 
 [profiles.identity]
 device_id = "…"
-mac_addresses = ["…"]
+# mac_addresses = ["…"]  # optional: report this instead of the host's cards
 os_family = "linux"
 
 [profiles.keepalive]
@@ -76,12 +76,17 @@ what the gateway sees:
 
 | Action | Device the portal records |
 |---|---|
-| New | A new device. The account gets its own `device_id` and hardware address on its first login, so the portal counts it as another machine |
-| Duplicate | The device of the account it was copied from. Signing in to a second account from the same machine is one device to the portal, and the copy shares its `device_id` and hardware address |
+| New | A new device. The account gets its own `device_id` on its first login, so the portal counts it as another machine |
+| Duplicate | The device of the account it was copied from. Signing in to a second account from the same machine is one device to the portal, and the copy shares its `device_id` |
 
 Use New only for an account that really is another machine. Use Duplicate for a
 second account on this one, then change the username and password. To turn a
-copy into a separate device, edit `device_id` and `mac_addresses` by hand.
+copy into a separate device, edit `device_id` by hand.
+
+The hardware address is not stored in the file: every login reads the machine's
+network cards and reports the one in use (see `identity.mac_addresses`). Every
+account on one machine is therefore the same card to the portal, which is the
+same trade-off the device id makes.
 
 ## Field descriptions
 
@@ -89,7 +94,7 @@ copy into a separate device, edit `device_id` and `mac_addresses` by hand.
 
 | Field | Description |
 |---|---|
-| `version` | Configuration format version, currently 4. A file from version 3 or older is migrated on load: the shared settings are copied into every account. A version newer than the program is refused rather than rewritten |
+| `version` | Configuration format version, currently 5. A file from version 4 or older is migrated on load: the shared settings are copied into every account, and a generated address written by an earlier version is dropped. A version newer than the program is refused rather than rewritten |
 | `active_profile` | Name of the account in use, matching the `name` of some `[[profiles]]` entry |
 
 ### `[[profiles]]`
@@ -116,7 +121,7 @@ uses.
 | `logging.verbose` | `false` | Emit protocol-level debug logs. The Logs page switch takes effect immediately |
 | `keepalive.enabled` / `keepalive.interval` / `keepalive.targets` | on / `90s` / none | Application-traffic probes. Targets take precedence over the automatically derived ones (granted ports 80, 443 and 22, plus name-only grants) |
 | `identity.device_id` | generated | 32-digit hexadecimal device identifier, seeded into this account's login data |
-| `identity.mac_addresses` | generated | Hardware addresses the portal records for this account |
+| `identity.mac_addresses` | empty | Empty reports the machine's physical network cards, one entry per card; virtual interfaces are skipped while a real card remains. A value here is reported exactly as written and is never resolved against the host, for the case where one account must present a different address |
 | `identity.client_version` | — | Client version reported in requests. Empty uses the default built into the program |
 | `identity.os_family` | `linux` | `linux`, `uos` or `windows`. Selects the User-Agent wording; the latter two send the vocabulary the portal expects |
 | `identity.os_arch` | host | Architecture name in the User-Agent |

@@ -5,7 +5,6 @@ package config
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -971,40 +970,66 @@ func TestHandoffBindMustStayOnLoopback(t *testing.T) {
 	}
 }
 
-// TestEnsureIdentityGeneratesOneHardwareAddress: the address names the machine,
-// so it is generated once and kept across every launch and profile. A hand-set
-// value wins.
-func TestEnsureIdentityGeneratesOneHardwareAddress(t *testing.T) {
+// TestEnsureIdentityLeavesTheAddressToTheMachine: the settings do not carry a
+// hardware address. A blank entry means "report the machine's own cards", which
+// is read at login, and a value the user typed is kept exactly as written.
+func TestEnsureIdentityLeavesTheAddressToTheMachine(t *testing.T) {
 	cfg := Default()
 	active(&cfg).Ident.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
 	active(&cfg).Ident.MACAddresses = nil
-	if !cfg.EnsureIdentity() {
-		t.Fatal("a missing hardware address reported no change")
-	}
-	if len(active(&cfg).Ident.MACAddresses) != 1 {
-		t.Fatalf("mac addresses = %v, want one", active(&cfg).Ident.MACAddresses)
-	}
-	generated := active(&cfg).Ident.MACAddresses[0]
-	address, err := net.ParseMAC(generated)
-	if err != nil {
-		t.Fatalf("generated address %q: %v", generated, err)
-	}
-	if address[0]&0x02 == 0 || address[0]&0x01 != 0 {
-		t.Fatalf("generated address %q is not locally administered and unicast", address)
-	}
-
-	// A second launch keeps it: the portal binds the endpoint to this value.
-	if cfg.EnsureIdentity() {
-		t.Fatalf("the identity changed on a second launch: %+v", cfg.Active().Ident)
-	}
-	if len(active(&cfg).Ident.MACAddresses) != 1 || active(&cfg).Ident.MACAddresses[0] != generated {
-		t.Fatalf("mac addresses = %v, want %q", active(&cfg).Ident.MACAddresses, generated)
-	}
-
-	cfg.ActiveProfileRef().Ident.MACAddresses = []string{"02:00:5e:10:00:42"}
 	cfg.EnsureIdentity()
-	if active(&cfg).Ident.MACAddresses[0] != "02:00:5e:10:00:42" {
-		t.Fatalf("a hand-set address was replaced: %v", active(&cfg).Ident.MACAddresses)
+	if got := active(&cfg).Ident.MACAddresses; len(got) != 0 {
+		t.Fatalf("an address was written into the settings: %v", got)
+	}
+
+	// A second pass is not a change: nothing is generated, so nothing is saved.
+	if cfg.EnsureIdentity() {
+		t.Fatalf("a blank address reported a change: %+v", cfg.Active().Ident)
+	}
+
+	cfg.ActiveProfileRef().Ident.MACAddresses = []string{"00:1a:2b:3c:4d:5e"}
+	cfg.EnsureIdentity()
+	if got := active(&cfg).Ident.MACAddresses; len(got) != 1 || got[0] != "00:1a:2b:3c:4d:5e" {
+		t.Fatalf("a hand-set address was replaced: %v", got)
+	}
+}
+
+// TestMigrationDropsAGeneratedAddress: a file from the previous version carries
+// a locally administered address that no gateway ever recorded. Keeping it would
+// keep reporting a device that does not exist, so the migration drops it and
+// leaves the login free to report the machine's cards.
+func TestMigrationDropsAGeneratedAddress(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	raw := `version = 4
+active_profile = "a"
+
+[[profiles]]
+name = "a"
+[profiles.identity]
+device_id = "0123456789ABCDEF0123456789ABCDEF"
+mac_addresses = ["02:00:5e:10:00:01"]
+
+[[profiles]]
+name = "b"
+[profiles.identity]
+device_id = "FEDCBA9876543210FEDCBA9876543210"
+mac_addresses = ["00:1a:2b:3c:4d:5e"]
+`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("a v4 file was refused: %v", err)
+	}
+	if cfg.Version != CurrentVersion {
+		t.Fatalf("version = %d", cfg.Version)
+	}
+	if got := cfg.Profiles[0].Ident.MACAddresses; len(got) != 0 {
+		t.Fatalf("the generated address survived: %v", got)
+	}
+	if got := cfg.Profiles[1].Ident.MACAddresses; len(got) != 1 || got[0] != "00:1a:2b:3c:4d:5e" {
+		t.Fatalf("the address the user typed was dropped: %v", got)
 	}
 }
 
@@ -1179,8 +1204,8 @@ username = "bob"
 		if profile.Ident.DeviceID != "0123456789ABCDEF0123456789ABCDEF" {
 			t.Fatalf("%s device id = %q", profile.Name, profile.Ident.DeviceID)
 		}
-		if len(profile.Ident.MACAddresses) != 1 || profile.Ident.MACAddresses[0] != "02:00:5e:10:00:01" {
-			t.Fatalf("%s mac = %v", profile.Name, profile.Ident.MACAddresses)
+		if len(profile.Ident.MACAddresses) != 0 {
+			t.Fatalf("%s mac = %v, want the generated placeholder dropped", profile.Name, profile.Ident.MACAddresses)
 		}
 		if profile.Ident.OSFamily != IdentityOSUOS {
 			t.Fatalf("%s family = %q", profile.Name, profile.Ident.OSFamily)
@@ -1197,10 +1222,9 @@ username = "bob"
 	}
 }
 
-// A shared file with no hardware address takes one generated value for every
-// account: minting one each would make one machine look like several devices on
-// the first launch after the upgrade.
-func TestMigrationSharesOneGeneratedAddress(t *testing.T) {
+// A shared file with no hardware address leaves every account without one: the
+// address is read from the machine at login, so there is nothing to share.
+func TestMigrationLeavesTheAddressToTheMachine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	raw := `version = 3
 [identity]
@@ -1219,12 +1243,10 @@ name = "b"
 	if err != nil {
 		t.Fatal(err)
 	}
-	first := cfg.Profiles[0].Ident.MACAddresses
-	if len(first) != 1 {
-		t.Fatalf("mac = %v", first)
-	}
-	if got := cfg.Profiles[1].Ident.MACAddresses; len(got) != 1 || got[0] != first[0] {
-		t.Fatalf("second account mac = %v, want %v", got, first)
+	for _, profile := range cfg.Profiles {
+		if got := profile.Ident.MACAddresses; len(got) != 0 {
+			t.Fatalf("%s mac = %v, want none", profile.Name, got)
+		}
 	}
 }
 
@@ -1234,7 +1256,6 @@ name = "b"
 func TestNewAccountIsASeparateDevice(t *testing.T) {
 	cfg := Default()
 	cfg.ActiveProfileRef().Ident.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
-	cfg.ActiveProfileRef().Ident.MACAddresses = []string{"02:00:5e:10:00:01"}
 	cfg.ActiveProfileRef().Proxy = ProxyConfig{SOCKS5Bind: "127.0.0.1:2080", HTTPBind: "127.0.0.1:2081"}
 	cfg.EnsureIdentity()
 
@@ -1255,14 +1276,16 @@ func TestNewAccountIsASeparateDevice(t *testing.T) {
 		t.Fatalf("listeners = %q %q, want the current account's", socks, httpBind)
 	}
 
-	// Filling it in is what makes it a device, and it is a different one.
+	// Filling it in is what makes it a separate device.
 	cfg.EnsureIdentity()
 	minted := cfg.Profiles[cfg.ProfileIndex("other")].Ident
 	if minted.DeviceID == cfg.Profiles[0].Ident.DeviceID {
 		t.Fatal("the new account reused the first account's device")
 	}
-	if len(minted.MACAddresses) != 1 || minted.MACAddresses[0] == cfg.Profiles[0].Ident.MACAddresses[0] {
-		t.Fatalf("the new account reused the first account's address: %v", minted.MACAddresses)
+	// The address is the machine's, so both accounts report the same cards
+	// unless one of them names an address of its own.
+	if len(minted.MACAddresses) != 0 {
+		t.Fatalf("the new account came with an address: %v", minted.MACAddresses)
 	}
 }
 

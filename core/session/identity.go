@@ -38,9 +38,9 @@ func prepareStoredIdentity(data []byte, identity config.IdentityConfig) ([]byte,
 		}
 		log.Printf("The stored session belongs to device %s; logging in as %s needs a fresh one",
 			record.DeviceID, identity.DeviceID)
-		return seedIdentity(data, identity.DeviceID, identity.MACAddresses)
+		return seedIdentity(data, identity.DeviceID)
 	}
-	return seedIdentity(data, identity.DeviceID, identity.MACAddresses)
+	return seedIdentity(data, identity.DeviceID)
 }
 
 // dropStoredCredentials removes the material only the previous device could use.
@@ -55,35 +55,32 @@ func dropStoredCredentials(data []byte) ([]byte, error) {
 	return json.Marshal(record)
 }
 
-// seedIdentity makes the stored session carry the account's device id and
-// hardware address. Stored material without the fields is left otherwise
-// untouched, and a value already in the file wins: the MAC the portal recorded
-// for this account stays the one it sees.
-func seedIdentity(data []byte, deviceID string, macAddresses []string) ([]byte, error) {
-	if deviceID == "" && len(macAddresses) == 0 {
-		return data, nil
-	}
+// seedIdentity makes the stored session carry the account's device id.
+//
+// The hardware address is not part of the record: it belongs to the machine and
+// is read at every login, so a stored copy could only go stale when a card is
+// added or replaced. A record written by an earlier version still has one, and
+// it is dropped here rather than carried forward.
+func seedIdentity(data []byte, deviceID string) ([]byte, error) {
 	record := make(map[string]json.RawMessage)
 	if len(data) > 0 {
 		if err := json.Unmarshal(data, &record); err != nil {
 			return nil, fmt.Errorf("parse the stored session: %w", err)
 		}
 	}
+	_, hadAddress := record["mac_addresses"]
+	if deviceID == "" && !hadAddress {
+		// Nothing to add and nothing stale to drop: leave the record as it is
+		// rather than rewriting an equivalent one in a different key order.
+		return data, nil
+	}
+	delete(record, "mac_addresses")
 	if deviceID != "" {
 		encoded, err := json.Marshal(deviceID)
 		if err != nil {
 			return nil, err
 		}
 		record["device_id"] = encoded
-	}
-	if len(macAddresses) > 0 {
-		if _, present := record["mac_addresses"]; !present {
-			encoded, err := json.Marshal(macAddresses)
-			if err != nil {
-				return nil, err
-			}
-			record["mac_addresses"] = encoded
-		}
 	}
 	return json.Marshal(record)
 }

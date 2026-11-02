@@ -59,11 +59,6 @@ type ClientAuthData struct {
 	Cookies           []Cookie        `json:"cookies"`
 	DeviceID          string          `json:"device_id"`
 	ServerVersionInfo json.RawMessage `json:"server_version_info,omitempty"`
-	// MACAddresses is the installation's hardware address as the portal records
-	// it during reportEnv. It is generated once and reused: the portal binds the
-	// trusted endpoint to it, and a fresh value per login makes every login look
-	// like a new device.
-	MACAddresses []string `json:"mac_addresses,omitempty"`
 	// CSRFToken comes from the last authConfig and is what the restore path
 	// (sessionIdExchange) has to send, so a cold restore needs it.
 	CSRFToken string `json:"csrf_token,omitempty"`
@@ -266,8 +261,9 @@ type AuthInfo struct {
 
 type LoginOptions struct {
 	DeviceID string
-	// MACAddresses is the installation's hardware address as reportEnv sends
-	// it. The caller generates and stores it once with the device id.
+	// MACAddresses is what reportEnv reports as the endpoint's hardware
+	// address. The caller supplies it: the user's override if there is one,
+	// otherwise the machine's own cards.
 	MACAddresses     []string
 	Cookies          []Cookie
 	TOTPSecret       string

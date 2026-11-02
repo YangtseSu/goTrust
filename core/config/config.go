@@ -31,7 +31,7 @@ import (
 
 // CurrentVersion is the schema version this build writes. A file from a newer
 // build is refused rather than rewritten with fields this build would drop.
-const CurrentVersion = 4
+const CurrentVersion = 5
 
 // DefaultProfileName is the profile a fresh install uses.
 const DefaultProfileName = "默认"
@@ -97,10 +97,10 @@ type IdentityConfig struct {
 	// DeviceID is the 32-hex id the portal sees as deviceId. It is generated
 	// once and seeded into every profile's client data.
 	DeviceID string `toml:"device_id"`
-	// MACAddresses is the hardware address the portal records for this
-	// installation. Like DeviceID it is generated once and seeded into every
-	// profile, because it names the machine, not the account: a per-profile
-	// value would make one machine look like several endpoints.
+	// MACAddresses is what reportEnv reports as the endpoint's hardware
+	// address. Empty reports the machine's own physical network cards, read at
+	// login time; a value here overrides that, for a gateway that has already
+	// recorded an address this host cannot present.
 	MACAddresses []string `toml:"mac_addresses"`
 	// ClientVersion is the aTrust client version the UA reports. Empty takes
 	// the default the build was written against.
@@ -134,9 +134,9 @@ const (
 // client_version is empty. The truthful family carries no version.
 const defaultClientVersion = "2.5.16.41"
 
-// NewIdentity returns the derived part of a fresh identity. The random half
-// (the device id and the hardware address) is filled by EnsureIdentity so that
-// it is generated once per account rather than once per launch.
+// NewIdentity returns the derived part of a fresh identity. The device id is
+// filled by EnsureIdentity so that it is generated once per account rather than
+// once per launch; the hardware address is not stored at all.
 func NewIdentity() IdentityConfig {
 	return IdentityConfig{
 		OSFamily: IdentityOSLinux,
@@ -179,23 +179,7 @@ func (c *Config) ensureProfileIdentity(profile *Profile) bool {
 		}
 		changed = true
 	}
-	if len(profile.Ident.MACAddresses) == 0 {
-		profile.Ident.MACAddresses = []string{randomMACAddress()}
-		changed = true
-	}
 	return changed
-}
-
-// randomMACAddress returns a locally administered unicast address: the portal
-// records it as the endpoint's hardware address, and the two flag bits are what
-// keep a generated value from colliding with a real vendor prefix.
-func randomMACAddress() string {
-	mac := make([]byte, 6)
-	if _, err := rand.Read(mac); err != nil {
-		panic(fmt.Sprintf("generate a hardware address: %v", err))
-	}
-	mac[0] = mac[0]&0xfe | 0x02
-	return net.HardwareAddr(mac).String()
 }
 
 // storedDeviceID returns the device id an existing profile already reported,
@@ -263,6 +247,32 @@ func validateMACAddresses(addresses []string) error {
 		}
 	}
 	return nil
+}
+
+// realMACAddresses drops the locally administered addresses an earlier version
+// wrote into the settings. Those values were generated, never recorded by a
+// gateway, and keeping them would keep reporting a device that does not exist;
+// an address the user typed is global or it would not be the machine's own, so
+// the local bit is what tells the two apart.
+func realMACAddresses(addresses []string) []string {
+	kept := make([]string, 0, len(addresses))
+	for _, address := range addresses {
+		parsed, err := net.ParseMAC(strings.TrimSpace(address))
+		if err != nil {
+			// An unreadable entry is a hand edit the validator will refuse
+			// later; keeping it lets that error name the actual text.
+			kept = append(kept, address)
+			continue
+		}
+		if parsed[0]&0x02 != 0 {
+			continue
+		}
+		kept = append(kept, address)
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	return kept
 }
 
 // UserAgentString is the UA the portal sees. An explicit user_agent wins.
@@ -586,13 +596,11 @@ type legacyV3Prof struct {
 func (l legacyV3) migrateV3() Config {
 	cfg := Config{Version: CurrentVersion, ActiveProfile: l.ActiveProfile}
 	cfg.Profiles = make([]Profile, 0, len(l.Profiles))
-	// A file without a hardware address predates the field. Every account then
-	// takes the same generated value: the shared identity is what the file
-	// described, and minting one per account would make one machine look like
-	// several devices on the first launch after the upgrade.
-	if len(l.Identity.MACAddresses) == 0 {
-		l.Identity.MACAddresses = []string{randomMACAddress()}
-	}
+	// A file written before this version had no address of its own to report:
+	// the shared identity carried a generated placeholder that no gateway ever
+	// recorded. Dropping it lets the login read the machine's real cards, while
+	// an address the user typed is kept.
+	l.Identity.MACAddresses = realMACAddresses(l.Identity.MACAddresses)
 	for _, profile := range l.Profiles {
 		identity := l.Identity
 		// An account-level identity wins field by field; empty means "the
@@ -601,7 +609,7 @@ func (l legacyV3) migrateV3() Config {
 			identity.DeviceID = id
 		}
 		if len(profile.Client.MACAddresses) > 0 {
-			identity.MACAddresses = profile.Client.MACAddresses
+			identity.MACAddresses = realMACAddresses(profile.Client.MACAddresses)
 		}
 		if v := strings.TrimSpace(profile.Client.ClientVersion); v != "" {
 			identity.ClientVersion = v
@@ -664,6 +672,24 @@ func decode(raw []byte) (Config, error) {
 		}
 		if err := rejectUnknown(meta); err != nil {
 			return Config{}, err
+		}
+		return cfg, nil
+	}
+
+	if head.Version == 4 {
+		// The shape is the one this build writes; only the meaning of the
+		// stored address changed. Reading it as the current schema and then
+		// dropping the generated values is the whole migration.
+		var cfg Config
+		meta, err := toml.Decode(string(raw), &cfg)
+		if err != nil {
+			return Config{}, err
+		}
+		if err := rejectUnknown(meta); err != nil {
+			return Config{}, err
+		}
+		for index := range cfg.Profiles {
+			cfg.Profiles[index].Ident.MACAddresses = realMACAddresses(cfg.Profiles[index].Ident.MACAddresses)
 		}
 		return cfg, nil
 	}

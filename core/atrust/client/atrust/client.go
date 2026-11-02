@@ -25,8 +25,9 @@ type SessionOptions struct {
 	Username string
 	SID      string
 	DeviceID string
-	// MACAddresses is the installation's hardware address; it is stored with
-	// the device id because the portal binds the trusted endpoint to the pair.
+	// MACAddresses is what reportEnv reports as the endpoint's hardware
+	// address. The caller decides it, because only the front-end knows whether
+	// the user overrode the machine's own cards.
 	MACAddresses []string
 	SignKey      string
 	SIDTicket    string
@@ -90,9 +91,10 @@ type Client struct {
 	Username string
 	SID      string
 	DeviceID string
-	// MACAddresses is the installation's hardware address as the portal
-	// records it. It is generated once, stored with the device id and reused,
-	// so a restart is the same endpoint and not a new trusted device.
+	// MACAddresses is what reportEnv reports as the endpoint's hardware
+	// address: the caller's override, or the machine's own cards. It is
+	// re-read on every login rather than stored, because a card is the
+	// machine's and a stored copy could only drift from it.
 	MACAddresses []string
 	ConnectionID string
 	SignKey      string
@@ -458,9 +460,6 @@ func (c *Client) establishSession(
 	if clientAuthData.DeviceID != "" {
 		c.DeviceID = clientAuthData.DeviceID
 	}
-	if len(clientAuthData.MACAddresses) > 0 {
-		c.MACAddresses = clientAuthData.MACAddresses
-	}
 	if c.SignKey == "" {
 		c.SignKey = clientAuthData.SignKey
 	}
@@ -509,10 +508,6 @@ func (c *Client) establishSession(
 	c.DeviceID = clientAuthData.DeviceID
 	c.ConnectionID = buildConnectionID(c.DeviceID)
 	c.SignKey = randHex(64)
-	// The MAC is part of the device identity the portal records: generating a
-	// fresh one per login would report a new endpoint every time.
-	clientAuthData.MACAddresses = ensureMACAddresses(clientAuthData.MACAddresses, c.MACAddresses)
-	c.MACAddresses = clientAuthData.MACAddresses
 
 	if options.LoginMethod == nil {
 		log.Println("No auth type specified, trying to skip auth")
@@ -573,9 +568,6 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 		// that record is where a later restore reads the pair from.
 		clientAuthData.DeviceID = c.DeviceID
 	}
-	if len(clientAuthData.MACAddresses) == 0 && len(c.MACAddresses) > 0 {
-		clientAuthData.MACAddresses = c.MACAddresses
-	}
 
 	var authServerHost string
 	if options.ServerPort == 443 {
@@ -631,7 +623,6 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 	}
 	c.setSessionSID(snapshot.SID, nil)
 	clientAuthData.DeviceID = c.DeviceID
-	clientAuthData.MACAddresses = c.MACAddresses
 	clientAuthData.Cookies = snapshot.Cookies
 	clientAuthData.SignKey = c.SignKey
 	clientAuthData.CSRFToken = sess.CSRFToken()
@@ -739,29 +730,4 @@ func resolveServerVersionInfo(cached, fetched []byte, fetchErr error) ([]byte, e
 func buildConnectionID(deviceID string) string {
 	sum := md5.Sum([]byte(deviceID))
 	return fmt.Sprintf("%X-%d", sum, time.Now().UnixMicro())
-}
-
-// ensureMACAddresses returns the address the report must carry: the stored one,
-// else the one a caller named, else a generated one. A portal binds the trusted
-// endpoint to this value, so it is generated exactly once per installation.
-func ensureMACAddresses(stored, configured []string) []string {
-	if len(stored) > 0 {
-		return stored
-	}
-	if len(configured) > 0 {
-		return configured
-	}
-	return []string{randMACAddress()}
-}
-
-// randMACAddress returns a locally administered unicast address: the portal
-// records it as the endpoint's hardware address, and the two flag bits are what
-// keep a generated value from colliding with a real vendor prefix.
-func randMACAddress() string {
-	mac := make([]byte, 6)
-	if _, err := rand.Read(mac); err != nil {
-		panic(err)
-	}
-	mac[0] = mac[0]&0xfe | 0x02
-	return net.HardwareAddr(mac).String()
 }

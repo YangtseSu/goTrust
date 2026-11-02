@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -60,6 +59,7 @@ func newLoginStub(t *testing.T) *loginStub {
 		case "/passport/v1/user/onlineInfo":
 			fmt.Fprint(w, `{"code":0,"data":{"isOnline":true,"username":"student"}}`)
 		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
 			http.NotFound(w, r)
 		}
 	}))
@@ -82,105 +82,85 @@ func loginAgainstStub(t *testing.T, stub *loginStub, c *Client, clientData auth.
 	return clientData
 }
 
-func TestLoginReportsOneGeneratedMACAndReusesIt(t *testing.T) {
+// TestLoginReportsTheCallersAddress: the hardware address is decided by the
+// caller and reported as given. The protocol layer has no card of its own to
+// read, and inventing a value would name a device the portal never sees.
+func TestLoginReportsTheCallersAddress(t *testing.T) {
+	stub := newLoginStub(t)
+	c := NewClient(ClientOptions{Session: SessionOptions{
+		MACAddresses: []string{"00:1a:2b:3c:4d:5e", "00:1a:2b:3c:4d:5f"},
+	}})
+	t.Cleanup(c.Close)
+
+	loginAgainstStub(t, stub, c, auth.ClientAuthData{})
+	if len(stub.reportedMAC) != 1 {
+		t.Fatalf("reportEnv calls = %d, want one", len(stub.reportedMAC))
+	}
+	want := []string{"00:1a:2b:3c:4d:5e", "00:1a:2b:3c:4d:5f"}
+	if got := stub.reportedMAC[0]; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("reported = %v, want %v", got, want)
+	}
+}
+
+// TestLoginReportsEveryCallerAddressOnALaterLogin: the address list is not
+// frozen into the stored session, so a login that starts from a record written
+// by an older build reports what the caller passes now rather than the value in
+// the file.
+func TestLoginReportsWhatTheCallerPassesOnALaterLogin(t *testing.T) {
+	stub := newLoginStub(t)
+	c := NewClient(ClientOptions{Session: SessionOptions{MACAddresses: []string{"00:1a:2b:3c:4d:5e"}}})
+	t.Cleanup(c.Close)
+
+	// A record from a build that still stored an address with the device id.
+	stored := auth.ClientAuthData{
+		DeviceID:  "0123456789abcdef0123456789abcdef",
+		CSRFToken: "csrf",
+	}
+	loginAgainstStub(t, stub, c, stored)
+
+	second := NewClient(ClientOptions{Session: SessionOptions{MACAddresses: []string{"00:1a:2b:3c:4d:5f"}}})
+	t.Cleanup(second.Close)
+	loginAgainstStub(t, stub, second, stored)
+	if len(stub.reportedMAC) != 2 {
+		t.Fatalf("reportEnv calls = %d, want two", len(stub.reportedMAC))
+	}
+	if got := stub.reportedMAC[1]; len(got) != 1 || got[0] != "00:1a:2b:3c:4d:5f" {
+		t.Fatalf("second report = %v, want the caller's address", got)
+	}
+}
+
+// TestLoginWithoutAnAddressReportsNone: a caller with nothing to report sends
+// an empty list. The layer does not fill the gap, so a front-end that cannot
+// read a card produces a visible gap at the portal instead of a device that
+// does not exist.
+func TestLoginWithoutAnAddressReportsNone(t *testing.T) {
 	stub := newLoginStub(t)
 	c := NewClient(ClientOptions{})
 	t.Cleanup(c.Close)
 
-	stored := loginAgainstStub(t, stub, c, auth.ClientAuthData{})
-	if len(stored.MACAddresses) != 1 {
-		t.Fatalf("stored mac_addresses = %v, want exactly one", stored.MACAddresses)
+	loginAgainstStub(t, stub, c, auth.ClientAuthData{})
+	if len(stub.reportedMAC) != 1 {
+		t.Fatalf("reportEnv calls = %d, want one", len(stub.reportedMAC))
 	}
-	if len(stub.reportedMAC) != 1 || stub.reportedMAC[0][0] != stored.MACAddresses[0] {
-		t.Fatalf("reported = %v, stored = %v", stub.reportedMAC, stored.MACAddresses)
-	}
-	address, err := net.ParseMAC(stored.MACAddresses[0])
-	if err != nil {
-		t.Fatalf("generated MAC %q: %v", stored.MACAddresses[0], err)
-	}
-	if address[0]&0x02 == 0 || address[0]&0x01 != 0 {
-		t.Fatalf("generated MAC %q is not locally administered and unicast", address)
-	}
-
-	// A second login reads the record back instead of generating: the portal
-	// binds the trusted endpoint to this value.
-	second := loginAgainstStub(t, stub, c, stored)
-	if len(second.MACAddresses) != 1 || second.MACAddresses[0] != stored.MACAddresses[0] {
-		t.Fatalf("second login mac_addresses = %v, want %v", second.MACAddresses, stored.MACAddresses)
-	}
-	if len(stub.reportedMAC) != 2 || stub.reportedMAC[1][0] != stored.MACAddresses[0] {
-		t.Fatalf("second report = %v", stub.reportedMAC)
+	if got := stub.reportedMAC[0]; len(got) != 0 {
+		t.Fatalf("reported = %v, want none", got)
 	}
 }
 
-// TestOlderClientDataIsUpgradedOnce: a record written before the field existed
-// gains exactly one address, and the login that wrote it back is the last one
-// that generates.
-func TestOlderClientDataIsUpgradedOnce(t *testing.T) {
+// TestStoredAddressIsNotWrittenBack: the address is not part of the session
+// material, so a record that carried one from an older build is cleaned as the
+// login writes the record back.
+func TestStoredAddressIsNotWrittenBack(t *testing.T) {
 	stub := newLoginStub(t)
-	c := NewClient(ClientOptions{})
+	c := NewClient(ClientOptions{Session: SessionOptions{MACAddresses: []string{"00:1a:2b:3c:4d:5e"}}})
 	t.Cleanup(c.Close)
 
-	// What an older version stored: a device id and nothing else.
-	older := auth.ClientAuthData{DeviceID: "0123456789abcdef0123456789abcdef"}
-	upgraded := loginAgainstStub(t, stub, c, older)
-	if upgraded.DeviceID != older.DeviceID {
-		t.Fatalf("device id = %q, want %q", upgraded.DeviceID, older.DeviceID)
-	}
-	if len(upgraded.MACAddresses) != 1 {
-		t.Fatalf("upgraded mac_addresses = %v", upgraded.MACAddresses)
-	}
-
-	// The record as it reached the file, read back, is what the next login uses.
-	encoded, err := json.Marshal(upgraded)
+	encoded, err := json.Marshal(auth.ClientAuthData{DeviceID: "0123456789abcdef0123456789abcdef"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var reloaded auth.ClientAuthData
-	if err := json.Unmarshal(encoded, &reloaded); err != nil {
-		t.Fatal(err)
-	}
-	if len(reloaded.MACAddresses) != 1 || reloaded.MACAddresses[0] != upgraded.MACAddresses[0] {
-		t.Fatalf("reloaded mac_addresses = %v, want %v", reloaded.MACAddresses, upgraded.MACAddresses)
-	}
-
-	next := NewClient(ClientOptions{})
-	t.Cleanup(next.Close)
-	again := loginAgainstStub(t, stub, next, reloaded)
-	if len(again.MACAddresses) != 1 || again.MACAddresses[0] != upgraded.MACAddresses[0] {
-		t.Fatalf("second login mac_addresses = %v, want %v", again.MACAddresses, upgraded.MACAddresses)
-	}
-}
-
-func TestEnsureMACAddressesDecidesOnce(t *testing.T) {
-	if got := ensureMACAddresses([]string{"02:00:5e:10:00:01"}, []string{"02:00:5e:10:00:02"}); len(got) != 1 || got[0] != "02:00:5e:10:00:01" {
-		t.Fatalf("stored must win: %v", got)
-	}
-	if got := ensureMACAddresses(nil, []string{"02:00:5e:10:00:02"}); len(got) != 1 || got[0] != "02:00:5e:10:00:02" {
-		t.Fatalf("configured must be used when nothing is stored: %v", got)
-	}
-	first := ensureMACAddresses(nil, nil)
-	if len(first) != 1 {
-		t.Fatalf("generated = %v", first)
-	}
-	if _, err := net.ParseMAC(first[0]); err != nil {
-		t.Fatalf("generated MAC %q: %v", first[0], err)
-	}
-}
-
-// TestLoginReportsTheConfiguredMAC: the address names the machine, so a value
-// the caller supplies for the installation is what the portal sees, and no
-// per-profile address is invented beside it.
-func TestLoginReportsTheConfiguredMAC(t *testing.T) {
-	stub := newLoginStub(t)
-	c := NewClient(ClientOptions{Session: SessionOptions{MACAddresses: []string{"02:00:5e:10:00:07"}}})
-	t.Cleanup(c.Close)
-
-	stored := loginAgainstStub(t, stub, c, auth.ClientAuthData{})
-	if len(stored.MACAddresses) != 1 || stored.MACAddresses[0] != "02:00:5e:10:00:07" {
-		t.Fatalf("stored mac_addresses = %v, want the configured one", stored.MACAddresses)
-	}
-	if len(stub.reportedMAC) != 1 || len(stub.reportedMAC[0]) != 1 || stub.reportedMAC[0][0] != "02:00:5e:10:00:07" {
-		t.Fatalf("reported = %v, want the configured address", stub.reportedMAC)
+	loginAgainstStub(t, stub, c, auth.ClientAuthData{})
+	if strings.Contains(string(encoded), "mac_addresses") {
+		t.Fatalf("the record still has an address field: %s", encoded)
 	}
 }

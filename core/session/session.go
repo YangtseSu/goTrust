@@ -360,7 +360,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 		Session: atrust.SessionOptions{
 			Username:     profile.Auth.Username,
 			DeviceID:     profile.Ident.DeviceID,
-			MACAddresses: profile.Ident.MACAddresses,
+			MACAddresses: reportedMACAddresses(profile.Ident.MACAddresses),
 		},
 		UnderlayDialer: dialer,
 	})
