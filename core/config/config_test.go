@@ -17,7 +17,7 @@ func TestDefaultHasOneProfileAndBothListeners(t *testing.T) {
 	if cfg.Version != CurrentVersion {
 		t.Fatalf("version = %d, want %d", cfg.Version, CurrentVersion)
 	}
-	if len(cfg.Profiles) != 1 || cfg.ActiveProfile != DefaultProfileName {
+	if len(cfg.Profiles) != 1 || cfg.ActiveProfile != cfg.Profiles[0].ID {
 		t.Fatalf("profiles = %v, active = %q", cfg.ProfileNames(), cfg.ActiveProfile)
 	}
 	socks5, httpBind := active(&cfg).ProxyAddresses()
@@ -43,7 +43,6 @@ func TestTOMLRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "config.toml")
 
 	want := Default()
-	want.ActiveProfile = "工作"
 	if _, err := want.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
@@ -72,7 +71,8 @@ func TestTOMLRoundTrip(t *testing.T) {
 	if !strings.Contains(string(raw), "[[profiles]]") {
 		t.Fatalf("saved file is not profile TOML:\n%s", raw)
 	}
-	if !strings.Contains(string(raw), "active_profile = \"工作\"") {
+	// active_profile names the account by id, so a rename cannot move it.
+	if !strings.Contains(string(raw), "active_profile = \""+want.ActiveProfile+"\"") {
 		t.Fatalf("active profile not written:\n%s", raw)
 	}
 
@@ -80,7 +80,7 @@ func TestTOMLRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if got.ActiveProfile != "工作" || len(got.Profiles) != 2 {
+	if got.ActiveProfile != want.ActiveProfile || len(got.Profiles) != 2 {
 		t.Fatalf("profiles = %v, active = %q", got.ProfileNames(), got.ActiveProfile)
 	}
 	profile := got.Active()
@@ -163,8 +163,8 @@ username = "alice"
 	if profile.KeepAliveInterval() != 90*time.Second {
 		t.Fatalf("interval = %v, want 90s", profile.KeepAliveInterval())
 	}
-	if cfg.ActiveProfile != DefaultProfileName {
-		t.Fatalf("active = %q, want the only profile", cfg.ActiveProfile)
+	if cfg.ActiveProfile != cfg.Profiles[0].ID {
+		t.Fatalf("active = %q, want the only profile's id", cfg.ActiveProfile)
 	}
 }
 
@@ -230,8 +230,8 @@ func TestProfileOperations(t *testing.T) {
 	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	if cfg.ActiveProfile != "工作" {
-		t.Fatalf("active = %q, want the new profile", cfg.ActiveProfile)
+	if cfg.Active().Name != "工作" {
+		t.Fatalf("active = %q, want the new profile", cfg.Active().Name)
 	}
 	if _, err := cfg.DuplicateProfile(0, "工作"); err == nil {
 		t.Fatal("duplicate name accepted")
@@ -245,8 +245,8 @@ func TestProfileOperations(t *testing.T) {
 	if err != nil || copied != 2 {
 		t.Fatalf("duplicate: %d %v", copied, err)
 	}
-	if cfg.ActiveProfile != "工作 副本" {
-		t.Fatalf("active = %q after duplicate", cfg.ActiveProfile)
+	if cfg.Active().Name != "工作 副本" {
+		t.Fatalf("active = %q after duplicate", cfg.Active().Name)
 	}
 
 	if err := cfg.DeleteProfile(2); err != nil {
@@ -256,7 +256,7 @@ func TestProfileOperations(t *testing.T) {
 		t.Fatalf("profiles = %v", cfg.ProfileNames())
 	}
 	cfg.Profiles = cfg.Profiles[:1]
-	cfg.ActiveProfile = cfg.Profiles[0].Name
+	cfg.ActiveProfile = cfg.Profiles[0].ID
 	if err := cfg.DeleteProfile(0); err == nil {
 		t.Fatal("deleting the last profile succeeded")
 	}
@@ -471,8 +471,8 @@ func TestClientDataPathIsPerProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("path: %v", err)
 	}
-	if filepath.Base(path) != "client_data.json" {
-		t.Fatalf("default profile path = %q, want the v1 file name", path)
+	if base := filepath.Base(path); !strings.HasPrefix(base, "client_data-") {
+		t.Fatalf("default profile path = %q, want an id-named file", path)
 	}
 
 	work := NewProfile("工作")
@@ -483,12 +483,15 @@ func TestClientDataPathIsPerProfile(t *testing.T) {
 	if first == path {
 		t.Fatal("profiles share one client data file")
 	}
-	other, err := cfg.ClientDataPathFor(NewProfile("工作!"))
+	// Two accounts with one name are still two files: the id carries identity,
+	// the name is only a label.
+	twin := NewProfile("工作")
+	other, err := cfg.ClientDataPathFor(twin)
 	if err != nil {
 		t.Fatalf("path: %v", err)
 	}
 	if first == other {
-		t.Fatalf("different names collapsed to %q", first)
+		t.Fatalf("two accounts with one name collapsed to %q", first)
 	}
 	if filepath.Dir(first) != filepath.Dir(path) {
 		t.Fatalf("path %q is outside the config directory", first)
@@ -528,8 +531,8 @@ func TestClientDataFollowsTheLoadedSettingsFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("path: %v", err)
 	}
-	if want := filepath.Join(dir, "client_data.json"); first != want {
-		t.Fatalf("path = %q, want %q", first, want)
+	if got := filepath.Dir(first); got != dir {
+		t.Fatalf("path = %q, want it beside %q", first, dir)
 	}
 	if strings.HasPrefix(first, defaultHome) {
 		t.Fatalf("path = %q, the default directory was used", first)
@@ -556,8 +559,8 @@ func TestClientDataFollowsTheLoadedSettingsFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("path: %v", err)
 	}
-	if want := filepath.Join(dir, "client_data.json"); fresh != want {
-		t.Fatalf("fresh path = %q, want %q", fresh, want)
+	if got := filepath.Dir(fresh); got != dir {
+		t.Fatalf("fresh path = %q, want it beside %q", fresh, dir)
 	}
 }
 
@@ -729,25 +732,37 @@ func TestLoadFileRejectsUnknownSettings(t *testing.T) {
 	}
 }
 
-// File names are the account material's identity. A case-insensitive
-// filesystem cannot tell "Work" from "work", so the two profiles must not share
-// a path, while a lowercase name keeps the plain file name it already had.
-func TestProfileSlugSurvivesCaseInsensitiveFilesystems(t *testing.T) {
+// File names are the account material's identity, and the id is what they
+// carry. Two accounts whose names differ only in case are still two files, and
+// the stem is lower case so a case-insensitive filesystem cannot merge them.
+func TestClientDataPathFollowsTheID(t *testing.T) {
 	cfg := Default()
 
-	upper, err := cfg.ClientDataPathFor(Profile{Name: "Work"})
+	upper := Profile{ID: "ABCDEFGH", Name: "Work"}
+	lower := Profile{ID: "IJKLMNOP", Name: "work"}
+	upperPath, err := cfg.ClientDataPathFor(upper)
 	if err != nil {
 		t.Fatalf("upper path: %v", err)
 	}
-	lower, err := cfg.ClientDataPathFor(Profile{Name: "work"})
+	lowerPath, err := cfg.ClientDataPathFor(lower)
 	if err != nil {
 		t.Fatalf("lower path: %v", err)
 	}
-	if upper == lower || strings.EqualFold(upper, lower) {
-		t.Fatalf("both profiles resolve to %q / %q", upper, lower)
+	if strings.EqualFold(upperPath, lowerPath) {
+		t.Fatalf("both accounts resolve to %q / %q", upperPath, lowerPath)
 	}
-	if base := filepath.Base(lower); base != "client_data-work.json" {
-		t.Fatalf("lowercase stem = %q, want the plain name", base)
+	if base := filepath.Base(upperPath); base != "client_data-abcdefgh.json" {
+		t.Fatalf("stem = %q, want the lower-case id", base)
+	}
+	// The name is not part of the path: a rename leaves the file alone.
+	renamed := upper
+	renamed.Name = "Personal"
+	renamedPath, err := cfg.ClientDataPathFor(renamed)
+	if err != nil {
+		t.Fatalf("renamed path: %v", err)
+	}
+	if renamedPath != upperPath {
+		t.Fatalf("a rename moved the file: %q -> %q", upperPath, renamedPath)
 	}
 }
 
@@ -1197,8 +1212,10 @@ username = "bob"
 	if err != nil {
 		t.Fatalf("a v3 file was refused: %v", err)
 	}
-	if cfg.Version != CurrentVersion || cfg.ActiveProfile != "work" || len(cfg.Profiles) != 2 {
-		t.Fatalf("migrated head = %d %q %d", cfg.Version, cfg.ActiveProfile, len(cfg.Profiles))
+	// active_profile names the account by id; the migration has to point it at
+	// the same account the file did, which was "work".
+	if cfg.Version != CurrentVersion || cfg.Active().Name != "work" || len(cfg.Profiles) != 2 {
+		t.Fatalf("migrated head = %d %q %d", cfg.Version, cfg.Active().Name, len(cfg.Profiles))
 	}
 	for _, profile := range cfg.Profiles {
 		if profile.Ident.DeviceID != "0123456789ABCDEF0123456789ABCDEF" {
@@ -1263,8 +1280,8 @@ func TestNewAccountIsASeparateDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 	index := cfg.ProfileIndex("other")
-	if index < 0 || cfg.ActiveProfile != "other" {
-		t.Fatalf("profiles = %v active = %q", cfg.ProfileNames(), cfg.ActiveProfile)
+	if index < 0 || cfg.Active().Name != "other" {
+		t.Fatalf("profiles = %v active = %q", cfg.ProfileNames(), cfg.Active().Name)
 	}
 	blank := cfg.Profiles[index]
 	if blank.Ident.DeviceID != "" || len(blank.Ident.MACAddresses) != 0 {

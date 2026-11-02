@@ -479,7 +479,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 
 	m.mu.Lock()
 	m.client = client
-	m.liveProfile = profile.Name
+	m.liveProfile = profile.ID
 	m.resolver = resolver
 	m.dialer = dial.NewDialer(vpnStack, resolver, ipResources, false, "")
 	m.cancel = cancel

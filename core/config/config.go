@@ -14,6 +14,7 @@ package config
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/base32"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -53,7 +54,11 @@ const (
 // one profile, because exactly one account is connected at a time: a second
 // copy of a listener port or a log level could only disagree with the first.
 type Config struct {
-	Version       int       `toml:"version"`
+	Version int `toml:"version"`
+	// ActiveProfile is the id of the account in use, not its name: a name is a
+	// label the user may repeat or change, and pointing at it made a rename a
+	// profile switch. The id never changes, so the file keeps naming the same
+	// account while its label changes.
 	ActiveProfile string    `toml:"active_profile"`
 	Profiles      []Profile `toml:"profiles"`
 
@@ -351,7 +356,20 @@ func randomHexID() string {
 // newProfileID returns the opaque local identity a profile keeps for its
 // lifetime. It never reaches the gateway; it only keys local state, so the
 // format is free to change as long as it stays unique and TOML-safe.
-func newProfileID() string { return rand.Text() }
+//
+// Eight base32 characters carry 40 random bits. A file holds a handful of
+// accounts, so a collision is not a realistic event, and the account list and
+// the settings file stay readable. EnsureProfileIDs still breaks a duplicate a
+// hand edit or a copy-paste produces.
+func newProfileID() string {
+	var buffer [5]byte
+	if _, err := rand.Read(buffer[:]); err != nil {
+		// A settings file without a stable identity cannot key anything, and a
+		// value that silently repeats would merge two accounts.
+		panic(fmt.Sprintf("generate an account id: %v", err))
+	}
+	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(buffer[:])
+}
 
 // ProxyConfig is the pair of local listeners. An empty bind disables that
 // listener, so a user who only wants SOCKS5 can turn HTTP off. The binds are
@@ -457,6 +475,11 @@ func (k *KeepConfig) SetEnabled(on bool) { k.Enabled = &on }
 func NewProfile(name string) Profile {
 	enabled := true
 	listen := defaultHandoffBind
+	identity := NewIdentity()
+	// An empty list, not a missing key: the file has to show the setting so a
+	// user can see that the machine's own cards are reported and can replace
+	// them with an address of their own.
+	identity.MACAddresses = []string{}
 	return Profile{
 		ID:     newProfileID(),
 		Name:   name,
@@ -465,7 +488,7 @@ func NewProfile(name string) Profile {
 		Proxy:  ProxyConfig{SOCKS5Bind: defaultSocksBind, HTTPBind: defaultHTTPBind},
 		Hand:   HandoffConfig{Listen: &listen},
 		Keep:   KeepConfig{Enabled: &enabled, Interval: defaultKeepAlivePeriod.String()},
-		Ident:  NewIdentity(),
+		Ident:  identity,
 	}
 }
 
@@ -494,10 +517,13 @@ func (c *Config) EnsureProfileIDs() bool {
 
 // Default returns the settings a fresh install uses.
 func Default() Config {
+	profile := NewProfile(DefaultProfileName)
 	return Config{
-		Version:       CurrentVersion,
-		ActiveProfile: DefaultProfileName,
-		Profiles:      []Profile{NewProfile(DefaultProfileName)},
+		Version: CurrentVersion,
+		// The account in use is named by id, so the field points at the one
+		// account the file describes.
+		ActiveProfile: profile.ID,
+		Profiles:      []Profile{profile},
 	}
 }
 
@@ -646,6 +672,18 @@ func (l legacyV3) migrateV3() Config {
 			AutoReconnect: profile.AutoReconnect,
 		})
 	}
+	// active_profile named an account in the old file. The migrated file names
+	// the same account by id, which is what every later version reads. An id is
+	// minted here for the account that has none, so the active one is never
+	// left pointing at an empty id.
+	for index := range cfg.Profiles {
+		if strings.TrimSpace(cfg.Profiles[index].ID) == "" {
+			cfg.Profiles[index].ID = newProfileID()
+		}
+		if cfg.Profiles[index].Name == l.ActiveProfile {
+			cfg.ActiveProfile = cfg.Profiles[index].ID
+		}
+	}
 	return cfg
 }
 
@@ -771,7 +809,54 @@ func LoadOrCreate(path string) (Config, string, error) {
 			return Config{}, path, fmt.Errorf("save the generated settings: %w", err)
 		}
 	}
+	// The stored session used to be named after the account, and before that
+	// after nothing at all. Moving it once keeps a session the portal still
+	// accepts; a file that is already where it belongs is left alone.
+	cfg.adoptLegacyClientData()
 	return cfg, path, nil
+}
+
+// adoptLegacyClientData moves one stored session to the name this build uses.
+// It runs after an account has an id, and only when the target does not exist:
+// a file already there is the record the account goes on using, and overwriting
+// it would swap one account's device identity for another's.
+//
+// The two older names are the v1 single file and the name-derived one. A move
+// that fails is not fatal: the next login simply writes a fresh record, which
+// costs a password login and nothing else.
+func (c Config) adoptLegacyClientData() {
+	if c.path == "" || len(c.Profiles) == 0 {
+		return
+	}
+	target, err := c.ClientDataPathFor(c.Active())
+	if err != nil {
+		return
+	}
+	if _, err := os.Stat(target); err == nil {
+		return
+	}
+	candidates := make([]string, 0, 2)
+	if legacy, err := c.legacyClientDataPath(); err == nil && legacy != target {
+		candidates = append(candidates, legacy)
+	}
+	dir := filepath.Dir(target)
+	for _, profile := range c.Profiles {
+		if profile.Name == DefaultProfileName {
+			continue
+		}
+		name := filepath.Join(dir, "client_data-"+profileSlug(profile.Name)+".json")
+		if name != target {
+			candidates = append(candidates, name)
+		}
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err != nil {
+			continue
+		}
+		if err := os.Rename(candidate, target); err == nil {
+			return
+		}
+	}
 }
 
 // Save writes the settings file with owner-only permissions: it can hold a
@@ -874,7 +959,9 @@ func (c *Config) ActiveProfileRef() *Profile {
 	return nil
 }
 
-// ProfileIndex reports where name sits in Profiles, or -1.
+// ProfileIndex reports where the profile with this name sits in Profiles, or
+// -1. It is a lookup for the window, which edits accounts by name; identity
+// goes through ProfileIDIndex.
 func (c Config) ProfileIndex(name string) int {
 	for index := range c.Profiles {
 		if c.Profiles[index].Name == name {
@@ -884,8 +971,30 @@ func (c Config) ProfileIndex(name string) int {
 	return -1
 }
 
-// ActiveIndex reports where the active profile sits, or -1.
-func (c Config) ActiveIndex() int { return c.ProfileIndex(c.ActiveProfile) }
+// ProfileIDIndex reports where the profile with this id sits, or -1.
+func (c Config) ProfileIDIndex(id string) int {
+	for index := range c.Profiles {
+		if c.Profiles[index].ID == id {
+			return index
+		}
+	}
+	return -1
+}
+
+// ActiveIndex reports where the active profile sits, or -1. active_profile
+// holds an id, so a renamed account stays the active one.
+func (c Config) ActiveIndex() int { return c.ProfileIDIndex(c.ActiveProfile) }
+
+// ActiveID is the active account's id, which is what every local key uses.
+func (c Config) ActiveID() string {
+	if index := c.ActiveIndex(); index >= 0 {
+		return c.Profiles[index].ID
+	}
+	if len(c.Profiles) > 0 {
+		return c.Profiles[0].ID
+	}
+	return ""
+}
 
 // Active returns a copy of the active profile. A hand-edited file whose
 // active_profile names nothing falls back to the first profile, which normalise
@@ -930,7 +1039,7 @@ func (c *Config) NewProfileNamed(name string) (int, error) {
 		profile.Hand = active.Hand
 	}
 	c.Profiles = append(c.Profiles, profile)
-	c.ActiveProfile = name
+	c.ActiveProfile = profile.ID
 	return len(c.Profiles) - 1, nil
 }
 
@@ -954,7 +1063,7 @@ func (c *Config) DuplicateProfile(index int, newName string) (int, error) {
 	clone.ID = newProfileID()
 	clone.Name = newName
 	c.Profiles = append(c.Profiles, clone)
-	c.ActiveProfile = newName
+	c.ActiveProfile = clone.ID
 	return len(c.Profiles) - 1, nil
 }
 
@@ -984,13 +1093,13 @@ func (c *Config) DeleteProfile(index int) error {
 	if len(c.Profiles) == 1 {
 		return errors.New("the last profile cannot be deleted")
 	}
-	name := c.Profiles[index].Name
+	id := c.Profiles[index].ID
 	c.Profiles = append(c.Profiles[:index], c.Profiles[index+1:]...)
-	if c.ActiveProfile == name {
+	if c.ActiveProfile == id {
 		if index >= len(c.Profiles) {
 			index = len(c.Profiles) - 1
 		}
-		c.ActiveProfile = c.Profiles[index].Name
+		c.ActiveProfile = c.Profiles[index].ID
 	}
 	return nil
 }
@@ -1031,12 +1140,15 @@ func (c Config) ServerAddress() string { return c.Active().ServerAddress() }
 func (p Profile) ServerAddress() string { return strings.TrimSpace(p.Server.Address) }
 
 // ClientDataPathFor resolves one profile's client data file. The path is
-// derived from the name, never configured: two accounts that pointed at one
-// file would overwrite each other's sign key and ticket, and the result is a
-// tunnel that comes up while every authorization through it is refused. The
-// file lives beside the settings file that names the profile, so --config moves
-// the account material too; a configuration that was never loaded falls back to
-// the user config directory.
+// derived from the account id, never configured and never from the name: two
+// accounts that pointed at one file would overwrite each other's sign key and
+// ticket, and the result is a tunnel that comes up while every authorization
+// through it is refused. Naming the file after the id also means a rename is
+// only a change of label: the stored session stays where it is.
+//
+// The file lives beside the settings file that names the profile, so --config
+// moves the account material too; a configuration that was never loaded falls
+// back to the user config directory.
 func (c Config) ClientDataPathFor(profile Profile) (string, error) {
 	dir := ""
 	if c.path != "" {
@@ -1048,11 +1160,26 @@ func (c Config) ClientDataPathFor(profile Profile) (string, error) {
 		}
 		dir = defaultDir
 	}
-	if profile.Name == DefaultProfileName {
-		// The v1 file name, so a session stored before profiles keeps working.
-		return filepath.Join(dir, "client_data.json"), nil
+	// An id is already a safe file stem: base32 upper case and digits. Lower
+	// case keeps a case-insensitive filesystem from confusing two accounts,
+	// which is why the id never reaches the disk as written.
+	return filepath.Join(dir, "client_data-"+strings.ToLower(profile.ID)+".json"), nil
+}
+
+// legacyClientDataPath is the v1 file name, used by a build that had one
+// account and no ids. LoadOrCreate moves it to the id-based name once.
+func (c Config) legacyClientDataPath() (string, error) {
+	dir := ""
+	if c.path != "" {
+		dir = filepath.Dir(c.path)
+	} else {
+		defaultDir, err := Dir()
+		if err != nil {
+			return "", err
+		}
+		dir = defaultDir
 	}
-	return filepath.Join(dir, "client_data-"+profileSlug(profile.Name)+".json"), nil
+	return filepath.Join(dir, "client_data.json"), nil
 }
 
 // ProxyAddresses reports the listeners this account asks for.
@@ -1161,8 +1288,8 @@ func (c *Config) normalise() {
 		profile.Name = uniqueName(strings.TrimSpace(profile.Name), used)
 		used[profile.Name] = true
 	}
-	if c.ProfileIndex(c.ActiveProfile) < 0 {
-		c.ActiveProfile = c.Profiles[0].Name
+	if c.ProfileIDIndex(c.ActiveProfile) < 0 {
+		c.ActiveProfile = c.Profiles[0].ID
 	}
 }
 

@@ -41,8 +41,8 @@ type statusReport struct {
 // reportStatus answers whether an instance holds the profile. It is a probe of
 // the same lock the front-ends take, so it reports a login that is starting or
 // shutting down as in use, which is exactly what a second instance would find.
-func reportStatus(stdout, stderr io.Writer, profile, configPath string, asJSON bool) int {
-	pid, held, err := profilelock.Probe(configPath, profile)
+func reportStatus(stdout, stderr io.Writer, profileName, configPath, profileID string, asJSON bool) int {
+	pid, held, err := profilelock.Probe(configPath, profileID)
 	if err != nil {
 		fmt.Fprintf(stderr, "status: %v\n", err)
 		return ExitFailure
@@ -57,7 +57,7 @@ func reportStatus(stdout, stderr io.Writer, profile, configPath string, asJSON b
 	}
 
 	if asJSON {
-		report := statusReport{Profile: profile, InUse: held, PID: pid}
+		report := statusReport{Profile: profileName, InUse: held, PID: pid}
 		if cached {
 			report.Grant = &snapshot
 		}
@@ -65,11 +65,11 @@ func reportStatus(stdout, stderr io.Writer, profile, configPath string, asJSON b
 	} else {
 		switch {
 		case held && pid > 0:
-			fmt.Fprintf(stdout, "profile %s: in use by process %d\n", profile, pid)
+			fmt.Fprintf(stdout, "profile %s: in use by process %d\n", profileName, pid)
 		case held:
-			fmt.Fprintf(stdout, "profile %s: in use\n", profile)
+			fmt.Fprintf(stdout, "profile %s: in use\n", profileName)
 		default:
-			fmt.Fprintf(stdout, "profile %s: not in use\n", profile)
+			fmt.Fprintf(stdout, "profile %s: not in use\n", profileName)
 		}
 		if cached {
 			writeSnapshotText(stdout, snapshot)
@@ -187,11 +187,11 @@ func reportRender(stdout, stderr io.Writer, cfg config.Config, configPath string
 // logs in from nothing instead of replaying a dead ticket. A running instance
 // owns the file, so the reset refuses while the profile is in use.
 func removeLoginData(stdout, stderr io.Writer, cfg config.Config, configPath string) int {
-	if _, held, err := profilelock.Probe(configPath, cfg.ActiveProfile); err != nil {
+	if _, held, err := profilelock.Probe(configPath, cfg.ActiveID()); err != nil {
 		fmt.Fprintf(stderr, "reset: %v\n", err)
 		return ExitFailure
 	} else if held {
-		fmt.Fprintf(stderr, "reset: profile %s is in use; stop it first\n", cfg.ActiveProfile)
+		fmt.Fprintf(stderr, "reset: profile %s is in use; stop it first\n", cfg.Active().Name)
 		return ExitFailure
 	}
 

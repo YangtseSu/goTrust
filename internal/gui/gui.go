@@ -253,7 +253,7 @@ func (a *app) runUI(ctx context.Context) error {
 			// Without a tray icon a hidden window would leave no way back in.
 			a.showWindow()
 		}
-		a.logf("goTrust ready; profile %s", a.cfg.ActiveProfile)
+		a.logf("goTrust ready; profile %s", a.cfg.Active().Name)
 
 		// Logs shows the file as it grows; the tailer runs for the life of
 		// the app, so a page opened later already has the lines behind it.
@@ -968,7 +968,7 @@ func (a *app) changePasswordOnline(ctx context.Context, oldPassword, newPassword
 
 	profile := a.manager.LiveProfile()
 	if profile == "" {
-		profile = a.currentConfig().ActiveProfile
+		profile = a.currentConfig().ActiveID()
 	}
 	if err := a.manager.ResetPassword(ctx, oldPassword, newPassword); err != nil {
 		return err
@@ -1107,7 +1107,7 @@ func (a *app) connect(ctx context.Context) error {
 // the first one stored.
 func (a *app) acquireProfileLock() error {
 	cfg := a.currentConfig()
-	lock, err := profilelock.Acquire(a.configPath, cfg.ActiveProfile)
+	lock, err := profilelock.Acquire(a.configPath, cfg.ActiveID())
 	if err != nil {
 		return err
 	}
@@ -1116,7 +1116,7 @@ func (a *app) acquireProfileLock() error {
 	if a.profileLock != nil {
 		a.mu.Unlock()
 		_ = lock.Release()
-		return fmt.Errorf("profile %q is already held by this instance", cfg.ActiveProfile)
+		return fmt.Errorf("profile %q is already held by this instance", cfg.Active().Name)
 	}
 	a.profileLock = lock
 	a.mu.Unlock()
@@ -1454,13 +1454,14 @@ func (a *app) writeDraft(state *gotrustui.SettingsState) (config.Config, bool) {
 
 // selectProfile switches accounts from the tray or the Accounts page. One
 // live session at a time: the old one disconnects first.
-func (a *app) selectProfile(name string) {
+func (a *app) selectProfile(id string) {
 	cfg := a.currentConfig()
-	if cfg.ActiveProfile == name {
+	if cfg.ActiveProfile == id {
 		return
 	}
-	if cfg.ProfileIndex(name) < 0 {
-		a.setStatusError(locales.ProfileMissing(name))
+	index := cfg.ProfileIDIndex(id)
+	if index < 0 {
+		a.setStatusError(locales.ProfileMissing(id))
 		return
 	}
 
@@ -1468,7 +1469,7 @@ func (a *app) selectProfile(name string) {
 	online := sessionActive(a.view.Session.Phase)
 	a.mu.RUnlock()
 
-	cfg.ActiveProfile = name
+	cfg.ActiveProfile = id
 	if err := config.SaveFile(a.configPath, cfg.ForDisk()); err != nil {
 		a.setStatusError(locales.SwitchFailed(err.Error()))
 		a.logf("switch profile: %v", err)
@@ -1516,45 +1517,20 @@ func (a *app) reconcileProfileSwitch(previous, next config.Config) {
 // closed without saving must leave every file where the stored profiles still
 // point. The path is derived from the name, so a rename moves the file and a
 // deletion removes it.
+// applyClientDataChanges removes the stored session of an account the saved
+// draft deleted. It runs only after the settings file was written: a window
+// closed without saving must leave every file where the stored profiles still
+// point. A rename needs no handling here, because the file is named after the
+// account id rather than its label.
 func (a *app) applyClientDataChanges(cfg config.Config, changes []gotrustui.ClientDataChange) {
 	for _, change := range changes {
-		from, err := cfg.ClientDataPathFor(change.From)
+		path, err := cfg.ClientDataPathFor(change.From)
 		if err != nil {
 			a.logf("locate the client data of %q: %v", change.From.Name, err)
 			continue
 		}
-
-		if change.To.Name == "" {
-			if err := os.Remove(from); err != nil && !errors.Is(err, os.ErrNotExist) {
-				a.logf("remove the client data of %q: %v", change.From.Name, err)
-			}
-			continue
-		}
-
-		to, err := cfg.ClientDataPathFor(change.To)
-		if err != nil {
-			a.logf("locate the client data of %q: %v", change.To.Name, err)
-			continue
-		}
-		if from == to {
-			continue
-		}
-		if _, statErr := os.Stat(from); errors.Is(statErr, os.ErrNotExist) {
-			// Nothing was stored for this account yet: a rename has no file to
-			// move, and the next login creates one under the new name.
-			continue
-		}
-		if err := os.Rename(from, to); err != nil {
-			// A file left behind by an earlier profile with the target name
-			// would block the move where rename does not replace; that profile
-			// is gone from the configuration, so its stale material goes.
-			if removeErr := os.Remove(to); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-				a.logf("replace the client data of %q: %v", change.To.Name, removeErr)
-				continue
-			}
-			if err := os.Rename(from, to); err != nil {
-				a.logf("move the client data of %q to %q: %v", change.From.Name, change.To.Name, err)
-			}
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			a.logf("remove the client data of %q: %v", change.From.Name, err)
 		}
 	}
 }

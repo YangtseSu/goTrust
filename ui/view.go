@@ -113,8 +113,8 @@ type Actions struct {
 	CloseWindow    func()
 	// Settings are the callbacks the settings pages use on the draft.
 	Settings SettingsActions
-	// SelectProfile switches the active account. The application disconnects
-	// first and reconnects when auto-connect is on.
+	// SelectProfile switches the active account, by its id: a name is a label
+	// the user may repeat or change.
 	SelectProfile func(string)
 	// ToggleTheme switches between the light and the dark appearance.
 	ToggleTheme func()
@@ -540,11 +540,10 @@ func themeButton(c *ui.Context, actions Actions) {
 // activeAccountName is the live account's own name, as the sidebar's tag and
 // the tray use it: the name is user data and is not translated.
 func activeAccountName(cfg config.Config) string {
-	name := cfg.ActiveProfile
-	if name == "" {
-		name = config.DefaultProfileName
+	if name := strings.TrimSpace(cfg.Active().Name); name != "" {
+		return name
 	}
-	return name
+	return config.DefaultProfileName
 }
 
 // statusToast reports the last action's result once. The window never keeps it
@@ -1216,14 +1215,15 @@ func TrayMenu(state *State, actions Actions) *mygo.Menu {
 	accounts := make([]*mygo.MenuItem, 0, len(state.Config.Profiles))
 	for _, profile := range state.Config.Profiles {
 		name := profile.Name
+		id := profile.ID
 		accounts = append(accounts, &mygo.MenuItem{
-			ID:      "account:" + name,
+			ID:      "account:" + id,
 			Label:   name,
 			Type:    mygo.MenuItemRadio,
-			Checked: name == state.Config.ActiveProfile,
+			Checked: id == state.Config.ActiveProfile,
 			Click: func(*mygo.MenuItem, *mygo.Window) {
 				if actions.SelectProfile != nil {
-					actions.SelectProfile(name)
+					actions.SelectProfile(id)
 				}
 			},
 		})

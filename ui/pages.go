@@ -126,7 +126,7 @@ func accountPage(c *ui.Context, state *State, actions Actions) {
 			caption(c, locales.ErrNoProfiles())
 			return
 		}
-		if active := settings.ActiveAtOpen; active != "" && active != profile.Name {
+		if active := settings.ActiveAtOpen; active != "" && active != profile.ID {
 			captionTone(c, locales.SettingsSwitchHint(profile.Name), toneWarning)
 		}
 		card(c).Gap(rowGap).Children(func() {
@@ -460,7 +460,7 @@ func accountRow(c *ui.Context, settings *SettingsState, actions Actions, index i
 			}
 			caption(c, gateway).SingleLine()
 		})
-		if profile.Name == settings.ActiveAtOpen {
+		if profile.ID == settings.ActiveAtOpen {
 			caption(c, locales.ProfileCurrent())
 		}
 	})

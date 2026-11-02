@@ -217,7 +217,7 @@ func TestSidebarTagsTheLiveAccount(t *testing.T) {
 	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add account: %v", err)
 	}
-	cfg.ActiveProfile = "工作"
+	cfg.ActiveProfile = cfg.Profiles[cfg.ProfileIndex("工作")].ID
 	state := State{
 		Session: session.State{Phase: session.PhaseIdle},
 		Config:  cfg,
@@ -521,7 +521,7 @@ func TestTrayMenuStatusProfilesAndToggle(t *testing.T) {
 	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
-	cfg.ActiveProfile = config.DefaultProfileName
+	cfg.ActiveProfile = cfg.Profiles[0].ID
 
 	var login, logout int
 	var selected string
@@ -581,8 +581,9 @@ func TestTrayMenuStatusProfilesAndToggle(t *testing.T) {
 		t.Fatal("the active account is not the checked one")
 	}
 	accounts.Submenu[1].Click(accounts.Submenu[1], nil)
-	if selected != "工作" {
-		t.Fatalf("account click selected %q", selected)
+	// A click carries the account id, which is what the application switches on.
+	if want := state.Config.Profiles[state.Config.ProfileIndex("工作")].ID; selected != want {
+		t.Fatalf("account click selected %q, want %q", selected, want)
 	}
 }
 

@@ -107,7 +107,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	switch {
 	case *status:
-		return reportStatus(stdout, stderr, cfg.ActiveProfile, path, *asJSON)
+		return reportStatus(stdout, stderr, cfg.Active().Name, path, cfg.ActiveID(), *asJSON)
 	case *printResources:
 		return reportCachedGrant(stdout, stderr, path, *asJSON)
 	case *pacURL:
@@ -141,7 +141,7 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 	// The tray app takes the same lock before its login. A profile already held
 	// by another instance has one client data file and one tunnel identity, and
 	// two live logins would overwrite each other's session.
-	lock, err := profilelock.Acquire(configPath, cfg.ActiveProfile)
+	lock, err := profilelock.Acquire(configPath, cfg.ActiveID())
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return ExitFailure
@@ -247,7 +247,7 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 
 	state := manager.State()
 	printGrant(stdout, liveGrant{
-		Profile:   cfg.ActiveProfile,
+		Profile:   cfg.Active().Name,
 		Gateway:   gatewayAddress(cfg),
 		TunnelIP:  state.ClientIP,
 		Resources: state.Resources,
@@ -269,20 +269,21 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 // turn an accepted change into a failed login. The file gets the copy ForDisk
 // allows, so a profile that does not store passwords keeps the new one only for
 // this run.
-func saveChangedPassword(cfg *config.Config, configPath, profile, newPassword string, logf func(string, ...any)) {
+func saveChangedPassword(cfg *config.Config, configPath, profileID, newPassword string, logf func(string, ...any)) {
 	next := cfg.Clone()
-	index := next.ProfileIndex(profile)
+	index := next.ProfileIDIndex(profileID)
 	if index < 0 {
-		logf("changed password for unknown profile %q; not stored", profile)
+		logf("changed password for unknown profile %q; not stored", profileID)
 		return
 	}
 	next.Profiles[index].Auth.Password = newPassword
+	name := next.Profiles[index].Name
 	*cfg = next
 	if err := config.SaveFile(configPath, next.ForDisk()); err != nil {
 		logf("save the changed password: %v", err)
 		return
 	}
-	logf("stored the changed password for profile %s", profile)
+	logf("stored the changed password for profile %s", name)
 }
 
 // openLog opens the log file and mirrors it to stderr, which is where a

@@ -100,9 +100,9 @@ type SettingsState struct {
 	Methods     []session.AuthMethod
 	MethodsFrom string
 	Discovering bool
-	// ActiveAtOpen is the profile the saved settings point at. It differs from
-	// the edited one after a dropdown choice, which is what the save hint
-	// reports.
+	// ActiveAtOpen is the id of the profile the saved settings point at. It
+	// differs from the edited one after a dropdown choice, which is what the
+	// save hint reports. An id, not a name: two accounts may share a label.
 	ActiveAtOpen string
 	// LocaleIndex is the language picker's entry: 0 follows the desktop, 1 is
 	// Chinese, 2 is English. The application fills it from the choice mygo
@@ -116,31 +116,25 @@ type SettingsState struct {
 	// loaded. Their stored client data is removed after a successful save, not
 	// before: closing the window without saving must leave the account alone.
 	removedProfiles []config.Profile
-	// renamed is the selected profile's pending name change, if any. Apply
-	// reports it so the caller can move the client data file once the settings
-	// file names the new profile.
-	renamed *ClientDataChange
 }
 
-// ClientDataChange is one stored account file that follows the draft. To is the
-// profile's new name and settings; an empty To.Name means the profile was
-// deleted. Deletions come before a rename in the list, because a rename may
-// take the name of a profile deleted in the same save.
+// ClientDataChange is a profile the draft deleted. Its stored session is
+// removed after a successful save, not before: closing the window without
+// saving must leave the account alone.
+//
+// A rename is not in this list. The stored session is named after the account
+// id, so a new label leaves the file where it is.
 type ClientDataChange struct {
 	From config.Profile
-	To   config.Profile
 }
 
-// ClientDataChanges lists the account files the draft moves or removes. It is
-// meaningful after Apply: the caller writes the settings file first and only
-// then applies these, in order.
+// ClientDataChanges lists the account files the draft removes. It is meaningful
+// after Apply: the caller writes the settings file first and only then applies
+// these, in order.
 func (s *SettingsState) ClientDataChanges() []ClientDataChange {
-	changes := make([]ClientDataChange, 0, len(s.removedProfiles)+1)
+	changes := make([]ClientDataChange, 0, len(s.removedProfiles))
 	for _, profile := range s.removedProfiles {
 		changes = append(changes, ClientDataChange{From: profile})
-	}
-	if s.renamed != nil {
-		changes = append(changes, *s.renamed)
 	}
 	return changes
 }
@@ -252,7 +246,7 @@ func (s *SettingsState) CanChangePassword() bool {
 		return false
 	}
 	profile := s.SelectedProfile()
-	return profile != nil && profile.Name == s.Draft.ActiveProfile
+	return profile != nil && profile.ID == s.Draft.ActiveProfile
 }
 
 // SelectedProfile returns the profile the editor shows, or nil when nothing is
@@ -270,7 +264,6 @@ func (s *SettingsState) Reload(cfg config.Config) {
 	s.ActiveAtOpen = cfg.ActiveProfile
 	s.Discovering = false
 	s.removedProfiles = nil
-	s.renamed = nil
 	s.Selected = s.Draft.ActiveIndex()
 	if s.Selected < 0 {
 		s.Selected = 0
@@ -294,9 +287,6 @@ func (s *SettingsState) Select(index int) bool {
 	changed := index != s.Selected
 	s.Selected = index
 	s.NameText = s.Draft.Profiles[index].Name
-	// The name field now shows another profile's name, so any rename typed for
-	// the previous selection is gone.
-	s.renamed = nil
 	if changed {
 		s.dropStaleMethods()
 	}
@@ -447,7 +437,6 @@ func (s *SettingsState) DeleteProfile() {
 	// The stored material is removed only after a save; until then the draft is
 	// just an edit.
 	s.removedProfiles = append(s.removedProfiles, removed)
-	s.renamed = nil
 	// The buffers are positional: truncating them would hand the deleted
 	// profile's gateway and targets to the profile that moved up.
 	s.Gateways = append(s.Gateways[:index], s.Gateways[index+1:]...)
@@ -508,7 +497,6 @@ func (s *SettingsState) Apply() (config.Config, error) {
 	}
 
 	profile := &cfg.Profiles[index]
-	previousName := profile.Name
 	profile.Name = name
 	profile.Auth.Username = strings.TrimSpace(profile.Auth.Username)
 	profile.Auth.Domain = strings.TrimSpace(profile.Auth.Domain)
@@ -533,16 +521,11 @@ func (s *SettingsState) Apply() (config.Config, error) {
 		}
 	}
 
-	cfg.ActiveProfile = name
+	// Saving the page switches to the account it shows, which is what the hint
+	// above the form promises. The field holds the id, so the switch survives
+	// any later rename.
+	cfg.ActiveProfile = cfg.Profiles[index].ID
 	cfg.Version = config.CurrentVersion
-
-	// A renamed profile's client data file has to follow it. The saved draft
-	// names the new profile already, so this is safe to report here; the caller
-	// applies it only after the settings file is written.
-	s.renamed = nil
-	if previousName != name {
-		s.renamed = &ClientDataChange{From: s.Draft.Profiles[index], To: cfg.Profiles[index]}
-	}
 	return cfg, nil
 }
 
@@ -577,7 +560,7 @@ func (s *SettingsState) folded() config.Config {
 	profile.Keep.Targets = splitTargets(s.Targets[index])
 	cfg.Profiles[index].Proxy.SOCKS5Bind = strings.TrimSpace(cfg.Profiles[index].Proxy.SOCKS5Bind)
 	cfg.Profiles[index].Proxy.HTTPBind = strings.TrimSpace(cfg.Profiles[index].Proxy.HTTPBind)
-	cfg.ActiveProfile = profile.Name
+	// active_profile is untouched: editing an account is not selecting it.
 	cfg.Version = config.CurrentVersion
 	return cfg
 }

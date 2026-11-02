@@ -104,7 +104,7 @@ func TestActiveProfileFeedsTheSession(t *testing.T) {
 		t.Fatalf("active server = %q", got)
 	}
 
-	cfg.ActiveProfile = config.DefaultProfileName
+	cfg.ActiveProfile = cfg.Profiles[0].ID
 	application.applyConfig(cfg)
 	if got := application.currentConfig().Active().ServerAddress(); got != "first.example.com" {
 		t.Fatalf("active server after switch = %q", got)
@@ -188,8 +188,8 @@ func TestSaveSettingsWritesAndApplies(t *testing.T) {
 	if state.Status != "设置已保存" {
 		t.Fatalf("status = %q", state.Status)
 	}
-	if application.currentConfig().ActiveProfile != "工作" {
-		t.Fatalf("active = %q", application.currentConfig().ActiveProfile)
+	if application.currentConfig().Active().Name != "工作" {
+		t.Fatalf("active = %q", application.currentConfig().Active().Name)
 	}
 	if got := application.currentConfig().Active().Auth.Password; got != "memory-only" {
 		t.Fatalf("in-memory password = %q", got)
@@ -484,11 +484,12 @@ func TestPendingLogoutIsSharedAndAwaited(t *testing.T) {
 	}
 }
 
-// A saved rename moves the profile's stored client data, and a saved delete
+// A saved rename leaves the profile's stored client data where it is, because
+// the file is named after the account id rather than its label. A saved delete
 // removes it. Closing the window without saving must leave the files where the
 // stored settings still point, so the draft reports changes and the save applies
 // them.
-func TestSavingProfileChangesMovesItsClientData(t *testing.T) {
+func TestSavingProfileChangesKeepsItsClientData(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.toml")
 
@@ -529,16 +530,17 @@ func TestSavingProfileChangesMovesItsClientData(t *testing.T) {
 	if newIndex < 0 {
 		t.Fatalf("profiles = %v, the rename was not saved", renamed.ProfileNames())
 	}
+	// The name changed, the file did not: it belongs to the id.
 	newPath, err := renamed.ClientDataPathFor(renamed.Profiles[newIndex])
 	if err != nil {
-		t.Fatalf("new client data path: %v", err)
+		t.Fatalf("client data path: %v", err)
 	}
-	if _, err := os.Stat(workPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("the old file still exists (%v)", err)
+	if newPath != workPath {
+		t.Fatalf("a rename moved the file: %q -> %q", workPath, newPath)
 	}
 	raw, err := os.ReadFile(newPath)
 	if err != nil || string(raw) != `{"sid":"kept"}` {
-		t.Fatalf("moved client data = %q, %v", raw, err)
+		t.Fatalf("stored client data = %q, %v", raw, err)
 	}
 
 	// The delete reaches the filesystem only when the draft is saved.

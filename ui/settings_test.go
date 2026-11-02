@@ -33,7 +33,7 @@ func TestSettingsApplyBuildsAProfile(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 	profile := cfg.Active()
-	if cfg.ActiveProfile != "工作" || profile.Name != "工作" {
+	if profile.Name != "工作" || cfg.ActiveProfile != profile.ID {
 		t.Fatalf("active = %q, profile = %q", cfg.ActiveProfile, profile.Name)
 	}
 	if profile.ID != id {
@@ -188,30 +188,31 @@ func TestSettingsClientDataChangesFollowTheDraft(t *testing.T) {
 		t.Fatalf("changes = %+v, want none for an unchanged draft", changes)
 	}
 
+	// A rename is only a label: the stored session is named after the id, so
+	// the draft reports nothing for the caller to move.
 	state.NameText = "工作二"
-	if _, err := state.Apply(); err != nil {
+	renamed, err := state.Apply()
+	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	changes := state.ClientDataChanges()
-	if len(changes) != 1 {
-		t.Fatalf("changes = %+v, want the rename", changes)
-	}
-	if changes[0].From.Name != "工作" || changes[0].To.Name != "工作二" {
-		t.Fatalf("rename = %q -> %q", changes[0].From.Name, changes[0].To.Name)
-	}
-
-	// Selecting another profile discards the typed name, so the rename is no
-	// longer pending.
-	state.Select(0)
 	if changes := state.ClientDataChanges(); len(changes) != 0 {
-		t.Fatalf("changes = %+v, want none after the selection changed", changes)
+		t.Fatalf("changes = %+v, want none for a rename", changes)
+	}
+	if got := renamed.Profiles[renamed.ProfileIDIndex(renamed.ActiveProfile)].Name; got != "工作二" {
+		t.Fatalf("renamed account = %q", got)
+	}
+	// The account in use is still the same one, whatever its label.
+	if renamed.ActiveProfile != renamed.Profiles[state.Selected].ID {
+		t.Fatalf("active = %q, want the edited account", renamed.ActiveProfile)
 	}
 
+	// Deleting another account reports that account, and only that account.
+	removedID := renamed.Profiles[1].ID
 	state.Select(1)
 	state.DeleteProfile()
-	changes = state.ClientDataChanges()
-	if len(changes) != 1 || changes[0].From.Name != "工作" || changes[0].To.Name != "" {
-		t.Fatalf("changes = %+v, want one removal of 工作", changes)
+	changes := state.ClientDataChanges()
+	if len(changes) != 1 || changes[0].From.ID != removedID {
+		t.Fatalf("changes = %+v, want one removal of %s", changes, removedID)
 	}
 
 	// A successful save reloads the draft, which clears what was applied.
@@ -421,11 +422,17 @@ func TestSettingsChangedFollowsTheSavedFile(t *testing.T) {
 	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add profile: %v", err)
 	}
-	cfg.ActiveProfile = config.DefaultProfileName
+	// Point at the default account by id: a name is a label, not identity.
+	cfg.ActiveProfile = cfg.Profiles[0].ID
 	state = NewSettingsState(cfg, "/tmp/logs")
 	state.Select(state.Draft.ProfileIndex("工作"))
+	// Selecting the account the file already uses is not an edit.
+	if state.Changed() {
+		t.Fatal("selecting the saved account is marked as an edit")
+	}
+	state.NameText = "工作二"
 	if !state.Changed() {
-		t.Fatal("choosing another profile is not marked")
+		t.Fatal("a rename is not marked as an edit")
 	}
 
 	// So is removing one, even when nothing else changed.
@@ -488,7 +495,7 @@ func TestAccountsPageRowsMarkTheLiveAccountAndSelect(t *testing.T) {
 	if _, err := cfg.DuplicateProfile(0, "工作"); err != nil {
 		t.Fatalf("add account: %v", err)
 	}
-	cfg.ActiveProfile = config.DefaultProfileName
+	cfg.ActiveProfile = cfg.Profiles[0].ID
 	cfg.Profiles[cfg.ProfileIndex("工作")].Server.Address = "vpn.example.com"
 
 	state := NewSettingsState(cfg, "/tmp/logs")

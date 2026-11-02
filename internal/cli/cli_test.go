@@ -136,8 +136,9 @@ func TestStatusJSON(t *testing.T) {
 	if !report.InUse || report.PID <= 0 {
 		t.Fatalf("report = %+v, want a held profile with a process id", report)
 	}
-	if report.Profile != cfg.ActiveProfile {
-		t.Fatalf("profile = %q, want %q", report.Profile, cfg.ActiveProfile)
+	// The report names the account as the user knows it; the id stays local.
+	if report.Profile != cfg.Active().Name {
+		t.Fatalf("profile = %q, want %q", report.Profile, cfg.Active().Name)
 	}
 	if report.Grant == nil || report.Grant.Gateway != "vpn.example.com:443" {
 		t.Fatalf("grant = %+v, want the cached one", report.Grant)

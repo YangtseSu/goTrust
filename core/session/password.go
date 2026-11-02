@@ -66,9 +66,10 @@ func passwordChangeUnavailable(required *auth.PasswordChangeRequiredError) error
 	return fmt.Errorf("%s; setting a new password needs an interactive client", reason)
 }
 
-// LiveProfile returns the profile the live session belongs to, empty when no
-// session exists. A credential rewrite uses it instead of the currently active
-// profile, which may have changed since the login.
+// LiveProfile returns the id of the profile the live session belongs to, empty
+// when no session exists. A credential rewrite uses it instead of the currently
+// active profile, which may have changed since the login. It is an id, so a
+// rename during the session cannot point the rewrite at another account.
 func (m *Manager) LiveProfile() string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

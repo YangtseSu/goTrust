@@ -15,11 +15,11 @@ The file mode is 0600, because it may hold a password. The window's save bar wri
 ## Complete example
 
 ```toml
-version = 4
-active_profile = "work"
+version = 5
+active_profile = "7KQ2M9XA"
 
 [[profiles]]
-id = "…"
+id = "7KQ2M9XA"
 name = "work"
 auto_reconnect = false
 
@@ -95,7 +95,7 @@ same trade-off the device id makes.
 | Field | Description |
 |---|---|
 | `version` | Configuration format version, currently 5. A file from version 4 or older is migrated on load: the shared settings are copied into every account, and a generated address written by an earlier version is dropped. A version newer than the program is refused rather than rewritten |
-| `active_profile` | Name of the account in use, matching the `name` of some `[[profiles]]` entry |
+| `active_profile` | `id` of the account in use, not its name. A name is a label that may repeat and may change; keying on it would turn a rename into a switch. The id is generated, eight upper-case letters and digits, and is never reused after a deletion |
 
 ### `[[profiles]]`
 
@@ -121,7 +121,7 @@ uses.
 | `logging.verbose` | `false` | Emit protocol-level debug logs. The Logs page switch takes effect immediately |
 | `keepalive.enabled` / `keepalive.interval` / `keepalive.targets` | on / `90s` / none | Application-traffic probes. Targets take precedence over the automatically derived ones (granted ports 80, 443 and 22, plus name-only grants) |
 | `identity.device_id` | generated | 32-digit hexadecimal device identifier, seeded into this account's login data |
-| `identity.mac_addresses` | empty | Empty reports the machine's physical network cards, one entry per card; virtual interfaces are skipped while a real card remains. A value here is reported exactly as written and is never resolved against the host, for the case where one account must present a different address |
+| `identity.mac_addresses` | `[]` | A new file writes an empty list, which reports the machine's physical network cards, one entry per card; virtual interfaces are skipped while a real card remains. A value here is reported exactly as written and is never resolved against the host, for the case where one account must present a different address |
 | `identity.client_version` | — | Client version reported in requests. Empty uses the default built into the program |
 | `identity.os_family` | `linux` | `linux`, `uos` or `windows`. Selects the User-Agent wording; the latter two send the vocabulary the portal expects |
 | `identity.os_arch` | host | Architecture name in the User-Agent |
@@ -135,7 +135,7 @@ loopback address, and a change takes effect on the next start.
 
 The window's Gateway field accepts `host:port`, `https://host:port`, a bare host (443), a pasted path or trailing slash, and a bracketed IPv6 address with or without a port. Other schemes, an empty host and ports outside 1–65535 are rejected. On save the field is split back into `server.address` and `server.port`.
 
-`client_data-<name>.json` holds the account's cookies, device identity and session tickets, also with mode 0600. The path is derived from the account name and cannot be configured: two accounts sharing one file would overwrite each other's sign key and ticket. Renaming an account moves the file and deleting an account removes it, both only after settings are saved. Reset login data on the Settings page, or `gotrust-cli --reset-login-data`, removes it and makes the next login start from nothing: that is the recovery step for a stored record the portal no longer accepts.
+`client_data-<id>.json` holds the account's cookies, device identity and session tickets, also with mode 0600. The path is derived from the account id and cannot be configured: two accounts sharing one file would overwrite each other's sign key and ticket. A rename leaves the file where it is, and deleting an account removes it once settings are saved. Reset login data on the Settings page, or `gotrust-cli --reset-login-data`, removes it and makes the next login start from nothing: that is the recovery step for a stored record the portal no longer accepts.
 
 ## Compatibility
 

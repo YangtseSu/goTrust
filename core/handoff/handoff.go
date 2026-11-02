@@ -55,7 +55,7 @@ func FromState(cfg config.Config, state session.State) Snapshot {
 		}
 	}
 	online := state.Phase == session.PhaseOnline || state.Phase == session.PhaseReconnecting
-	return build(cfg, cfg.ActiveProfile, gateway, state.ClientIP, online, state.Resources)
+	return build(cfg, cfg.Active().Name, gateway, state.ClientIP, online, state.Resources)
 }
 
 // FromCache builds a snapshot from the grant cached by the last login. It is
@@ -66,9 +66,11 @@ func FromCache(cfg config.Config, cached session.ResourceSnapshot) Snapshot {
 	if gateway == "" {
 		gateway = gatewayOf(cfg)
 	}
+	// A cached snapshot names the account as the user knows it; a cache written
+	// before the field existed has nothing to show.
 	profile := cached.Profile
 	if profile == "" {
-		profile = cfg.ActiveProfile
+		profile = cfg.Active().Name
 	}
 	return build(cfg, profile, gateway, cached.TunnelIP, true, cached.Resources)
 }
