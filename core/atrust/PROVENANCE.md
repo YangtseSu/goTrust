@@ -73,6 +73,10 @@ Beyond the module prefix and the drops above:
   adopted only the sign key and the ticket, so the restore predicate never saw
   the device id and the password-free restore never ran: every start made a
   password login, which a gateway that requires a captcha answered with one.
+- The fallback device id keeps the generator's uppercase spelling instead of
+  lowercasing it. goTrust's ids are uppercase, so the lowercase fallback
+  introduced a second spelling for a value the rest of the application treats
+  as one.
 - `service.DeriveKeepAliveTargets` derives TCP targets too. A grant for 80 is
   still a plain HTTP request; 443 completes a TLS handshake, 22 is read for the
   SSH identification, and any other single port gets one connection. The source

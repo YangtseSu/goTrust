@@ -503,7 +503,7 @@ func (c *Client) establishSession(
 	}
 
 	if clientAuthData.DeviceID == "" {
-		clientAuthData.DeviceID = strings.ToLower(randHex(32))
+		clientAuthData.DeviceID = randHex(32)
 	}
 	c.DeviceID = clientAuthData.DeviceID
 	c.ConnectionID = buildConnectionID(c.DeviceID)
