@@ -476,6 +476,10 @@ func NewProfile(name string) Profile {
 	enabled := true
 	listen := defaultHandoffBind
 	identity := NewIdentity()
+	// A new account is complete at creation: its device id must not wait for
+	// the next load, which would let a login mint one of its own before the
+	// file names any.
+	identity.DeviceID = randomHexID()
 	// An empty list, not a missing key: the file has to show the setting so a
 	// user can see that the machine's own cards are reported and can replace
 	// them with an address of their own.
@@ -800,11 +804,17 @@ func LoadOrCreate(path string) (Config, string, error) {
 	if err != nil {
 		return Config{}, path, err
 	}
+	// A missing file is written even when the in-memory defaults are already
+	// complete: LoadOrCreate's contract is that the file exists afterwards.
+	created := false
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		created = true
+	}
 	changed := cfg.EnsureIdentity()
 	if cfg.EnsureProfileIDs() {
 		changed = true
 	}
-	if changed {
+	if changed || created {
 		if err := SaveFile(path, cfg); err != nil {
 			return Config{}, path, fmt.Errorf("save the generated settings: %w", err)
 		}

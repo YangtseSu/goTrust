@@ -768,15 +768,14 @@ func TestClientDataPathFollowsTheID(t *testing.T) {
 
 func TestInstallIdentityIsGeneratedOnce(t *testing.T) {
 	cfg := Default()
-	if !cfg.EnsureIdentity() {
-		t.Fatal("a fresh identity reported no changes")
-	}
 	id := active(&cfg).Ident.DeviceID
 	if len(id) != 32 || strings.ToUpper(id) != id {
 		t.Fatalf("device id %q is not 32 uppercase hex", id)
 	}
+	// A profile created in this run is complete, so loading it again is not a
+	// change; EnsureIdentity only fills what an older file lacks.
 	if cfg.EnsureIdentity() {
-		t.Fatal("a second call replaced the stored id")
+		t.Fatalf("a complete identity reported a change: %+v", cfg.Active().Ident)
 	}
 	if active(&cfg).Ident.DeviceID != id {
 		t.Fatalf("device id = %q, want it stable", active(&cfg).Ident.DeviceID)
@@ -834,6 +833,9 @@ func TestEnsureIdentityAdoptsTheStoredProfileDevice(t *testing.T) {
 	dir := t.TempDir()
 	cfg := Default()
 	cfg.path = filepath.Join(dir, "config.toml")
+	// An older file may predate the generated id; the stored session names the
+	// device it already presented.
+	active(&cfg).Ident.DeviceID = ""
 	clientData, err := cfg.ClientDataPathFor(cfg.Active())
 	if err != nil {
 		t.Fatalf("client data path: %v", err)
@@ -1320,8 +1322,14 @@ func TestNewAccountIsASeparateDevice(t *testing.T) {
 		t.Fatalf("profiles = %v active = %q", cfg.ProfileNames(), cfg.Active().Name)
 	}
 	blank := cfg.Profiles[index]
-	if blank.Ident.DeviceID != "" || len(blank.Ident.MACAddresses) != 0 {
-		t.Fatalf("a blank account came with an identity: %+v", blank.Ident)
+	if blank.Ident.DeviceID == "" || blank.Ident.DeviceID == cfg.Profiles[0].Ident.DeviceID {
+		t.Fatalf("a new account reused the first account's device: %+v", blank.Ident)
+	}
+	if len(blank.Ident.DeviceID) != 32 || strings.ToUpper(blank.Ident.DeviceID) != blank.Ident.DeviceID {
+		t.Fatalf("device id %q is not 32 uppercase hex", blank.Ident.DeviceID)
+	}
+	if len(blank.Ident.MACAddresses) != 0 {
+		t.Fatalf("a new account came with an address: %v", blank.Ident.MACAddresses)
 	}
 	// The listeners carry over, so switching to the new account does not move
 	// the ports an application already points at.
@@ -1329,16 +1337,11 @@ func TestNewAccountIsASeparateDevice(t *testing.T) {
 		t.Fatalf("listeners = %q %q, want the current account's", socks, httpBind)
 	}
 
-	// Filling it in is what makes it a separate device.
+	// A later load keeps the device the account was created with.
 	cfg.EnsureIdentity()
 	minted := cfg.Profiles[cfg.ProfileIndex("other")].Ident
-	if minted.DeviceID == cfg.Profiles[0].Ident.DeviceID {
-		t.Fatal("the new account reused the first account's device")
-	}
-	// The address is the machine's, so both accounts report the same cards
-	// unless one of them names an address of its own.
-	if len(minted.MACAddresses) != 0 {
-		t.Fatalf("the new account came with an address: %v", minted.MACAddresses)
+	if minted.DeviceID != blank.Ident.DeviceID {
+		t.Fatalf("device id changed after load: %q -> %q", blank.Ident.DeviceID, minted.DeviceID)
 	}
 }
 

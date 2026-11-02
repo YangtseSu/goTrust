@@ -1281,9 +1281,13 @@ func TestProfilesPageOffersBothWaysToAddAnAccount(t *testing.T) {
 	if created != 1 || len(state.Draft.Profiles) != 2 {
 		t.Fatalf("created = %d profiles = %v", created, state.Draft.ProfileNames())
 	}
-	// The blank account is a separate device: no identity until it is filled in.
-	if got := state.Draft.Profiles[state.Selected].Ident.DeviceID; got != "" {
-		t.Fatalf("a new account came with a device id: %q", got)
+	// The blank account is a separate device from the moment it is created.
+	got := state.Draft.Profiles[state.Selected].Ident.DeviceID
+	if len(got) != 32 || strings.ToUpper(got) != got {
+		t.Fatalf("a new account came with device id %q, want 32 uppercase hex", got)
+	}
+	if got == state.Draft.Profiles[0].Ident.DeviceID {
+		t.Fatal("a new account reused the first account's device")
 	}
 
 	if err := tester.Click("复制"); err != nil {
