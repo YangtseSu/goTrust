@@ -1009,6 +1009,42 @@ func TestEnsureIdentityLeavesTheAddressToTheMachine(t *testing.T) {
 	}
 }
 
+// TestSaveKeepsTheEmptyAddressList: a new profile writes identity.mac_addresses
+// as an empty list, which is how the file says the login reports the machine's
+// own cards. Every save goes through ForDisk, which clones the settings; the
+// clone has to keep the empty list rather than collapse it to a missing key.
+func TestSaveKeepsTheEmptyAddressList(t *testing.T) {
+	cfg := Default()
+	active(&cfg).Ident.DeviceID = "0123456789ABCDEF0123456789ABCDEF"
+	save := func(cfg Config) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.toml")
+		if err := SaveFile(path, cfg.ForDisk()); err != nil {
+			t.Fatal(err)
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(raw), "mac_addresses = []") {
+			t.Fatalf("the file does not show the empty address list:\n%s", raw)
+		}
+		return path
+	}
+
+	path := save(cfg)
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := active(&loaded).Ident.MACAddresses; got == nil || len(got) != 0 {
+		t.Fatalf("the empty address list did not survive the load: %#v", got)
+	}
+
+	// A reloaded empty list is still present, not missing.
+	save(loaded)
+}
+
 // TestMigrationDropsAGeneratedAddress: a file from the previous version carries
 // a locally administered address that no gateway ever recorded. Keeping it would
 // keep reporting a device that does not exist, so the migration drops it and

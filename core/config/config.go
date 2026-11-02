@@ -1071,17 +1071,28 @@ func (c *Config) DuplicateProfile(index int, newName string) (int, error) {
 // the slice it came from.
 func cloneProfile(profile Profile) Profile {
 	clone := profile
-	clone.Keep.Targets = append([]string(nil), profile.Keep.Targets...)
+	clone.Keep.Targets = cloneStrings(profile.Keep.Targets)
 	if profile.Keep.Enabled != nil {
 		enabled := *profile.Keep.Enabled
 		clone.Keep.Enabled = &enabled
 	}
-	clone.Ident.MACAddresses = append([]string(nil), profile.Ident.MACAddresses...)
+	clone.Ident.MACAddresses = cloneStrings(profile.Ident.MACAddresses)
 	if profile.Hand.Listen != nil {
 		listen := *profile.Hand.Listen
 		clone.Hand.Listen = &listen
 	}
 	return clone
+}
+
+// cloneStrings keeps a present empty list apart from a missing one. The encoder
+// writes `[]` for the former and omits the key for the latter, and
+// identity.mac_addresses relies on that: a new profile writes the empty list so
+// the file shows that the machine's own cards are reported.
+func cloneStrings(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	return append([]string{}, values...)
 }
 
 // DeleteProfile removes the profile at index. The last profile cannot be
