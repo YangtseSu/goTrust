@@ -66,14 +66,16 @@ type SetupOptions struct {
 	ResourceData             []byte
 	BestNodesRefreshInterval time.Duration
 	ChallengeHandler         authchallenge.Handler
-	// UserAgent overrides the aTrustTray UA for every request of this session.
+	// UserAgent names the UA every request of this session carries. The
+	// protocol layer has no default; an empty value leaves the session without
+	// one, and its first request is refused.
 	UserAgent string
 	// Platform overrides the session platform for this setup. Empty keeps the
 	// client identity's value.
 	Platform string
 	// TunnelProcess overrides the process block a TCP tunnel authorisation
 	// reports, which stands for the application that asked for the
-	// destination. Nil keeps the client's per-port default.
+	// destination. Nil reports the running binary.
 	TunnelProcess *TunnelProcess
 	// ClientProcess overrides the process block the L3 environment reports,
 	// which is the client itself. Nil keeps the client's own default.
