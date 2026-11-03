@@ -531,14 +531,10 @@ func (c *Client) DialTCP(ctx context.Context, addr *net.TCPAddr) (net.Conn, erro
 	procPath := c.tunnelProcess.Path
 	procVersion := c.tunnelProcess.Version
 	if procName == "" || procPath == "" {
-		// No process block from the caller: keep the historical decoy so a
-		// plain CLI behaves exactly as before.
-		procName = "google-chrome-stable"
-		procPath = "/usr/bin/google-chrome-stable"
-		if addr.Port == 22 {
-			procName = "ssh"
-			procPath = "/usr/bin/ssh"
-		}
+		// No process block from the caller: report the binary that is running.
+		own := ownProcess()
+		procName = own.Name
+		procPath = own.Path
 		procVersion = "TrustAppClosed"
 	}
 	procHash := fmt.Sprintf("%X", sha256.Sum256([]byte(procPath)))
