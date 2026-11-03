@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -148,6 +149,9 @@ type Options struct {
 	// ResourceCachePath is where the last granted resources are cached for
 	// gotrust-cli --print-resources. Empty disables the cache.
 	ResourceCachePath string
+	// ClientVersion is the binary's version. A login whose account leaves
+	// identity.client_version empty reports this instead.
+	ClientVersion string
 	// OnState is called on every transition, from the goroutine that caused it.
 	OnState func(State)
 }
@@ -258,6 +262,18 @@ func (m *Manager) loginSession(ctx context.Context) error {
 	return m.loginAttempt(ctx, false)
 }
 
+// loginIdentity is the account identity one login presents: the machine's own
+// cards unless the account overrides them, and the binary's version unless the
+// account names one.
+func loginIdentity(profile config.Profile, buildVersion string) config.IdentityConfig {
+	identity := profile.Ident
+	identity.MACAddresses = reportedMACAddresses(profile.Ident.MACAddresses)
+	if strings.TrimSpace(identity.ClientVersion) == "" {
+		identity.ClientVersion = strings.TrimSpace(buildVersion)
+	}
+	return identity
+}
+
 // loginAttempt is one login. afterReauth lets the retry start while the phase
 // is still connecting from the attempt the password change ended; a caller
 // that is not the retry must not find a half-open attempt.
@@ -294,6 +310,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	// One snapshot drives the whole attempt: a profile switch while this login
 	// runs must not mix one account's gateway with another's credentials.
 	profile := cfg.Active()
+	identity := loginIdentity(profile, m.options.ClientVersion)
 
 	// The session must outlive the login attempt. The caller's context carries
 	// the attempt's deadline and the application cancels it once Login returns,
@@ -326,7 +343,7 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	}
 	// The account carries its own identity, so a copy of an account presents
 	// the same device and an account whose id was changed presents another.
-	clientData, err = prepareStoredIdentity(clientData, profile.Ident)
+	clientData, err = prepareStoredIdentity(clientData, identity)
 	if err != nil {
 		return fail("prepare the stored session", err)
 	}
@@ -359,10 +376,10 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 	client := atrust.NewClient(atrust.ClientOptions{
 		Session: atrust.SessionOptions{
 			Username:        profile.Auth.Username,
-			DeviceID:        profile.Ident.DeviceID,
-			MACAddresses:    reportedMACAddresses(profile.Ident.MACAddresses),
-			Platform:        profile.Ident.PlatformName(),
-			ProcessPlatform: profile.Ident.ProcessPlatformName(),
+			DeviceID:        identity.DeviceID,
+			MACAddresses:    identity.MACAddresses,
+			Platform:        identity.PlatformName(),
+			ProcessPlatform: identity.ProcessPlatformName(),
 		},
 		UnderlayDialer: dialer,
 	})
@@ -400,11 +417,11 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 		ClientData:            clientData,
 		ChallengeHandler:      prompt,
 		PasswordChangeHandler: passwordHandler,
-		UserAgent:             profile.Ident.UserAgentString(),
+		UserAgent:             identity.UserAgentString(),
 		TunnelProcess: &atrust.TunnelProcess{
-			Name:    profile.Ident.ProcessName,
-			Path:    profile.Ident.ProcessPath,
-			Version: profile.Ident.ProcessVersion,
+			Name:    identity.ProcessName,
+			Path:    identity.ProcessPath,
+			Version: identity.ProcessVersion,
 		},
 		ClientProcess: clientProcess(),
 		OnPasswordChanged: func(newPassword string) {

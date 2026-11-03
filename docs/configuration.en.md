@@ -122,7 +122,7 @@ uses.
 | `keepalive.enabled` / `keepalive.interval` / `keepalive.targets` | on / `90s` / none | Application-traffic probes. Targets take precedence over the automatically derived ones (granted ports 80, 443 and 22, plus name-only grants) |
 | `identity.device_id` | generated | 32-digit hexadecimal device identifier, seeded into this account's login data |
 | `identity.mac_addresses` | `[]` | A new file writes an empty list, which reports the machine's physical network cards, one entry per card; virtual interfaces are skipped while a real card remains. A value here is reported exactly as written and is never resolved against the host, for the case where one account must present a different address |
-| `identity.client_version` | — | Client version reported in requests. Empty leaves the version out of the User-Agent |
+| `identity.client_version` | build version | Client version reported in requests. Empty reports the binary's build version |
 | `identity.os_family` | host platform | `linux`, `windows` or `macos`. Selects the `platform=` query and the tunnel process block; the User-Agent always states the host platform and architecture. Every Linux distribution is `linux`. The retired `uos` value is read as `linux` |
 | `identity.os_arch` | host | Stored machine architecture; the User-Agent reads the host directly and does not use this value |
 | `identity.user_agent` | derived | Overrides the whole User-Agent |

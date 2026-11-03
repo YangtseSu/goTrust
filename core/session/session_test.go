@@ -651,3 +651,25 @@ func TestKeepAliveTargetsCoverNameOnlyGrants(t *testing.T) {
 		t.Fatalf("targets = %+v, want the granted name probed at its own host", targets)
 	}
 }
+
+// TestLoginIdentityUsesTheBuildVersion: an account that leaves client_version
+// empty reports the binary's build version; a hand-edited value still wins. The
+// address override is part of the same snapshot.
+func TestLoginIdentityUsesTheBuildVersion(t *testing.T) {
+	profile := config.Profile{}
+	profile.Ident.DeviceID = testDeviceID
+	profile.Ident.MACAddresses = []string{"00:11:22:33:44:55"}
+
+	identity := loginIdentity(profile, "0.5.0")
+	if identity.ClientVersion != "0.5.0" {
+		t.Fatalf("client version = %q, want the build version", identity.ClientVersion)
+	}
+	if len(identity.MACAddresses) != 1 || identity.MACAddresses[0] != "00:11:22:33:44:55" {
+		t.Fatalf("addresses = %v, want the account's override", identity.MACAddresses)
+	}
+
+	profile.Ident.ClientVersion = "9.9.9"
+	if got := loginIdentity(profile, "0.5.0").ClientVersion; got != "9.9.9" {
+		t.Fatalf("client version = %q, want the stored value", got)
+	}
+}

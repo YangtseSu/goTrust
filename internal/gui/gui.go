@@ -36,6 +36,7 @@ import (
 	gotrustproxy "github.com/YangtseSu/goTrust/core/proxy"
 	"github.com/YangtseSu/goTrust/core/session"
 	"github.com/YangtseSu/goTrust/data"
+	"github.com/YangtseSu/goTrust/internal/version"
 	"github.com/YangtseSu/goTrust/locales"
 	gotrustui "github.com/YangtseSu/goTrust/ui"
 )
@@ -115,6 +116,7 @@ func Run(configPath string) error {
 		Logf:              application.logf,
 		OnState:           application.onSessionState,
 		ResourceCachePath: config.ResourcesPath(path),
+		ClientVersion:     version.Version,
 		Prompt: func(ctx context.Context) session.Prompter {
 			return &uiPrompter{app: application, ctx: ctx}
 		},

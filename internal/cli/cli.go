@@ -192,6 +192,7 @@ func runSession(stdout, stderr io.Writer, cfg config.Config, configPath string, 
 			}
 		},
 		ResourceCachePath: config.ResourcesPath(configPath),
+		ClientVersion:     version.Version,
 	})
 
 	if listen := cfg.Active().Hand.Address(); listen != "" {
