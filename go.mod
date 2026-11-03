@@ -7,7 +7,7 @@ require (
 	github.com/egoist/mygo v0.7.3
 	github.com/jellydator/ttlcache/v3 v3.4.1
 	github.com/pquerna/otp v1.5.0
-	github.com/things-go/go-socks5 v0.1.3
+	github.com/things-go/go-socks5 v0.1.4
 	golang.org/x/sys v0.49.0
 	gvisor.dev/gvisor v0.0.0-20261027095827-a68437cfc713
 )
