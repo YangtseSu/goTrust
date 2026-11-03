@@ -29,8 +29,15 @@ type SessionOptions struct {
 	// address. The caller decides it, because only the front-end knows whether
 	// the user overrode the machine's own cards.
 	MACAddresses []string
-	SignKey      string
-	SIDTicket    string
+	// Platform is the platform= value every request reports. The caller
+	// derives it from the account identity; empty leaves the parameter out,
+	// which only a caller that has no identity should do.
+	Platform string
+	// ProcessPlatform is the platform the tunnel process blocks report:
+	// Linux, Windows or macOS. The caller derives it from the same identity.
+	ProcessPlatform string
+	SignKey         string
+	SIDTicket       string
 }
 
 type ClientOptions struct {
@@ -61,6 +68,9 @@ type SetupOptions struct {
 	ChallengeHandler         authchallenge.Handler
 	// UserAgent overrides the aTrustTray UA for every request of this session.
 	UserAgent string
+	// Platform overrides the session platform for this setup. Empty keeps the
+	// client identity's value.
+	Platform string
 	// TunnelProcess overrides the process block a TCP tunnel authorisation
 	// reports, which stands for the application that asked for the
 	// destination. Nil keeps the client's per-port default.
@@ -97,7 +107,12 @@ type Client struct {
 	// machine's and a stored copy could only drift from it.
 	MACAddresses []string
 	ConnectionID string
-	SignKey      string
+	// Platform is the platform= value every request reports, from the account
+	// identity. Setup may override it for one session.
+	Platform string
+	// ProcessPlatform is the platform the tunnel process blocks report.
+	ProcessPlatform string
+	SignKey         string
 	// SIDTicket is the portal-issued ticket the restore path exchanges for a
 	// session; it is the material that survives a restart without a password.
 	SIDTicket string
@@ -163,6 +178,8 @@ func NewClient(options ClientOptions) *Client {
 		SID:             options.Session.SID,
 		DeviceID:        options.Session.DeviceID,
 		MACAddresses:    options.Session.MACAddresses,
+		Platform:        options.Session.Platform,
+		ProcessPlatform: options.Session.ProcessPlatform,
 		SignKey:         options.Session.SignKey,
 		SIDTicket:       options.Session.SIDTicket,
 		underlayDialer:  options.UnderlayDialer,
@@ -577,6 +594,11 @@ func (c *Client) SetupContext(ctx context.Context, options SetupOptions) ([]byte
 	}
 	sess := auth.NewSessionContext(setupCtx, authServerHost, c.tlsKeyLogWriter, c.underlayDialer.DialContext)
 	sess.SetUserAgent(options.UserAgent)
+	platform := options.Platform
+	if platform == "" {
+		platform = c.Platform
+	}
+	sess.SetPlatform(platform)
 	if options.TunnelProcess != nil {
 		c.tunnelProcess = *options.TunnelProcess
 	}

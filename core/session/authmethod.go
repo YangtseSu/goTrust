@@ -71,7 +71,8 @@ func DiscoverAuthMethods(ctx context.Context, profile config.Profile) ([]AuthMet
 		return nil, err
 	}
 
-	return discoverAuthMethods(ctx, authHost(address, profile.Server.Port), (&net.Dialer{}).DialContext)
+	return discoverAuthMethods(ctx, authHost(address, profile.Server.Port), (&net.Dialer{}).DialContext,
+		profile.Ident.UserAgentString(), profile.Ident.PlatformName())
 }
 
 // authHost is the host a login sends to the gateway. The client omits the port
@@ -88,8 +89,10 @@ func authHost(address string, port int) string {
 }
 
 // discoverAuthMethods is the part that can be pointed at a test server.
-func discoverAuthMethods(ctx context.Context, host string, dial client.DialContextFunc) ([]AuthMethod, error) {
+func discoverAuthMethods(ctx context.Context, host string, dial client.DialContextFunc, userAgent, platform string) ([]AuthMethod, error) {
 	session := auth.NewSessionContext(ctx, host, nil, dial)
+	session.SetUserAgent(userAgent)
+	session.SetPlatform(platform)
 	infos, err := session.GetAuthInfoList()
 	if err != nil {
 		return nil, err

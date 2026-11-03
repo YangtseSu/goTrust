@@ -110,8 +110,9 @@ type IdentityConfig struct {
 	// ClientVersion is the aTrust client version the UA reports. Empty takes
 	// the default the build was written against.
 	ClientVersion string `toml:"client_version"`
-	// OSFamily selects the vocabulary the UA uses: "uos" reports Linux/UOS,
-	// "windows" reports Windows.
+	// OSFamily selects the vocabulary the UA and the protocol use: "linux"
+	// covers every distribution, "windows" and "macos" carry the vocabulary
+	// those platforms expect. Empty takes the host's family.
 	OSFamily string `toml:"os_family"`
 	// OSArch is the uname -m spelling the UA carries.
 	OSArch string `toml:"os_arch"`
@@ -126,14 +127,18 @@ type IdentityConfig struct {
 	ProcessVersion string `toml:"process_version"`
 }
 
-// Identity families. The family selects the UA vocabulary. The default,
-// "linux", is the truthful one; "uos" and "windows" carry the vocabulary those
-// platforms expect and are only used when the file asks for them.
+// Identity families. The family selects the vocabulary the UA and the
+// protocol use. "linux" covers every distribution; "windows" and "macos"
+// carry the vocabulary those platforms expect.
 const (
 	IdentityOSLinux   = "linux"
-	IdentityOSUOS     = "uos"
 	IdentityOSWindows = "windows"
+	IdentityOSMacOS   = "macos"
 )
+
+// legacyIdentityOSUOS is the value an earlier build accepted for a Linux/UOS
+// identity. A stored value is read as linux and never written again.
+const legacyIdentityOSUOS = "uos"
 
 // defaultClientVersion is the version the alternate presets report when
 // client_version is empty. The truthful family carries no version.
@@ -144,8 +149,40 @@ const defaultClientVersion = "2.5.16.41"
 // once per launch; the hardware address is not stored at all.
 func NewIdentity() IdentityConfig {
 	return IdentityConfig{
-		OSFamily: IdentityOSLinux,
+		OSFamily: hostOSFamily(),
 		OSArch:   archName(),
+	}
+}
+
+// hostOSFamily is the family a new identity starts from: the host platform,
+// with every Linux distribution reporting linux.
+func hostOSFamily() string {
+	return osFamilyFor(runtime.GOOS)
+}
+
+func osFamilyFor(goos string) string {
+	switch goos {
+	case "windows":
+		return IdentityOSWindows
+	case "darwin":
+		return IdentityOSMacOS
+	default:
+		return IdentityOSLinux
+	}
+}
+
+// normalisedIdentityFamily resolves a stored value: an empty one takes the
+// host's family, and the retired uos value becomes linux so an old file still
+// loads. Any other value is kept so validation can name it.
+func normalisedIdentityFamily(family string) string {
+	family = strings.TrimSpace(family)
+	switch family {
+	case "":
+		return hostOSFamily()
+	case legacyIdentityOSUOS:
+		return IdentityOSLinux
+	default:
+		return family
 	}
 }
 
@@ -168,8 +205,8 @@ func (c *Config) EnsureIdentity() bool {
 
 func (c *Config) ensureProfileIdentity(profile *Profile) bool {
 	changed := false
-	if strings.TrimSpace(profile.Ident.OSFamily) == "" {
-		profile.Ident.OSFamily = IdentityOSLinux
+	if family := normalisedIdentityFamily(profile.Ident.OSFamily); family != profile.Ident.OSFamily {
+		profile.Ident.OSFamily = family
 		changed = true
 	}
 	if strings.TrimSpace(profile.Ident.OSArch) == "" {
@@ -224,10 +261,10 @@ func (i IdentityConfig) validate() error {
 		return err
 	}
 	switch i.OSFamily {
-	case "", IdentityOSLinux, IdentityOSUOS, IdentityOSWindows:
+	case "", IdentityOSLinux, IdentityOSWindows, IdentityOSMacOS:
 	default:
 		return fmt.Errorf("identity os_family %q is not one of %q, %q or %q",
-			i.OSFamily, IdentityOSLinux, IdentityOSUOS, IdentityOSWindows)
+			i.OSFamily, IdentityOSLinux, IdentityOSWindows, IdentityOSMacOS)
 	}
 	return nil
 }
@@ -281,9 +318,9 @@ func realMACAddresses(addresses []string) []string {
 }
 
 // UserAgentString is the UA the portal sees. An explicit user_agent wins.
-// Otherwise the default family states what the client is; the uos and windows
-// presets send the vocabulary those platforms use, only when the file selects
-// them.
+// Otherwise the default family states what the client is, and the windows and
+// macOS presets send the vocabulary those platforms use, only when the file
+// selects them.
 func (i IdentityConfig) UserAgentString() string {
 	if strings.TrimSpace(i.UserAgent) != "" {
 		return i.UserAgent
@@ -300,18 +337,44 @@ func (i IdentityConfig) UserAgentString() string {
 		}
 		return fmt.Sprintf("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-Windows-Plat-Windows10-%s SPCClientType",
 			version, uaArch(arch))
-	case IdentityOSUOS:
+	case IdentityOSMacOS:
 		version := i.ClientVersion
 		if version == "" {
 			version = defaultClientVersion
 		}
-		return fmt.Sprintf("Mozilla/5.0 (X11; Linux %s) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-Linux-Plat-UOS-%s SPCClientType",
-			arch, version, uaArch(arch))
+		return fmt.Sprintf("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-MacOS-Plat-MacOS10-%s SPCClientType",
+			version, uaArch(arch))
 	default:
 		if strings.TrimSpace(i.ClientVersion) != "" {
 			return fmt.Sprintf("goTrust/%s (aTrust client; Linux %s)", i.ClientVersion, arch)
 		}
 		return fmt.Sprintf("goTrust (aTrust client; Linux %s)", arch)
+	}
+}
+
+// PlatformName is the platform= value requests carry: the vocabulary the
+// portal expects for this family.
+func (i IdentityConfig) PlatformName() string {
+	switch normalisedIdentityFamily(i.OSFamily) {
+	case IdentityOSWindows:
+		return "Windows"
+	case IdentityOSMacOS:
+		return "Darwin"
+	default:
+		return "Linux"
+	}
+}
+
+// ProcessPlatformName is the platform the tunnel process block reports:
+// Linux, Windows or macOS.
+func (i IdentityConfig) ProcessPlatformName() string {
+	switch normalisedIdentityFamily(i.OSFamily) {
+	case IdentityOSWindows:
+		return "Windows"
+	case IdentityOSMacOS:
+		return "macOS"
+	default:
+		return "Linux"
 	}
 }
 
@@ -1322,9 +1385,7 @@ func (p *Profile) normalise() {
 		p.Proxy.SOCKS5Bind = defaultSocksBind
 		p.Proxy.HTTPBind = defaultHTTPBind
 	}
-	if strings.TrimSpace(p.Ident.OSFamily) == "" {
-		p.Ident.OSFamily = IdentityOSLinux
-	}
+	p.Ident.OSFamily = normalisedIdentityFamily(p.Ident.OSFamily)
 	if strings.TrimSpace(p.Ident.OSArch) == "" {
 		p.Ident.OSArch = archName()
 	}

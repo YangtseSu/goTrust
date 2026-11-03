@@ -45,7 +45,7 @@ func (s *Session) sendCustomSMS() error {
 	}
 
 	u := s.baseURL + "/passport/v1/auth/customSms"
-	params := WithSharedParams(url.Values{
+	params := s.sharedParams(url.Values{
 		"action": {"sendcustomsms"},
 	})
 	req, err := http.NewRequest("POST", u+"?"+params.Encode(), bytes.NewReader(body))
@@ -109,7 +109,7 @@ func (s *Session) customSMSCheckCode(code string, skipSecondaryAuth bool) (authS
 	}
 
 	u := s.baseURL + "/passport/v1/auth/customSms"
-	params := WithSharedParams(url.Values{
+	params := s.sharedParams(url.Values{
 		"action": {"checkcustomcode"},
 	})
 	req, err := http.NewRequest("POST", u+"?"+params.Encode(), bytes.NewReader(body))

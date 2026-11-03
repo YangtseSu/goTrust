@@ -358,9 +358,11 @@ func (m *Manager) loginAttempt(ctx context.Context, afterReauth bool) error {
 
 	client := atrust.NewClient(atrust.ClientOptions{
 		Session: atrust.SessionOptions{
-			Username:     profile.Auth.Username,
-			DeviceID:     profile.Ident.DeviceID,
-			MACAddresses: reportedMACAddresses(profile.Ident.MACAddresses),
+			Username:        profile.Auth.Username,
+			DeviceID:        profile.Ident.DeviceID,
+			MACAddresses:    reportedMACAddresses(profile.Ident.MACAddresses),
+			Platform:        profile.Ident.PlatformName(),
+			ProcessPlatform: profile.Ident.ProcessPlatformName(),
 		},
 		UnderlayDialer: dialer,
 	})

@@ -158,7 +158,7 @@ func recoveringClient(t *testing.T, stub *recoveryStub) *Client {
 	t.Cleanup(c.Close)
 
 	c.sessionMu.Lock()
-	c.session = auth.NewSession(stub.host(), nil)
+	c.session = newAuthTestSession(stub.host(), nil)
 	c.sessionState = SessionOnline
 	c.sessionMu.Unlock()
 
@@ -214,7 +214,7 @@ func TestTicketRestoreWithoutResourceFile(t *testing.T) {
 	t.Cleanup(c.Close)
 
 	c.sessionMu.Lock()
-	c.session = auth.NewSession(stub.host(), nil)
+	c.session = newAuthTestSession(stub.host(), nil)
 	c.sessionMu.Unlock()
 
 	var clientAuthData auth.ClientAuthData
@@ -248,7 +248,7 @@ func TestTicketRestoreUsesTheStoredDeviceID(t *testing.T) {
 	t.Cleanup(c.Close)
 
 	c.sessionMu.Lock()
-	c.session = auth.NewSession(stub.host(), nil)
+	c.session = newAuthTestSession(stub.host(), nil)
 	c.sessionMu.Unlock()
 
 	clientAuthData := auth.ClientAuthData{
@@ -287,7 +287,7 @@ func TestStaleTicketIsReplacedAfterTheFallbackLogin(t *testing.T) {
 	t.Cleanup(c.Close)
 
 	c.sessionMu.Lock()
-	c.session = auth.NewSession(stub.host(), nil)
+	c.session = newAuthTestSession(stub.host(), nil)
 	c.sessionMu.Unlock()
 
 	clientAuthData := auth.ClientAuthData{
@@ -350,7 +350,7 @@ func TestDocumentedCombinationsReachOneDecision(t *testing.T) {
 			c := NewClient(ClientOptions{Session: tt.options})
 			t.Cleanup(c.Close)
 			c.sessionMu.Lock()
-			c.session = auth.NewSession(strings.TrimPrefix(server.URL, "https://"), nil)
+			c.session = newAuthTestSession(strings.TrimPrefix(server.URL, "https://"), nil)
 			c.sessionMu.Unlock()
 
 			var data auth.ClientAuthData
@@ -485,7 +485,7 @@ func TestReloginMakesOneAttempt(t *testing.T) {
 	c := NewClient(ClientOptions{})
 	t.Cleanup(c.Close)
 	c.sessionMu.Lock()
-	c.session = auth.NewSession(strings.TrimPrefix(server.URL, "https://"), nil)
+	c.session = newAuthTestSession(strings.TrimPrefix(server.URL, "https://"), nil)
 	c.loginMethod = auth.PasswordLogin{}
 	c.loginOptions = auth.LoginOptions{DeviceID: "device"}
 	c.sessionMu.Unlock()
@@ -752,7 +752,7 @@ func TestStoredIdentityBeatsTheConfiguredDefault(t *testing.T) {
 	t.Cleanup(c.Close)
 
 	c.sessionMu.Lock()
-	c.session = auth.NewSession(stub.host(), nil)
+	c.session = newAuthTestSession(stub.host(), nil)
 	c.sessionMu.Unlock()
 
 	clientAuthData := auth.ClientAuthData{

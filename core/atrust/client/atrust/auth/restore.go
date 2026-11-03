@@ -29,7 +29,7 @@ func (s *Session) TicketExchange(ctx context.Context) (string, error) {
 	log.Println("Perform POST /passport/v1/public/ticketExchange")
 
 	u := s.baseURL + "/passport/v1/public/ticketExchange"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u+"?"+WithSharedParams(nil).Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u+"?"+s.sharedParams(nil).Encode(), nil)
 	if err != nil {
 		return "", err
 	}
@@ -118,7 +118,7 @@ func (s *Session) sessionIDExchange(ctx context.Context, sidTicket string) error
 	}
 
 	u := s.baseURL + "/passport/v1/public/sessionIdExchange"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u+"?"+WithSharedParams(nil).Encode(), bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u+"?"+s.sharedParams(nil).Encode(), bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}

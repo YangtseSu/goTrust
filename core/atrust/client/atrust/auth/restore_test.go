@@ -172,7 +172,7 @@ func (p *restorePortalStub) postContentTypes() (ticket, exchange string) {
 
 func (p *restorePortalStub) session(t *testing.T, csrf string) *Session {
 	t.Helper()
-	session := NewSession(strings.TrimPrefix(p.server.URL, "https://"), nil)
+	session := newTestSession(strings.TrimPrefix(p.server.URL, "https://"), nil)
 	session.csrfToken = csrf
 	return session
 }

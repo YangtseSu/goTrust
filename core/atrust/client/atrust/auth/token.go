@@ -108,7 +108,7 @@ func (s *Session) submitTokenAt(service string, payload map[string]interface{}) 
 	path := "/passport/v1/" + service
 	log.Printf("Perform POST %s", path)
 	u := s.baseURL + path
-	req, err := http.NewRequest("POST", u+"?"+WithSharedParams(nil).Encode(), bytes.NewReader(postBody))
+	req, err := http.NewRequest("POST", u+"?"+s.sharedParams(nil).Encode(), bytes.NewReader(postBody))
 	if err != nil {
 		return authStep{}, err
 	}
@@ -142,7 +142,7 @@ func (s *Session) submitTokenAt(service string, payload map[string]interface{}) 
 func (s *Session) accessCheck() (authStep, error) {
 	log.Println("Perform GET /passport/v1/auth/accessCheck")
 	u := s.baseURL + "/passport/v1/auth/accessCheck"
-	req, err := http.NewRequest("GET", u+"?"+WithSharedParams(nil).Encode(), nil)
+	req, err := http.NewRequest("GET", u+"?"+s.sharedParams(nil).Encode(), nil)
 	if err != nil {
 		return authStep{}, err
 	}

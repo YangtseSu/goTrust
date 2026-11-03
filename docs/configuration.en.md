@@ -123,7 +123,7 @@ uses.
 | `identity.device_id` | generated | 32-digit hexadecimal device identifier, seeded into this account's login data |
 | `identity.mac_addresses` | `[]` | A new file writes an empty list, which reports the machine's physical network cards, one entry per card; virtual interfaces are skipped while a real card remains. A value here is reported exactly as written and is never resolved against the host, for the case where one account must present a different address |
 | `identity.client_version` | — | Client version reported in requests. Empty uses the default built into the program |
-| `identity.os_family` | `linux` | `linux`, `uos` or `windows`. Selects the User-Agent wording; the latter two send the vocabulary the portal expects |
+| `identity.os_family` | host platform | `linux`, `windows` or `macos`. Selects the platform vocabulary the User-Agent and requests use; every Linux distribution is `linux`. The retired `uos` value is read as `linux` |
 | `identity.os_arch` | host | Architecture name in the User-Agent |
 | `identity.user_agent` | derived | Overrides the whole User-Agent |
 | `identity.process_name` / `process_path` / `process_version` | client's own | Tunnel process block this account reports |

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	mathrand "math/rand"
@@ -21,15 +22,28 @@ import (
 )
 
 const (
-	UserAgent    = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/2.4.10.50 Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-Linux-Plat-Ubuntu-x64 SPCClientType"
 	maxAttempts  = 5
 	maxAuthSteps = 8
 )
 
+// ErrMissingUserAgent is returned before a request is sent when the caller has
+// not named the UA the session presents. The protocol layer has no default:
+// only the installation identity knows what the portal should see.
+var ErrMissingUserAgent = errors.New("auth: a user agent is required before the first request")
+
 var sharedParams = url.Values{
 	"clientType": {"SDPClient"},
-	"platform":   {"Linux"},
 	"lang":       {"en-US"},
+}
+
+// sharedParams combines the fixed query parameters with the session's
+// platform, which the caller derives from the account identity.
+func (s *Session) sharedParams(extra url.Values) url.Values {
+	combined := WithSharedParams(extra)
+	if s.platform != "" {
+		combined.Set("platform", s.platform)
+	}
+	return combined
 }
 
 func WithSharedParams(extra url.Values) url.Values {
@@ -138,10 +152,14 @@ type Session struct {
 	nextService    string
 
 	response map[string]json.RawMessage
-	// userAgent is the UA every request of this session carries. It starts as
-	// the package default and a caller may replace it once, before the first
-	// request (see SetUserAgent).
-	userAgent        string
+	// userAgent is the UA every request of this session carries. It is empty
+	// until the caller names it, and a request without one is refused (see
+	// SetUserAgent and ErrMissingUserAgent).
+	userAgent string
+	// platform is the platform= value every request of this session carries.
+	// The caller sets it from the account identity before the first request
+	// (see SetPlatform); the protocol layer has no platform default.
+	platform         string
 	challengeHandler authchallenge.Handler
 	// passwordChange is the forced-change demand the password answer carried,
 	// and passwordChangeHandler is how the caller answers it. The notifier is
@@ -172,23 +190,30 @@ func NewSessionContext(ctx context.Context, server string, tlsKeyLogWriter io.Wr
 	httpClient := &http.Client{Transport: tr, Jar: jar, Timeout: 20 * time.Second}
 
 	return &Session{
-		ctx:       ctx,
-		client:    httpClient,
-		baseHost:  server,
-		baseURL:   "https://" + server,
-		rid:       base64.StdEncoding.EncodeToString([]byte(server)),
-		response:  make(map[string]json.RawMessage),
-		userAgent: UserAgent,
+		ctx:      ctx,
+		client:   httpClient,
+		baseHost: server,
+		baseURL:  "https://" + server,
+		rid:      base64.StdEncoding.EncodeToString([]byte(server)),
+		response: make(map[string]json.RawMessage),
 	}
 }
 
-// SetUserAgent overrides the UA before the first request. A caller that
-// presents an installation identity uses it, so the login and the tunnel
-// carry that string instead of the package default.
+// SetUserAgent names the UA before the first request. A caller that presents
+// an installation identity derives it from that identity; without one the
+// session refuses every request with ErrMissingUserAgent.
 func (s *Session) SetUserAgent(userAgent string) {
 	if userAgent != "" {
 		s.userAgent = userAgent
 	}
+}
+
+// SetPlatform sets the platform= value every request reports. A caller that
+// presents an installation identity derives it from that identity; the login
+// and the tunnel then send the same platform. It must be set before the first
+// request.
+func (s *Session) SetPlatform(platform string) {
+	s.platform = platform
 }
 
 // SetLifetime rebinds the session from the context of the call that created it to
@@ -217,6 +242,9 @@ func (s *Session) CSRFToken() string {
 }
 
 func (s *Session) request(req *http.Request) (*http.Response, error) {
+	if s.userAgent == "" {
+		return nil, ErrMissingUserAgent
+	}
 	// The request ends when either context does: the session's own one, or the
 	// one the caller put on the request (a per-call deadline or cancellation).
 	// The session context is the parent, so its cancellation is synchronous and

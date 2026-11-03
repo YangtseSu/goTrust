@@ -83,11 +83,18 @@ Beyond the module prefix and the drops above:
   derived HTTP targets only, so an account granted 443 and 22 ran no keep-alive
   at all. The connection is what the probe counts; the exchange is best effort
   and its failure is logged, not reported as a failed probe.
+- The platform a request and a tunnel process block report is a property of the
+  account, not of the build host. `auth.Session` carries it from
+  `SetPlatform`; `Client.ProcessPlatform` replaces the hardcoded `Linux` in the
+  TCP process block and the `runtime.GOOS` expression in the L3 one. The
+  package no longer ships a user-agent default either: a session without one
+  fails its first request with `ErrMissingUserAgent`, because only the
+  installation identity knows what the portal should see.
 
 ## Client version literals
 
-The default user agent in `client/atrust/auth` carries an aTrust client version.
-The current client versions are published at
-<https://atrustcdn.sangfor.com/tools/clientVersion/index.html>, so the literal is
-a published value. It is only a default: the login
-takes the user agent from its options, and goTrust always passes its own.
+The user-agent presets in `core/config` carry an aTrust client version. The
+current client versions are published at
+<https://atrustcdn.sangfor.com/tools/clientVersion/index.html>, so the literal
+is a published value. It is only a default: the login takes the user agent from
+the account identity, and the protocol layer has none of its own.

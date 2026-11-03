@@ -15,7 +15,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -67,9 +66,11 @@ type clientInfo struct {
 	username     string
 	// processName/processPath/processVersion replace the block the tunnel
 	// authorisation reports. An empty field keeps the default decoy.
-	processName    string
-	processPath    string
-	processVersion string
+	// processPlatform is the identity's platform (Linux, Windows or macOS).
+	processName     string
+	processPath     string
+	processVersion  string
+	processPlatform string
 }
 
 func (info clientInfo) currentSID() (string, error) {
@@ -725,15 +726,11 @@ func defaultEnv(info clientInfo) *trustEnv {
 		procVersion = "TrustAppClosed"
 	}
 	fingerprint := fmt.Sprintf("%X", sha256.Sum256([]byte(procPath)))
-	platform := strings.Title(runtime.GOOS)
-	if platform == "Darwin" {
-		platform = "macOS"
-	}
 
 	var env trustEnv
 	env.Application.Runtime.Process.Name = procName
 	env.Application.Runtime.Process.DigitalSignature = "TrustAppClosed"
-	env.Application.Runtime.Process.Platform = platform
+	env.Application.Runtime.Process.Platform = info.processPlatform
 	env.Application.Runtime.Process.Fingerprint = fingerprint
 	env.Application.Runtime.Process.Description = "TrustAppClosed"
 	env.Application.Runtime.Process.Path = procPath

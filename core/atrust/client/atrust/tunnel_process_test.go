@@ -23,6 +23,15 @@ func TestDefaultEnvUsesTheConfiguredProcess(t *testing.T) {
 	}
 }
 
+// The platform follows the caller's identity rather than the host the binary
+// happens to run on, so a preset reports the platform it claims.
+func TestDefaultEnvUsesTheConfiguredPlatform(t *testing.T) {
+	process := defaultEnv(clientInfo{processPlatform: "macOS"}).Application.Runtime.Process
+	if process.Platform != "macOS" {
+		t.Fatalf("platform = %q, want the configured macOS", process.Platform)
+	}
+}
+
 // An empty field falls back to the binary that is running and to the protocol's
 // unsigned-application placeholder.
 func TestDefaultEnvKeepsTheFallbacks(t *testing.T) {

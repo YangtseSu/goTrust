@@ -65,7 +65,7 @@ func (s *Session) QueryDevices(status string) (*QueryDeviceResult, error) {
 	log.Printf("Perform GET /passport/v1/security/queryDevice status=%s", status)
 
 	u := s.baseURL + "/passport/v1/security/queryDevice"
-	params := WithSharedParams(url.Values{
+	params := s.sharedParams(url.Values{
 		"status": {status},
 	})
 	req, _ := http.NewRequest("GET", u+"?"+params.Encode(), nil)
@@ -133,7 +133,7 @@ func (s *Session) TrustDevice(idList []string) error {
 		"idList": idList,
 	}
 	bdy, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", u+"?"+WithSharedParams(nil).Encode(), bytes.NewReader(bdy))
+	req, _ := http.NewRequest("POST", u+"?"+s.sharedParams(nil).Encode(), bytes.NewReader(bdy))
 	req.Header.Set("User-Agent", s.userAgent)
 	req.Header.Set("Content-Type", "application/json;charset=utf-8")
 	req.Header.Set("x-csrf-token", s.csrfToken)
@@ -175,7 +175,7 @@ func (s *Session) UntrustDevice(idList []string) error {
 		"idList": idList,
 	}
 	bdy, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", u+"?"+WithSharedParams(nil).Encode(), bytes.NewReader(bdy))
+	req, _ := http.NewRequest("POST", u+"?"+s.sharedParams(nil).Encode(), bytes.NewReader(bdy))
 	req.Header.Set("User-Agent", s.userAgent)
 	req.Header.Set("Content-Type", "application/json;charset=utf-8")
 	req.Header.Set("x-csrf-token", s.csrfToken)

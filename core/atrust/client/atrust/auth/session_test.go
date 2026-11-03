@@ -27,7 +27,7 @@ func TestLoginReturnsRefreshedCookiesForExistingSession(t *testing.T) {
 	defer server.Close()
 
 	host := strings.TrimPrefix(server.URL, "https://")
-	session := NewSession(host, nil)
+	session := newTestSession(host, nil)
 	result, err := session.Login(nil, LoginOptions{
 		DeviceID: "0123456789abcdef0123456789abcdef",
 		Cookies: []Cookie{{
@@ -70,7 +70,7 @@ func TestAuthInfoPreservesAuthIDAndSubType(t *testing.T) {
 	defer server.Close()
 
 	host := strings.TrimPrefix(server.URL, "https://")
-	list, err := NewSession(host, nil).GetAuthInfoList()
+	list, err := newTestSession(host, nil).GetAuthInfoList()
 	if err != nil {
 		t.Fatalf("GetAuthInfoList() error = %v", err)
 	}

@@ -20,7 +20,7 @@ func TestSetupContextCancellationReachesManifestDial(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		_, err := client.SetupContext(ctx, SetupOptions{ServerAddress: "vpn.example", ServerPort: 443})
+		_, err := client.SetupContext(ctx, SetupOptions{ServerAddress: "vpn.example", ServerPort: 443, UserAgent: testUserAgent})
 		done <- err
 	}()
 	time.Sleep(20 * time.Millisecond)
@@ -39,7 +39,7 @@ func TestClientCloseCancelsSetupContext(t *testing.T) {
 	client := NewClient(ClientOptions{UnderlayDialer: blockingUnderlayDialer{}})
 	done := make(chan error, 1)
 	go func() {
-		_, err := client.SetupContext(context.Background(), SetupOptions{ServerAddress: "vpn.example", ServerPort: 443})
+		_, err := client.SetupContext(context.Background(), SetupOptions{ServerAddress: "vpn.example", ServerPort: 443, UserAgent: testUserAgent})
 		done <- err
 	}()
 	time.Sleep(20 * time.Millisecond)

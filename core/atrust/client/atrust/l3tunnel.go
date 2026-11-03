@@ -49,13 +49,14 @@ const (
 // client that runs the environment, not the TCP requester.
 func l3ClientInfo(c *Client) clientInfo {
 	return clientInfo{
-		sidProvider:    c.sessionSID,
-		deviceID:       c.DeviceID,
-		connectionID:   c.ConnectionID,
-		username:       c.Username,
-		processName:    c.clientProcess.Name,
-		processPath:    c.clientProcess.Path,
-		processVersion: c.clientProcess.Version,
+		sidProvider:     c.sessionSID,
+		deviceID:        c.DeviceID,
+		connectionID:    c.ConnectionID,
+		username:        c.Username,
+		processName:     c.clientProcess.Name,
+		processPath:     c.clientProcess.Path,
+		processVersion:  c.clientProcess.Version,
+		processPlatform: c.ProcessPlatform,
 	}
 }
 

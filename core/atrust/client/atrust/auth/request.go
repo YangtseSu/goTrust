@@ -52,7 +52,7 @@ func (s *Session) authConfig(mod, needTicket bool) (int, []AuthInfo, error) {
 func (s *Session) authConfigContext(ctx context.Context, mod, needTicket, refresh bool) (int, []AuthInfo, error) {
 	log.Println("Perform GET /passport/v1/public/authConfig")
 
-	params := WithSharedParams(nil)
+	params := s.sharedParams(nil)
 	if mod {
 		params.Set("mod", "1")
 	}
@@ -210,7 +210,7 @@ func (s *Session) performAntiMITMRequestContext(ctx context.Context, data antiMI
 	}
 	payload := []byte(fmt.Sprintf("\n            {\n                \"nonce\": \"%s\",\n                \"ticket\": \"%s\"\n            }\n        ", nonce, data.Ticket))
 
-	params := WithSharedParams(nil)
+	params := s.sharedParams(nil)
 	if s.deviceID != "" {
 		params.Set("mobileId", s.deviceID)
 	}
@@ -291,7 +291,7 @@ func (s *Session) reportEnv() error {
 	}
 	body, _ := json.Marshal(payload)
 	log.DebugPrintf("Sending report env: %s", string(body))
-	signPath := endpointPath + "?" + WithSharedParams(nil).Encode()
+	signPath := endpointPath + "?" + s.sharedParams(nil).Encode()
 	req, _ := http.NewRequest("POST", s.baseURL+signPath, bytes.NewReader(body))
 	req.Header.Set("User-Agent", s.userAgent)
 	req.Header.Set("Content-Type", "application/json;charset=utf-8")
@@ -417,7 +417,7 @@ func (s *Session) authCheck() (authStep, error) {
 	log.Println("Perform GET /passport/v1/auth/authCheck")
 
 	u := s.baseURL + "/passport/v1/auth/authCheck"
-	req, _ := http.NewRequest("GET", u+"?"+WithSharedParams(nil).Encode(), nil)
+	req, _ := http.NewRequest("GET", u+"?"+s.sharedParams(nil).Encode(), nil)
 	req.Header.Set("User-Agent", s.userAgent)
 	req.Header.Set("x-csrf-token", s.csrfToken)
 	req.Header.Set("x-sdp-traceid", s.randSdpId())
@@ -463,7 +463,7 @@ func (s *Session) phoneNumber(authID string) ([]string, error) {
 	log.Println("Perform GET /passport/v1/public/phoneNumber")
 
 	u := s.baseURL + "/passport/v1/public/phoneNumber"
-	params := WithSharedParams(nil)
+	params := s.sharedParams(nil)
 	if authID != "" {
 		params.Set("authId", authID)
 	}
@@ -533,7 +533,7 @@ func parsePhoneNumbers(raw json.RawMessage) ([]string, error) {
 func (s *Session) authSms(step authStep) error {
 	log.Println("Perform GET /passport/v1/auth/sms")
 	u := s.baseURL + "/passport/v1/auth/sms"
-	params := WithSharedParams(url.Values{
+	params := s.sharedParams(url.Values{
 		"action": {"sendsms"},
 	})
 	switch step.SMSMode {
@@ -604,7 +604,7 @@ func (s *Session) smsCheckCode(step authStep) (authStep, error) {
 
 func (s *Session) secondarySMSCheckCodeImpl(step authStep, code string, skipSecondaryAuth bool) (authStep, error) {
 	u := s.baseURL + "/passport/v1/auth/sms"
-	params := WithSharedParams(url.Values{
+	params := s.sharedParams(url.Values{
 		"action": {"checkcode"},
 	})
 
@@ -689,7 +689,7 @@ func (s *Session) onlineInfoContext(ctx context.Context) (onlineInfoResult, erro
 	log.Println("Perform GET /passport/v1/user/onlineInfo")
 
 	u := s.baseURL + "/passport/v1/user/onlineInfo"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u+"?"+WithSharedParams(nil).Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u+"?"+s.sharedParams(nil).Encode(), nil)
 	if err != nil {
 		return onlineInfoResult{}, err
 	}
@@ -755,7 +755,7 @@ func (s *Session) ClientResource() ([]byte, error) {
 		},
 	}
 	bdy, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", u+"?"+WithSharedParams(nil).Encode(), bytes.NewReader(bdy))
+	req, _ := http.NewRequest("POST", u+"?"+s.sharedParams(nil).Encode(), bytes.NewReader(bdy))
 	req.Header.Set("User-Agent", s.userAgent)
 	req.Header.Set("Content-Type", "application/json;charset=utf-8")
 	req.Header.Set("x-csrf-token", s.csrfToken)
@@ -778,7 +778,7 @@ func (s *Session) checkCode() ([]byte, error) {
 	log.Println("Perform GET /passport/v1/public/checkCode")
 
 	u := s.baseURL + "/passport/v1/public/checkCode"
-	params := WithSharedParams(url.Values{
+	params := s.sharedParams(url.Values{
 		"rnd": {strconv.FormatInt(time.Now().UnixMilli(), 10)},
 	})
 	req, _ := http.NewRequest("GET", u+"?"+params.Encode(), nil)

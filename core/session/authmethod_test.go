@@ -128,7 +128,7 @@ func TestDiscoverAuthMethodsParsesTheGatewayAnswer(t *testing.T) {
 	}))
 	defer server.Close()
 
-	methods, err := discoverAuthMethods(context.Background(), strings.TrimPrefix(server.URL, "https://"), testDial(server))
+	methods, err := discoverAuthMethods(context.Background(), strings.TrimPrefix(server.URL, "https://"), testDial(server), "goTrust test client", "Linux")
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestDiscoverAuthMethodsAcceptsAnEmptyList(t *testing.T) {
 	}))
 	defer server.Close()
 
-	methods, err := discoverAuthMethods(context.Background(), strings.TrimPrefix(server.URL, "https://"), testDial(server))
+	methods, err := discoverAuthMethods(context.Background(), strings.TrimPrefix(server.URL, "https://"), testDial(server), "goTrust test client", "Linux")
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestDiscoverAuthMethodsHonoursTheContext(t *testing.T) {
 		cancel()
 	}()
 
-	if _, err := discoverAuthMethods(ctx, strings.TrimPrefix(server.URL, "https://"), testDial(server)); err == nil {
+	if _, err := discoverAuthMethods(ctx, strings.TrimPrefix(server.URL, "https://"), testDial(server), "goTrust test client", "Linux"); err == nil {
 		t.Fatal("a cancelled discovery returned a method list")
 	}
 }

@@ -84,7 +84,7 @@ func TestPswImplCapturesForcedPasswordChange(t *testing.T) {
 }
 
 func TestCompletePasswordChangeRequiresAHandler(t *testing.T) {
-	session := NewSession("vpn.example.com", nil)
+	session := newTestSession("vpn.example.com", nil)
 	session.passwordChange = &PasswordChangeChallenge{Code: 75500404, CanSkip: true}
 
 	_, err := session.completePasswordChange()

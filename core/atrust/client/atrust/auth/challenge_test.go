@@ -11,7 +11,7 @@ import (
 )
 
 func TestInteractiveCASUsesExternalLoginChallenge(t *testing.T) {
-	session := NewSession("vpn.example.com", nil)
+	session := newTestSession("vpn.example.com", nil)
 	session.challengeHandler = authchallenge.HandlerFuncs{
 		ExternalLogin: func(challenge authchallenge.ExternalLoginChallenge) (authchallenge.ExternalLoginResponse, error) {
 			if challenge.Kind != authchallenge.ExternalLoginCAS || challenge.LoginURL != "https://idp.example/login" {
@@ -70,7 +70,7 @@ func TestSecondarySMSUsesStructuredChallengeResponse(t *testing.T) {
 }
 
 func TestInteractiveOAuthUsesExternalLoginChallenge(t *testing.T) {
-	session := NewSession("vpn.example.com", nil)
+	session := newTestSession("vpn.example.com", nil)
 	session.challengeHandler = authchallenge.HandlerFuncs{
 		ExternalLogin: func(challenge authchallenge.ExternalLoginChallenge) (authchallenge.ExternalLoginResponse, error) {
 			if challenge.Kind != authchallenge.ExternalLoginOAuth2 || challenge.LoginURL != "https://idp.example/oauth" {

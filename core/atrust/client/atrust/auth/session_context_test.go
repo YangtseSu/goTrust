@@ -21,7 +21,7 @@ func (blockingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 
 func TestNewSessionContextCancelsRequest(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	session := NewSessionContext(ctx, "vpn.example", nil)
+	session := newTestSessionContext(ctx, "vpn.example", nil)
 	session.client.Transport = blockingRoundTripper{}
 	req, err := http.NewRequest(http.MethodGet, "https://example.invalid", nil)
 	if err != nil {
@@ -61,7 +61,7 @@ func TestRequestKeepsBodyReadableAfterReturn(t *testing.T) {
 	}))
 	defer server.Close()
 
-	session := NewSession(strings.TrimPrefix(server.URL, "https://"), nil)
+	session := newTestSession(strings.TrimPrefix(server.URL, "https://"), nil)
 	req, err := http.NewRequestWithContext(
 		context.Background(), http.MethodGet, session.baseURL+"/passport/v1/public/authConfig", nil)
 	if err != nil {

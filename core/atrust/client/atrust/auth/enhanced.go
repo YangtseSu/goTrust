@@ -26,7 +26,7 @@ func (s *Session) completeEnhancedAuth(step authStep) (authStep, error) {
 func (s *Session) requestAuthStep(method string, step authStep, body []byte) (authStep, error) {
 	path := "/passport/v1/" + step.Service
 	log.Printf("Perform %s %s", method, path)
-	params := WithSharedParams(nil)
+	params := s.sharedParams(nil)
 	if step.AuthID != "" {
 		params.Set("authId", step.AuthID)
 	}

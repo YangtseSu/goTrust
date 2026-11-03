@@ -155,7 +155,7 @@ func (s *Session) requestBindAuthDevice(unbindList string) (bindAuthDeviceRespon
 	if err != nil {
 		return bindAuthDeviceResponse{}, err
 	}
-	u := s.baseURL + "/passport/v1/auth/bindAuthDevice?" + WithSharedParams(url.Values{}).Encode()
+	u := s.baseURL + "/passport/v1/auth/bindAuthDevice?" + s.sharedParams(url.Values{}).Encode()
 	req, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(body))
 	if err != nil {
 		return bindAuthDeviceResponse{}, err

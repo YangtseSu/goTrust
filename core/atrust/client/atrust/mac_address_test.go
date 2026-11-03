@@ -72,9 +72,11 @@ func newLoginStub(t *testing.T) *loginStub {
 func loginAgainstStub(t *testing.T, stub *loginStub, c *Client, clientData auth.ClientAuthData) auth.ClientAuthData {
 	t.Helper()
 
-	sess := auth.NewSession(strings.TrimPrefix(stub.server.URL, "https://"), nil)
+	sess := newAuthTestSession(strings.TrimPrefix(stub.server.URL, "https://"), nil)
 	options := SetupOptions{
 		LoginMethod: auth.PasswordLogin{Username: "student", Password: "secret", Domain: "local"},
+		UserAgent:   testUserAgent,
+		Platform:    "Linux",
 	}
 	if _, err := c.establishSession(context.Background(), sess, options, &clientData, nil); err != nil {
 		t.Fatalf("establishSession() error = %v", err)

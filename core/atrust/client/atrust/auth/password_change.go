@@ -560,7 +560,7 @@ func (s *Session) ResetPassword(ctx context.Context, oldPassword, newPassword st
 		return err
 	}
 
-	u := s.baseURL + "/passport/v1/security/modifyPwd?" + WithSharedParams(nil).Encode()
+	u := s.baseURL + "/passport/v1/security/modifyPwd?" + s.sharedParams(nil).Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(payload))
 	if err != nil {
 		return err
@@ -618,7 +618,7 @@ func (s *Session) skipPasswordChange(ctx context.Context) (passwordChangeResult,
 // PasswordStrategy fetches the account's password policy.
 func (s *Session) PasswordStrategy(ctx context.Context) (PasswordStrategy, error) {
 	log.Println("Perform GET /passport/v1/user/pswStrategy")
-	u := s.baseURL + "/passport/v1/user/pswStrategy?" + WithSharedParams(nil).Encode()
+	u := s.baseURL + "/passport/v1/user/pswStrategy?" + s.sharedParams(nil).Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return PasswordStrategy{}, err
@@ -667,7 +667,7 @@ func (s *Session) CheckWeakPassword(ctx context.Context, password string) (WeakP
 		return WeakPasswordResult{}, err
 	}
 
-	u := s.baseURL + "/passport/v1/public/weakpwd?" + WithSharedParams(nil).Encode()
+	u := s.baseURL + "/passport/v1/public/weakpwd?" + s.sharedParams(nil).Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(payload))
 	if err != nil {
 		return WeakPasswordResult{}, err
@@ -706,7 +706,7 @@ func (s *Session) CheckWeakPassword(ctx context.Context, password string) (WeakP
 
 // postPasswordForm posts a form-urlencoded answer to a password endpoint.
 func (s *Session) postPasswordForm(ctx context.Context, path string, form url.Values) (passwordChangeResult, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+path+"?"+WithSharedParams(nil).Encode(), strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+path+"?"+s.sharedParams(nil).Encode(), strings.NewReader(form.Encode()))
 	if err != nil {
 		return passwordChangeResult{}, err
 	}

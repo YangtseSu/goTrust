@@ -69,7 +69,7 @@ func TestRenewalDoesNotInheritTheSetupContext(t *testing.T) {
 	stub := newPortalStub(t, authConfigBody("ticket-1"))
 
 	setupCtx, cancelSetup := context.WithCancel(context.Background())
-	session := NewSessionContext(setupCtx, stub.host(), nil)
+	session := newTestSessionContext(setupCtx, stub.host(), nil)
 	cancelSetup()
 
 	if _, err := session.Refresh(context.Background()); !errors.Is(err, context.Canceled) {
@@ -106,7 +106,7 @@ func TestSessionLifetimeReplacesTheEarlierOne(t *testing.T) {
 	stub := newPortalStub(t, authConfigBody("ticket-1"))
 
 	setupCtx, cancelSetup := context.WithCancel(context.Background())
-	session := NewSessionContext(setupCtx, stub.host(), nil)
+	session := newTestSessionContext(setupCtx, stub.host(), nil)
 
 	lifetime, cancelLifetime := context.WithCancel(context.Background())
 	session.SetLifetime(lifetime)
@@ -129,7 +129,7 @@ func TestSessionLifetimeReplacesTheEarlierOne(t *testing.T) {
 // throw away the ticket the session already holds.
 func TestRenewalKeepsTheTicketWhenAnAnswerOmitsIt(t *testing.T) {
 	stub := newPortalStub(t, authConfigBody("ticket-1"))
-	session := NewSessionContext(context.Background(), stub.host(), nil)
+	session := newTestSessionContext(context.Background(), stub.host(), nil)
 
 	if _, err := session.Refresh(context.Background()); err != nil {
 		t.Fatal(err)

@@ -74,7 +74,7 @@ func (s *Session) pswImpl(username, password, loginDomain, graphCheckCode string
 	postBody, _ := json.Marshal(data)
 
 	u := s.baseURL + "/passport/v1/auth/psw"
-	req, _ := http.NewRequest("POST", u+"?"+WithSharedParams(nil).Encode(), bytes.NewReader(postBody))
+	req, _ := http.NewRequest("POST", u+"?"+s.sharedParams(nil).Encode(), bytes.NewReader(postBody))
 	req.Header.Set("User-Agent", s.userAgent)
 	req.Header.Set("Content-Type", "application/json;charset=utf-8")
 	req.Header.Set("x-csrf-token", s.csrfToken)

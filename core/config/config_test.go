@@ -872,15 +872,75 @@ func TestUserAgentDefaultIsTruthful(t *testing.T) {
 }
 
 func TestUserAgentPresetsAreExplicit(t *testing.T) {
-	uos := IdentityConfig{OSFamily: IdentityOSUOS, OSArch: "x86_64"}
-	if ua := uos.UserAgentString(); !strings.Contains(ua, "aTrustTray/"+defaultClientVersion) ||
-		!strings.Contains(ua, "aTrustTray-Linux-Plat-UOS-x64") {
-		t.Fatalf("UOS preset UA = %q", ua)
+	macOS := IdentityConfig{OSFamily: IdentityOSMacOS, OSArch: "x86_64"}
+	if ua := macOS.UserAgentString(); !strings.Contains(ua, "aTrustTray/"+defaultClientVersion) ||
+		!strings.Contains(ua, "Macintosh; Intel Mac OS X") ||
+		!strings.Contains(ua, "aTrustTray-MacOS-Plat-MacOS10-x64") {
+		t.Fatalf("macOS preset UA = %q", ua)
 	}
 	windows := IdentityConfig{OSFamily: IdentityOSWindows, OSArch: "x86_64"}
 	if ua := windows.UserAgentString(); !strings.Contains(ua, "Windows NT 10.0") ||
 		!strings.Contains(ua, "aTrustTray-Windows-Plat-Windows10-x64") {
 		t.Fatalf("Windows preset UA = %q", ua)
+	}
+}
+
+// TestHostFamilyFollowsTheHost: a fresh identity starts from the platform the
+// build runs on, and every Linux distribution reports linux.
+func TestHostFamilyFollowsTheHost(t *testing.T) {
+	for goos, want := range map[string]string{
+		"linux":   IdentityOSLinux,
+		"freebsd": IdentityOSLinux,
+		"windows": IdentityOSWindows,
+		"darwin":  IdentityOSMacOS,
+	} {
+		if got := osFamilyFor(goos); got != want {
+			t.Fatalf("osFamilyFor(%q) = %q, want %q", goos, got, want)
+		}
+	}
+	if got := NewIdentity().OSFamily; got != hostOSFamily() {
+		t.Fatalf("NewIdentity family = %q, want the host's %q", got, hostOSFamily())
+	}
+}
+
+// TestPlatformNames: the platform= query keeps the vocabulary the portal
+// expects, which differs from the tunnel process spelling for macOS.
+func TestPlatformNames(t *testing.T) {
+	for _, test := range []struct{ family, query, process string }{
+		{IdentityOSLinux, "Linux", "Linux"},
+		{IdentityOSWindows, "Windows", "Windows"},
+		{IdentityOSMacOS, "Darwin", "macOS"},
+		{legacyIdentityOSUOS, "Linux", "Linux"},
+	} {
+		ident := IdentityConfig{OSFamily: test.family}
+		if got := ident.PlatformName(); got != test.query {
+			t.Fatalf("PlatformName(%q) = %q, want %q", test.family, got, test.query)
+		}
+		if got := ident.ProcessPlatformName(); got != test.process {
+			t.Fatalf("ProcessPlatformName(%q) = %q, want %q", test.family, got, test.process)
+		}
+	}
+	empty := IdentityConfig{}
+	if got := empty.PlatformName(); got != (IdentityConfig{OSFamily: hostOSFamily()}).PlatformName() {
+		t.Fatalf("an empty family reported %q, want the host family's platform", got)
+	}
+}
+
+// TestNormalisedIdentityFamily: the stored vocabulary is resolved once, so a
+// missing value takes the host's family and the retired uos value becomes
+// linux before validation runs.
+func TestNormalisedIdentityFamily(t *testing.T) {
+	for _, test := range []struct{ stored, want string }{
+		{"", hostOSFamily()},
+		{legacyIdentityOSUOS, IdentityOSLinux},
+		{" linux ", IdentityOSLinux},
+		{IdentityOSWindows, IdentityOSWindows},
+		{IdentityOSMacOS, IdentityOSMacOS},
+		{"beos", "beos"},
+	} {
+		if got := normalisedIdentityFamily(test.stored); got != test.want {
+			t.Fatalf("normalisedIdentityFamily(%q) = %q, want %q", test.stored, got, test.want)
+		}
 	}
 }
 
@@ -893,7 +953,7 @@ func TestEnsureIdentityFillsTheDerivedFields(t *testing.T) {
 	if !cfg.EnsureIdentity() {
 		t.Fatal("an empty derived identity reported no change")
 	}
-	if active(&cfg).Ident.OSFamily != IdentityOSLinux || active(&cfg).Ident.OSArch == "" {
+	if active(&cfg).Ident.OSFamily != hostOSFamily() || active(&cfg).Ident.OSArch == "" {
 		t.Fatalf("identity = %+v", cfg.Active().Ident)
 	}
 	if active(&cfg).Ident.ClientVersion != "" {
@@ -908,8 +968,13 @@ func TestValidateRejectsAnUnknownIdentityFamily(t *testing.T) {
 	if err := (IdentityConfig{OSFamily: "beos"}).validate(); err == nil {
 		t.Fatal("an unknown os_family was accepted")
 	}
-	if err := (IdentityConfig{OSFamily: IdentityOSWindows}).validate(); err != nil {
-		t.Fatalf("a known family was refused: %v", err)
+	for _, family := range []string{IdentityOSLinux, IdentityOSWindows, IdentityOSMacOS} {
+		if err := (IdentityConfig{OSFamily: family}).validate(); err != nil {
+			t.Fatalf("a known family %q was refused: %v", family, err)
+		}
+	}
+	if err := (IdentityConfig{OSFamily: legacyIdentityOSUOS}).validate(); err == nil {
+		t.Fatal("the retired uos family was accepted")
 	}
 }
 
@@ -1103,7 +1168,7 @@ func TestAccountsCarryTheirOwnIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	index := cfg.ProfileIndex("vendor")
-	cfg.Profiles[index].Ident.OSFamily = IdentityOSUOS
+	cfg.Profiles[index].Ident.OSFamily = IdentityOSMacOS
 	cfg.Profiles[index].Ident.ClientVersion = "2.5.16.41"
 	cfg.Profiles[index].Ident.ProcessName = "google-chrome-stable"
 
@@ -1160,9 +1225,13 @@ func TestValidateRejectsAnUnknownAccountFamily(t *testing.T) {
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("an unknown account os_family was accepted")
 	}
-	cfg.Profiles[0].Ident.OSFamily = IdentityOSUOS
+	cfg.Profiles[0].Ident.OSFamily = IdentityOSMacOS
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("a known account family was refused: %v", err)
+	}
+	cfg.Profiles[0].Ident.OSFamily = legacyIdentityOSUOS
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("the retired uos family was accepted")
 	}
 }
 
@@ -1262,8 +1331,8 @@ username = "bob"
 		if len(profile.Ident.MACAddresses) != 0 {
 			t.Fatalf("%s mac = %v, want the generated placeholder dropped", profile.Name, profile.Ident.MACAddresses)
 		}
-		if profile.Ident.OSFamily != IdentityOSUOS {
-			t.Fatalf("%s family = %q", profile.Name, profile.Ident.OSFamily)
+		if profile.Ident.OSFamily != IdentityOSLinux {
+			t.Fatalf("%s family = %q, want the retired uos value read as linux", profile.Name, profile.Ident.OSFamily)
 		}
 		if socks, httpBind := profile.ProxyAddresses(); socks != "127.0.0.1:1180" || httpBind != "127.0.0.1:1181" {
 			t.Fatalf("%s listeners = %q %q", profile.Name, socks, httpBind)
@@ -1274,6 +1343,41 @@ username = "bob"
 		if !profile.Log.Verbose || !profile.App.Autostart || !profile.App.AutoConnect || !profile.App.StartHidden {
 			t.Fatalf("%s app/log = %+v %+v", profile.Name, profile.App, profile.Log)
 		}
+	}
+}
+
+// TestRetiredUOSFamilyLoadsAsLinux: a current-schema file may still carry the
+// value an earlier build wrote. It is a Linux identity under a retired name, so
+// the file loads and every later save writes linux.
+func TestRetiredUOSFamilyLoadsAsLinux(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	raw := fmt.Sprintf(`version = %d
+
+[[profiles]]
+name = "a"
+[profiles.server]
+address = "vpn.example.com"
+[profiles.auth]
+username = "alice"
+[profiles.identity]
+os_family = "uos"
+`, CurrentVersion)
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("a file with the retired value was refused: %v", err)
+	}
+	ident := cfg.Active().Ident
+	if ident.OSFamily != IdentityOSLinux {
+		t.Fatalf("family = %q, want linux", ident.OSFamily)
+	}
+	if ua := ident.UserAgentString(); !strings.Contains(ua, "goTrust") {
+		t.Fatalf("UA = %q, want the truthful Linux wording", ua)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("the migrated file does not validate: %v", err)
 	}
 }
 

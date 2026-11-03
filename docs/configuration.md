@@ -115,7 +115,7 @@ name = "个人"
 `client_data-<id>.json` 保存该账户的 cookie、设备标识与会话票据，同样是 0600。文件名由账户 `id` 决定，不可配置：两个账户共用一个文件会互相覆盖 sign key 与 ticket。改名不动文件，删除账户在保存设置后删除文件。设置页的“重置登录数据”或 `gotrust-cli --reset-login-data` 会删掉它，让下次登录从零开始——这是网关不再接受已存记录时的恢复手段。
 | `identity.mac_addresses` | `[]` | 新配置写出空列表，表示上报本机网卡的物理地址（每块符合条件的网卡各一条，虚拟网卡在有真实网卡时被排除）。填写后按填写的值上报，不作改动；只在这一账户需要呈现另一个地址时使用 |
 | `identity.client_version` | — | 请求中上报的客户端版本。留空使用程序内置默认值 |
-| `identity.os_family` | `linux` | `linux`、`uos` 或 `windows`。决定 User-Agent 措辞；后两者使用网关期望的写法 |
+| `identity.os_family` | 本机平台 | `linux`、`windows` 或 `macos`。决定 User-Agent 与请求中的平台写法；Linux 的所有发行版都是 `linux`。旧值 `uos` 读取时按 `linux` 处理 |
 | `identity.os_arch` | 本机 | User-Agent 中的架构名 |
 | `identity.user_agent` | 推导 | 直接覆盖整个 User-Agent |
 | `identity.process_name` / `process_path` / `process_version` | 客户端自身 | 该账户上报的隧道进程块 |
