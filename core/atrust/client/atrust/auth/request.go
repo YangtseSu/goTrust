@@ -283,7 +283,7 @@ func (s *Session) reportEnv() error {
 			"endpoint": map[string]interface{}{
 				"device_id": s.deviceID,
 				"device": map[string]interface{}{
-					"type": "browser",
+					"type": "goTrust",
 				},
 				"mac_addresses": s.macAddresses,
 			},

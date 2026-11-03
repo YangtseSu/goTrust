@@ -113,7 +113,7 @@ func reportEnvBody(t *testing.T, deviceID, ticket string, macs []string) string 
 			"endpoint": map[string]interface{}{
 				"device_id": deviceID,
 				"device": map[string]interface{}{
-					"type": "browser",
+					"type": "goTrust",
 				},
 				"mac_addresses": macs,
 			},
