@@ -107,17 +107,19 @@ type IdentityConfig struct {
 	// login time; a value here overrides that, for a gateway that has already
 	// recorded an address this host cannot present.
 	MACAddresses []string `toml:"mac_addresses"`
-	// ClientVersion is the aTrust client version the UA reports. Empty takes
-	// the default the build was written against.
+	// ClientVersion is the aTrust client version the UA reports. Empty leaves
+	// the version out.
 	ClientVersion string `toml:"client_version"`
-	// OSFamily selects the vocabulary the UA and the protocol use: "linux"
+	// OSFamily selects the platform vocabulary the protocol uses: "linux"
 	// covers every distribution, "windows" and "macos" carry the vocabulary
-	// those platforms expect. Empty takes the host's family.
+	// those platforms expect. The User-Agent always states the host. Empty
+	// takes the host's family.
 	OSFamily string `toml:"os_family"`
-	// OSArch is the uname -m spelling the UA carries.
+	// OSArch is the stored machine architecture. The User-Agent reads the
+	// host directly.
 	OSArch string `toml:"os_arch"`
-	// UserAgent overrides the derived UA. Empty derives it from
-	// ClientVersion, OSFamily and OSArch, so a version bump needs one edit.
+	// UserAgent overrides the derived UA. Empty derives it from ClientVersion
+	// and the host platform.
 	UserAgent string `toml:"user_agent,omitempty"`
 	// ProcessName, ProcessPath and ProcessVersion replace the tunnel process
 	// block the client would otherwise report. Empty keeps the client's own
@@ -127,9 +129,9 @@ type IdentityConfig struct {
 	ProcessVersion string `toml:"process_version"`
 }
 
-// Identity families. The family selects the vocabulary the UA and the
-// protocol use. "linux" covers every distribution; "windows" and "macos"
-// carry the vocabulary those platforms expect.
+// Identity families. The family selects the platform vocabulary the protocol
+// uses. "linux" covers every distribution; "windows" and "macos" carry the
+// vocabulary those platforms expect.
 const (
 	IdentityOSLinux   = "linux"
 	IdentityOSWindows = "windows"
@@ -139,10 +141,6 @@ const (
 // legacyIdentityOSUOS is the value an earlier build accepted for a Linux/UOS
 // identity. A stored value is read as linux and never written again.
 const legacyIdentityOSUOS = "uos"
-
-// defaultClientVersion is the version the alternate presets report when
-// client_version is empty. The truthful family carries no version.
-const defaultClientVersion = "2.5.16.41"
 
 // NewIdentity returns the derived part of a fresh identity. The device id is
 // filled by EnsureIdentity so that it is generated once per account rather than
@@ -318,72 +316,56 @@ func realMACAddresses(addresses []string) []string {
 }
 
 // UserAgentString is the UA the portal sees. An explicit user_agent wins.
-// Otherwise the default family states what the client is, and the windows and
-// macOS presets send the vocabulary those platforms use, only when the file
-// selects them.
+// Otherwise it states what the client is, the host platform and the host
+// architecture; the account's os_family does not change it.
 func (i IdentityConfig) UserAgentString() string {
 	if strings.TrimSpace(i.UserAgent) != "" {
 		return i.UserAgent
 	}
-	switch i.OSFamily {
-	case IdentityOSWindows:
-		version := i.ClientVersion
-		if version == "" {
-			version = defaultClientVersion
-		}
-		return fmt.Sprintf("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-Windows-Plat SPCClientType",
-			version)
-	case IdentityOSMacOS:
-		version := i.ClientVersion
-		if version == "" {
-			version = defaultClientVersion
-		}
-		return fmt.Sprintf("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-MacOS-Plat SPCClientType",
-			version)
-	default:
-		arch := i.OSArch
-		if arch == "" {
-			arch = archName()
-		}
-		if strings.TrimSpace(i.ClientVersion) != "" {
-			return fmt.Sprintf("goTrust/%s (aTrust client; Linux %s)", i.ClientVersion, arch)
-		}
-		return fmt.Sprintf("goTrust (aTrust client; Linux %s)", arch)
+	platform := hostPlatformName()
+	arch := archName()
+	if strings.TrimSpace(i.ClientVersion) != "" {
+		return fmt.Sprintf("goTrust/%s (aTrust client; %s %s)", i.ClientVersion, platform, arch)
 	}
+	return fmt.Sprintf("goTrust (aTrust client; %s %s)", platform, arch)
+}
+
+func platformName(family string) string {
+	switch family {
+	case IdentityOSWindows:
+		return "Windows"
+	case IdentityOSMacOS:
+		return "macOS"
+	default:
+		return "Linux"
+	}
+}
+
+func hostPlatformName() string {
+	return platformName(hostOSFamily())
 }
 
 // PlatformName is the platform= value requests carry: the vocabulary the
 // portal expects for this family.
 func (i IdentityConfig) PlatformName() string {
-	switch normalisedIdentityFamily(i.OSFamily) {
-	case IdentityOSWindows:
-		return "Windows"
-	case IdentityOSMacOS:
-		return "macOS"
-	default:
-		return "Linux"
-	}
+	return platformName(normalisedIdentityFamily(i.OSFamily))
 }
 
-// ProcessPlatformName is the platform the tunnel process block reports:
-// Linux, Windows or macOS.
+// ProcessPlatformName is the platform the tunnel process block reports.
 func (i IdentityConfig) ProcessPlatformName() string {
-	switch normalisedIdentityFamily(i.OSFamily) {
-	case IdentityOSWindows:
-		return "Windows"
-	case IdentityOSMacOS:
-		return "macOS"
-	default:
-		return "Linux"
-	}
+	return i.PlatformName()
 }
 
-// archName is the uname -m spelling the protocol expects, not GOARCH.
+// archName is the machine architecture the client reports, in the spelling
+// the host platform uses for it.
 func archName() string {
 	switch runtime.GOARCH {
 	case "amd64":
 		return "x86_64"
 	case "arm64":
+		if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+			return "arm64"
+		}
 		return "aarch64"
 	case "386":
 		return "i686"

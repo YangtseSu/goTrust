@@ -854,16 +854,19 @@ func TestEnsureIdentityAdoptsTheStoredProfileDevice(t *testing.T) {
 
 func TestUserAgentDefaultIsTruthful(t *testing.T) {
 	id := IdentityConfig{}
-	ua := id.UserAgentString()
-	if ua != "goTrust (aTrust client; Linux "+archName()+")" {
-		t.Fatalf("UA = %q, want the truthful default", ua)
+	want := "goTrust (aTrust client; " + hostPlatformName() + " " + archName() + ")"
+	if ua := id.UserAgentString(); ua != want {
+		t.Fatalf("UA = %q, want %q", ua, want)
 	}
-	if strings.Contains(ua, "aTrustTray") || strings.Contains(ua, "UOS") {
+	ua := id.UserAgentString()
+	if strings.Contains(ua, "aTrustTray") || strings.Contains(ua, "UOS") ||
+		strings.Contains(ua, "Chrome/") || strings.Contains(ua, "Electron/") {
 		t.Fatalf("UA %q is not the truthful default", ua)
 	}
 	id.ClientVersion = "1.2.3"
-	if !strings.Contains(id.UserAgentString(), "goTrust/1.2.3") {
-		t.Fatalf("UA %q does not carry the version", id.UserAgentString())
+	want = "goTrust/1.2.3 (aTrust client; " + hostPlatformName() + " " + archName() + ")"
+	if got := id.UserAgentString(); got != want {
+		t.Fatalf("UA = %q, want %q", got, want)
 	}
 	id.UserAgent = "custom-ua"
 	if got := id.UserAgentString(); got != "custom-ua" {
@@ -871,19 +874,15 @@ func TestUserAgentDefaultIsTruthful(t *testing.T) {
 	}
 }
 
-func TestUserAgentPresetsAreExplicit(t *testing.T) {
-	macOS := IdentityConfig{OSFamily: IdentityOSMacOS, OSArch: "x86_64"}
-	if ua := macOS.UserAgentString(); !strings.Contains(ua, "aTrustTray/"+defaultClientVersion) ||
-		!strings.Contains(ua, "Macintosh; Intel Mac OS X") ||
-		!strings.Contains(ua, "aTrustTray-MacOS-Plat SPCClientType") ||
-		strings.Contains(ua, "MacOS10") {
-		t.Fatalf("macOS preset UA = %q", ua)
-	}
-	windows := IdentityConfig{OSFamily: IdentityOSWindows, OSArch: "x86_64"}
-	if ua := windows.UserAgentString(); !strings.Contains(ua, "Windows NT 10.0") ||
-		!strings.Contains(ua, "aTrustTray-Windows-Plat SPCClientType") ||
-		strings.Contains(ua, "Windows10") {
-		t.Fatalf("Windows preset UA = %q", ua)
+// TestUserAgentIsTheSameForEveryFamily: the UA describes the host, so a preset
+// family changes the protocol platform but not the UA.
+func TestUserAgentIsTheSameForEveryFamily(t *testing.T) {
+	want := "goTrust (aTrust client; " + hostPlatformName() + " " + archName() + ")"
+	for _, family := range []string{IdentityOSLinux, IdentityOSWindows, IdentityOSMacOS, legacyIdentityOSUOS} {
+		id := IdentityConfig{OSFamily: family, OSArch: "arm64"}
+		if got := id.UserAgentString(); got != want {
+			t.Fatalf("UA for %q = %q, want %q", family, got, want)
+		}
 	}
 }
 
@@ -1153,9 +1152,9 @@ mac_addresses = ["00:1a:2b:3c:4d:5e"]
 	}
 }
 
-// TestAccountsCarryTheirOwnIdentity: one file may hold an account that presents
-// the vendor's client beside one that presents this program, because the whole
-// identity lives in the profile.
+// TestAccountsCarryTheirOwnIdentity: one file may hold accounts that present
+// different protocol platforms and process blocks. The User-Agent stays the
+// same because it describes the host.
 func TestAccountsCarryTheirOwnIdentity(t *testing.T) {
 	cfg := Default()
 	cfg.ActiveProfileRef().Ident = IdentityConfig{
@@ -1171,14 +1170,16 @@ func TestAccountsCarryTheirOwnIdentity(t *testing.T) {
 	}
 	index := cfg.ProfileIndex("vendor")
 	cfg.Profiles[index].Ident.OSFamily = IdentityOSMacOS
-	cfg.Profiles[index].Ident.ClientVersion = "2.5.16.41"
 	cfg.Profiles[index].Ident.ProcessName = "google-chrome-stable"
 
-	if ua := cfg.Profiles[index].Ident.UserAgentString(); !strings.Contains(ua, "aTrustTray/2.5.16.41") {
-		t.Fatalf("vendor UA = %q", ua)
+	if got := cfg.Profiles[index].Ident.PlatformName(); got != "macOS" {
+		t.Fatalf("vendor platform = %q, want macOS", got)
 	}
-	if ua := cfg.Profiles[0].Ident.UserAgentString(); strings.Contains(ua, "aTrustTray") {
-		t.Fatalf("the other account inherited the vendor vocabulary: %q", ua)
+	if got := cfg.Profiles[0].Ident.PlatformName(); got != "Linux" {
+		t.Fatalf("other platform = %q, want Linux", got)
+	}
+	if got, want := cfg.Profiles[index].Ident.UserAgentString(), cfg.Profiles[0].Ident.UserAgentString(); got != want {
+		t.Fatalf("vendor UA = %q, want the host UA %q", got, want)
 	}
 	if cfg.Profiles[0].Ident.ProcessName != "" {
 		t.Fatalf("the other account inherited a process block: %q", cfg.Profiles[0].Ident.ProcessName)

@@ -2,9 +2,9 @@
 
 ## Goal
 
-Every platform-dependent value the portal sees is derived from the account's
-`identity.os_family`: the login User-Agent, the `platform=` query, and the
-tunnel process block. A new profile defaults to the host platform (`linux`,
+The `platform=` query and the tunnel process block are derived from the
+account's `identity.os_family`; the login User-Agent states the host platform
+and architecture. A new profile defaults to the host platform (`linux`,
 `windows` or `macos`); every Linux distribution is `linux`. The item exists
 for Windows and macOS compatibility: the code currently hardcodes Linux. The
 `uos` value is removed; a stored `uos` migrates to `linux`. On a Linux host
@@ -58,9 +58,9 @@ production path; the `auth.UserAgent` constant is the fallback.
    query builders read that field; no platform literal remains in the request
    code.
 4. **Tunnel process block follows the identity.** The TCP and L3 tunnels use the
-   same mapping as the UA, not `runtime.GOOS` directly. On the default Linux
-   configuration the result is `Linux`; an explicit preset makes the UA and the
-   process block agree.
+   account's platform mapping, not `runtime.GOOS` directly. On the default Linux
+   configuration the result is `Linux`; an explicit preset makes the query and
+   the process block agree, while the UA stays host-truthful.
 5. **No platform default in the protocol layer.** The auth package stops
    shipping a platform-specific UA. A session without a UA fails with a named
    error before the first request; `core/session` always sets one.
@@ -69,13 +69,14 @@ production path; the `auth.UserAgent` constant is the fallback.
 
 | `os_family` | Login UA | `platform=` | Tunnel process | `endpoint.os.family` |
 |---|---|---|---|---|
-| `linux` | Truthful Linux wording | `Linux` | `Linux` | `Linux` |
-| `windows` | Windows preset | `Windows` | `Windows` | `Windows` |
-| `macos` | macOS preset | `macOS` | `macOS` | `macOS` |
+| `linux` | Host truthful wording | `Linux` | `Linux` | `Linux` |
+| `windows` | Host truthful wording | `Windows` | `Windows` | `Windows` |
+| `macos` | Host truthful wording | `macOS` | `macOS` | `macOS` |
 
 The three platform strings are `Linux`, `Windows` and `macOS`; the endpoint
 family uses the same names. Main does not send that field, but the mapping
-stays in one place for that work.
+stays in one place for that work. The User-Agent is the same for every family
+and comes from the host platform and architecture.
 
 ## Phases
 
@@ -84,10 +85,10 @@ stays in one place for that work.
 - [x] Add `IdentityOSMacOS = "macos"`; accept it in `validate`.
 - [x] Add `hostOSFamily()` and use it in `NewIdentity`, `ensureProfileIdentity`
       and `Profile.normalise`; a Linux host maps to `linux`.
-- [x] Add the macOS UA template.
-- [x] Remove `IdentityOSUOS` and its UA preset; rewrite a stored `uos` to
+- [x] Add the macOS family.
+- [x] Remove `IdentityOSUOS` and its preset; rewrite a stored `uos` to
       `linux` before validation.
-- [x] Tests: host family, macOS preset, legacy `uos` migration, validation;
+- [x] Tests: host family, macOS family, legacy `uos` migration, validation;
       update the documentation's `os_family` default and value list.
 
 ### Phase 2 — per-session platform
@@ -144,6 +145,9 @@ stays in one place for that work.
 - The tunnel process block for an explicit preset follows the preset rather
   than the host. That is the consistent wire identity, but it makes the process
   block less literal; the default on every host is unchanged.
+- The User-Agent always states the host, while `platform=` and the process
+  block follow the account. An explicit preset therefore reports a host UA
+  with a preset platform; that is intentional.
 - The auth package refactor touches many call sites. Keep the existing helper
   signatures where possible and cover the query builders with tests.
 - Removing the UA default changes a package-level behaviour; no goTrust caller
@@ -153,8 +157,8 @@ stays in one place for that work.
 
 - On a Linux host with the default, the UA, `platform=`, and process block are
   all Linux; a live login and keep-alive succeed.
-- With `os_family = "windows"` or `"macos"`, the UA, query and process block
-  agree; no field falls back to Linux.
+- With `os_family = "windows"` or `"macos"`, the query and the process block
+  agree; the UA still states the host.
 - A Windows/macOS build defaults to the matching family instead of Linux.
 - No platform literal remains outside the map; the full gate and the cross-build
   checks pass.

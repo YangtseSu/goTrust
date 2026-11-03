@@ -4,9 +4,8 @@
 
 - The platform query uses `Linux` for every Linux distribution, `Windows` for
   Windows and `macOS` for macOS.
-- The platform marker in the User-Agent follows the same platform: a Windows
-  marker, a macOS marker, or a Linux marker; an unrecognised Linux distribution
-  uses the bare Linux marker.
+- The login User-Agent states the host platform and architecture; the account's
+  `os_family` does not change it.
 - A live Linux login with the truthful UA returned code 0 for both environment
   reports and the first tunnel keep-alive answered HTTP 200 (2026-11-03). The
   truthful UA is accepted on the test gateway.
@@ -34,8 +33,8 @@
   `auth.sharedParams`, which every request builder already shared; it now reads
   the session platform, so all endpoints follow the identity through one
   builder instead of three edits.
-- The macOS preset carries `aTrustTray-MacOS-Plat`; a live macOS run is still
-  needed before a release claims that wording is accepted.
+- The User-Agent is built from the host platform and architecture. `os_family`
+  selects the platform query and the tunnel process block.
 - The protocol layer no longer ships a UA. `auth.Session` refuses its first
   request with `ErrMissingUserAgent` until the caller names one, and the client
   discovery path takes the UA and platform from the same account identity as
