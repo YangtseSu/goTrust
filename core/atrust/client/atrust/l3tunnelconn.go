@@ -15,7 +15,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -671,7 +670,7 @@ func buildAuthRequest(info clientInfo, signKey []byte, meta packetMeta, ct *conn
 		ConnectionID:  info.connectionID,
 		Env:           env,
 		ConntrackHash: ct.authID,
-		Lang:          langFromEnv(url),
+		Lang:          "en-US",
 		IP: authIP{
 			Atype:    authIPType(meta.atype),
 			Protocol: meta.proto,
@@ -1114,37 +1113,6 @@ func authIPType(atype int) int {
 	default:
 		return 0x0800
 	}
-}
-
-func langFromEnv(_ string) string {
-	lang := firstNonEmpty(
-		os.Getenv("GOTRUST_LANG"),
-		os.Getenv("LC_ALL"),
-		os.Getenv("LC_MESSAGES"),
-		os.Getenv("LANG"),
-	)
-	if lang == "" {
-		return "en-US"
-	}
-	lang = strings.Split(lang, ".")[0]
-	lang = strings.ReplaceAll(lang, "_", "-")
-	if len(lang) == 2 {
-		lang = strings.ToLower(lang)
-		return lang + "-" + strings.ToUpper(lang)
-	}
-	if parts := strings.Split(lang, "-"); len(parts) == 2 {
-		return strings.ToLower(parts[0]) + "-" + strings.ToUpper(parts[1])
-	}
-	return lang
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 func connTrackKey(meta packetMeta) string {

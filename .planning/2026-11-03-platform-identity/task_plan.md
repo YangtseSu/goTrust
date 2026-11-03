@@ -71,11 +71,11 @@ production path; the `auth.UserAgent` constant is the fallback.
 |---|---|---|---|---|
 | `linux` | Truthful Linux wording | `Linux` | `Linux` | `Linux` |
 | `windows` | Windows preset | `Windows` | `Windows` | `Windows` |
-| `macos` | macOS preset | `Darwin` | `macOS` | `MacOS` |
+| `macos` | macOS preset | `macOS` | `macOS` | `macOS` |
 
-The three platform strings are `Linux`, `Windows` and `Darwin`; the endpoint
-family uses `Linux`, `Windows` and `MacOS`. Main does not send that field, but
-the mapping stays in one place for that work.
+The three platform strings are `Linux`, `Windows` and `macOS`; the endpoint
+family uses the same names. Main does not send that field, but the mapping
+stays in one place for that work.
 
 ## Phases
 
@@ -137,7 +137,7 @@ the mapping stays in one place for that work.
 
 ## Risks and open questions
 
-- The `Darwin` and `Windows` query values need a live run on Windows and macOS
+- The `macOS` and `Windows` query values need a live run on Windows and macOS
   before a release claims exact parity.
 - Removing `uos` changes an existing config value; the migration to `linux`
   keeps the file loadable and the Linux wire values unchanged.

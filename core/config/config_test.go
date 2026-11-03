@@ -875,12 +875,14 @@ func TestUserAgentPresetsAreExplicit(t *testing.T) {
 	macOS := IdentityConfig{OSFamily: IdentityOSMacOS, OSArch: "x86_64"}
 	if ua := macOS.UserAgentString(); !strings.Contains(ua, "aTrustTray/"+defaultClientVersion) ||
 		!strings.Contains(ua, "Macintosh; Intel Mac OS X") ||
-		!strings.Contains(ua, "aTrustTray-MacOS-Plat-MacOS10-x64") {
+		!strings.Contains(ua, "aTrustTray-MacOS-Plat SPCClientType") ||
+		strings.Contains(ua, "MacOS10") {
 		t.Fatalf("macOS preset UA = %q", ua)
 	}
 	windows := IdentityConfig{OSFamily: IdentityOSWindows, OSArch: "x86_64"}
 	if ua := windows.UserAgentString(); !strings.Contains(ua, "Windows NT 10.0") ||
-		!strings.Contains(ua, "aTrustTray-Windows-Plat-Windows10-x64") {
+		!strings.Contains(ua, "aTrustTray-Windows-Plat SPCClientType") ||
+		strings.Contains(ua, "Windows10") {
 		t.Fatalf("Windows preset UA = %q", ua)
 	}
 }
@@ -909,7 +911,7 @@ func TestPlatformNames(t *testing.T) {
 	for _, test := range []struct{ family, query, process string }{
 		{IdentityOSLinux, "Linux", "Linux"},
 		{IdentityOSWindows, "Windows", "Windows"},
-		{IdentityOSMacOS, "Darwin", "macOS"},
+		{IdentityOSMacOS, "macOS", "macOS"},
 		{legacyIdentityOSUOS, "Linux", "Linux"},
 	} {
 		ident := IdentityConfig{OSFamily: test.family}

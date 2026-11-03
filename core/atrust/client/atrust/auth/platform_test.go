@@ -19,7 +19,7 @@ func TestPlatformQueryFollowsTheSession(t *testing.T) {
 	defer server.Close()
 
 	session := newTLSTestSession(server)
-	want := []string{"Linux", "Windows", "Darwin"}
+	want := []string{"Linux", "Windows", "macOS"}
 	for _, platform := range want {
 		session.SetPlatform(platform)
 		if _, err := session.QueryDevice(); err != nil {

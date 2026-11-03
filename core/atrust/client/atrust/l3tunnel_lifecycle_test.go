@@ -1227,6 +1227,9 @@ func TestBuildAuthRequestFieldOrderAndSignature(t *testing.T) {
 	if err := json.Unmarshal(encoded, &signed); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
+	if signed.Lang != "en-US" {
+		t.Fatalf("lang = %q, want en-US", signed.Lang)
+	}
 	signature := signed.XRequestSig
 	signed.XRequestSig = ""
 	unsigned, err := json.Marshal(signed)

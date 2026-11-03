@@ -325,26 +325,26 @@ func (i IdentityConfig) UserAgentString() string {
 	if strings.TrimSpace(i.UserAgent) != "" {
 		return i.UserAgent
 	}
-	arch := i.OSArch
-	if arch == "" {
-		arch = archName()
-	}
 	switch i.OSFamily {
 	case IdentityOSWindows:
 		version := i.ClientVersion
 		if version == "" {
 			version = defaultClientVersion
 		}
-		return fmt.Sprintf("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-Windows-Plat-Windows10-%s SPCClientType",
-			version, uaArch(arch))
+		return fmt.Sprintf("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-Windows-Plat SPCClientType",
+			version)
 	case IdentityOSMacOS:
 		version := i.ClientVersion
 		if version == "" {
 			version = defaultClientVersion
 		}
-		return fmt.Sprintf("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-MacOS-Plat-MacOS10-%s SPCClientType",
-			version, uaArch(arch))
+		return fmt.Sprintf("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) aTrustTray/%s Chrome/83.0.4103.94 Electron/9.0.2 Safari/537.36 aTrustTray-MacOS-Plat SPCClientType",
+			version)
 	default:
+		arch := i.OSArch
+		if arch == "" {
+			arch = archName()
+		}
 		if strings.TrimSpace(i.ClientVersion) != "" {
 			return fmt.Sprintf("goTrust/%s (aTrust client; Linux %s)", i.ClientVersion, arch)
 		}
@@ -359,7 +359,7 @@ func (i IdentityConfig) PlatformName() string {
 	case IdentityOSWindows:
 		return "Windows"
 	case IdentityOSMacOS:
-		return "Darwin"
+		return "macOS"
 	default:
 		return "Linux"
 	}
@@ -375,18 +375,6 @@ func (i IdentityConfig) ProcessPlatformName() string {
 		return "macOS"
 	default:
 		return "Linux"
-	}
-}
-
-// uaArch is the short architecture suffix the UA uses.
-func uaArch(arch string) string {
-	switch arch {
-	case "x86_64", "amd64":
-		return "x64"
-	case "aarch64", "arm64":
-		return "arm64"
-	default:
-		return arch
 	}
 }
 
