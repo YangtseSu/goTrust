@@ -31,7 +31,7 @@ behaviour on the supported platform.
 - No new Linux distribution presets; this item only separates Windows and
   macOS from Linux.
 
-## Current state on main
+## State before this item
 
 | Value | Current source | Problem |
 |---|---|---|
@@ -81,48 +81,59 @@ the mapping stays in one place for that work.
 
 ### Phase 1 — config vocabulary and host default
 
-- [ ] Add `IdentityOSMacOS = "macos"`; accept it in `validate`.
-- [ ] Add `hostOSFamily()` and use it in `NewIdentity`, `ensureProfileIdentity`
+- [x] Add `IdentityOSMacOS = "macos"`; accept it in `validate`.
+- [x] Add `hostOSFamily()` and use it in `NewIdentity`, `ensureProfileIdentity`
       and `Profile.normalise`; a Linux host maps to `linux`.
-- [ ] Add the macOS UA template.
-- [ ] Remove `IdentityOSUOS` and its UA preset; rewrite a stored `uos` to
+- [x] Add the macOS UA template.
+- [x] Remove `IdentityOSUOS` and its UA preset; rewrite a stored `uos` to
       `linux` before validation.
-- [ ] Tests: host family, macOS preset, legacy `uos` migration, validation;
+- [x] Tests: host family, macOS preset, legacy `uos` migration, validation;
       update the documentation's `os_family` default and value list.
 
 ### Phase 2 — per-session platform
 
-- [ ] Add `Platform` to `atrust.SessionOptions` and `SetupOptions`, and a field
+- [x] Add `Platform` to `atrust.SessionOptions` and `SetupOptions`, and a field
       on `auth.Session`; set it before the first request.
-- [ ] `core/session` derives it from `config.IdentityConfig.PlatformName()`.
-- [ ] Replace the three `"platform": {"Linux"}` literals with the session
-      value; keep `WithSharedParams` working for the other parameters.
-- [ ] Tests: authConfig, endpointStrategy and both report requests carry the
-      session platform; the Linux default still sends `Linux`.
+- [x] `core/session` derives it from `config.IdentityConfig.PlatformName()`.
+- [x] Replace the shared `platform` literal with the session value; the builder
+      that every request already used now reads the session, so login,
+      discovery and every later request agree.
+- [x] Tests: the query carries each session platform, and the Linux default
+      still sends `Linux`.
 
 ### Phase 3 — tunnel process platform
 
-- [ ] Add one identity-to-process-platform helper (`Linux`/`Windows`/`macOS`).
-- [ ] Use it in the TCP tunnel instead of `Platform: "Linux"`.
-- [ ] Use it in the L3 tunnel instead of the `runtime.GOOS` expression.
-- [ ] Test the helper; the Linux value is unchanged.
+- [x] Add one identity-to-process-platform helper (`Linux`/`Windows`/`macOS`).
+- [x] Use it in the TCP tunnel instead of `Platform: "Linux"`.
+- [x] Use it in the L3 tunnel instead of the `runtime.GOOS` expression.
+- [x] Test the helper; the Linux value is unchanged.
 
 ### Phase 4 — auth UA default
 
-- [ ] Remove the platform-specific `auth.UserAgent` fallback; a session without
+- [x] Remove the platform-specific `auth.UserAgent` fallback; a session without
       a UA fails with a named error.
-- [ ] `core/session` always sets the UA; update the auth package tests.
-- [ ] Record the change in `core/atrust/PROVENANCE.md`.
+- [x] `core/session` always sets the UA, discovery included; update the auth
+      package tests.
+- [x] Record the change in `core/atrust/PROVENANCE.md`.
 
 ### Phase 5 — gates
 
-- [ ] `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .`,
+- [x] `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l .`,
       `reuse lint`.
-- [ ] `GOOS=windows go build ./cmd/gotrust-cli` and
+- [x] `GOOS=windows go build ./cmd/gotrust-cli` and
       `GOOS=darwin go build ./cmd/gotrust-cli`.
-- [ ] Live Linux login and tunnel keep-alive unchanged (manual).
-- [ ] Grep gate: no `platform=Linux` or `Platform: "Linux"` literal outside the
+- [x] Live Linux login and tunnel keep-alive unchanged (manual).
+- [x] Grep gate: no `platform=Linux` or `Platform: "Linux"` literal outside the
       mapping helper and its tests.
+
+## Verification (2026-11-03)
+
+- The five gates above pass; both cross-builds produce a binary.
+- A live login with the default Linux identity logged in with code 0, the two
+  environment reports and the resource fetch succeeded, and the first
+  keep-alive answered HTTP 200 through the tunnel.
+- The only `"platform": {"Linux"}` values left are wire expectations in tests;
+  production code reads the session.
 
 ## Risks and open questions
 

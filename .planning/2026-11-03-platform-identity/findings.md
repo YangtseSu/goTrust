@@ -28,6 +28,20 @@
 - `core/session/session.go` passes `profile.Ident.UserAgentString()` into the
   client, so the app's production path overrides the auth fallback.
 
+## Implementation notes
+
+- The plan expected three platform query literals. The tree had one,
+  `auth.sharedParams`, which every request builder already shared; it now reads
+  the session platform, so all endpoints follow the identity through one
+  builder instead of three edits.
+- The macOS user agent has no public sample. The preset mirrors the Windows
+  one (`aTrustTray-MacOS-Plat-MacOS10-<arch>`); a live macOS run is still
+  needed before a release claims that wording is accepted.
+- The protocol layer no longer ships a UA. `auth.Session` refuses its first
+  request with `ErrMissingUserAgent` until the caller names one, and the client
+  discovery path takes the UA and platform from the same account identity as
+  the login.
+
 ## Boundaries
 
 - No gateway address, account, host name or client data belongs in this plan or
