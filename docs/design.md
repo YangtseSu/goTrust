@@ -158,6 +158,13 @@ an entry in its decisions table. The layout they describe is
 * Every size comes from `textSize` on the theme's own font size: heading,
   panel heading, body, caption. No view hardcodes a size; a desktop font
   setting moves all four together.
+* The Chinese catalog is `zh-Hans.json`, and the language picker offers it as
+  `简体中文`. The tag a window shows is also the language the text engine lays
+  its text out in, and Windows' DirectWrite picks the fallback font for Han
+  characters from it: `zh-Hans` is the Microsoft YaHei entry, `zh-Hant` the
+  JhengHei one, a bare `zh` none at all, which falls back to a Japanese font.
+  The tag is a font decision, not only a translation one;
+  `TestChineseCatalogNamesItsScript` holds it.
 * Padding, gaps and control sizes are multiples of `Theme.Spacing`
   (`Theme.Space`), so a compact or roomy theme stays consistent. The shell
   adds the fixed 24 DIP window padding, a 16 DIP gap between groups and an

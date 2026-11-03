@@ -1,4 +1,4 @@
 {
   "main": "./cmd/gotrust",
-  "i18n": { "dir": "locales", "source": "zh" }
+  "i18n": { "dir": "locales", "source": "zh-Hans" }
 }

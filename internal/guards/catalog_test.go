@@ -79,7 +79,7 @@ func TestCatalogsCarryTheSameKeys(t *testing.T) {
 		t.Fatalf("locate the module root: %v", err)
 	}
 	keys := map[string]map[string]bool{}
-	for _, lang := range []string{"zh", "en"} {
+	for _, lang := range []string{"zh-Hans", "en"} {
 		body, err := os.ReadFile(filepath.Join(root, "locales", lang+".json"))
 		if err != nil {
 			t.Fatalf("read the %s catalog: %v", lang, err)
@@ -101,7 +101,7 @@ func TestCatalogsCarryTheSameKeys(t *testing.T) {
 		keys[lang] = set
 	}
 
-	for _, pair := range [][2]string{{"zh", "en"}, {"en", "zh"}} {
+	for _, pair := range [][2]string{{"zh-Hans", "en"}, {"en", "zh-Hans"}} {
 		source, other := pair[0], pair[1]
 		var missing []string
 		for key := range keys[source] {
@@ -126,7 +126,7 @@ func TestCatalogsAreTranslated(t *testing.T) {
 		t.Fatalf("locate the module root: %v", err)
 	}
 	catalogs := map[string]map[string]any{}
-	for _, lang := range []string{"zh", "en"} {
+	for _, lang := range []string{"zh-Hans", "en"} {
 		body, err := os.ReadFile(filepath.Join(root, "locales", lang+".json"))
 		if err != nil {
 			t.Fatalf("read the %s catalog: %v", lang, err)
@@ -139,7 +139,7 @@ func TestCatalogsAreTranslated(t *testing.T) {
 	}
 
 	placeholder := regexp.MustCompile(`\{([A-Za-z_][A-Za-z0-9_]*)[,}]`)
-	for key, value := range catalogs["zh"] {
+	for key, value := range catalogs["zh-Hans"] {
 		if strings.HasPrefix(key, "@") {
 			continue
 		}
@@ -153,7 +153,7 @@ func TestCatalogsAreTranslated(t *testing.T) {
 			t.Errorf("%s: the en message is not a string", key)
 			continue
 		}
-		for lang, text := range map[string]string{"zh": zh, "en": en} {
+		for lang, text := range map[string]string{"zh-Hans": zh, "en": en} {
 			if strings.TrimSpace(text) == "" {
 				t.Errorf("%s: the %s message is empty", key, lang)
 			}

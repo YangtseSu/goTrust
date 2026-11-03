@@ -70,7 +70,7 @@ rules are in [`docs/design.md`](docs/design.md).
 
 The language follows the desktop by default: a Chinese desktop shows Chinese,
 an English one English, and other languages fall back to Chinese. Settings →
-Language offers Follow the system, 中文 and English; the choice applies at once
+Language offers Follow the system, 简体中文 and English; the choice applies at once
 and is kept for the next start. gotrust-cli's terminal output and logs are
 English; the browser login pages are English by default, and `--prompt-lang zh`
 switches only those pages to Chinese. The environment is not read.

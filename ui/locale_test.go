@@ -29,8 +29,8 @@ func TestViewsFollowTheAppLanguage(t *testing.T) {
 		t.Fatalf("the English window has no %q; texts: %v",
 			locales.In("en").Connect(), tester.Texts())
 	}
-	if tester.HasText(locales.In("zh").Connect()) {
-		t.Fatalf("the English window still says %q", locales.In("zh").Connect())
+	if tester.HasText(locales.In("zh-Hans").Connect()) {
+		t.Fatalf("the English window still says %q", locales.In("zh-Hans").Connect())
 	}
 }
 

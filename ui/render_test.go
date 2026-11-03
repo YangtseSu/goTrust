@@ -39,7 +39,7 @@ func TestRenderEveryState(t *testing.T) {
 	// Both languages, because a label that fits in Chinese may not fit in
 	// English. The source language keeps the plain names, so the images before
 	// a change stay comparable.
-	for _, lang := range []string{"zh", "en"} {
+	for _, lang := range []string{"zh-Hans", "en"} {
 		t.Run(lang, func(t *testing.T) {
 			t.Setenv("MYGO_LOCALE", lang)
 			renderStates(t, dir, lang)
@@ -81,7 +81,7 @@ func renderStates(t *testing.T, dir, lang string) {
 
 	save := func(name string, tester *ui.Tester) {
 		t.Helper()
-		if lang != "zh" {
+		if lang != "zh-Hans" {
 			name += "-" + lang
 		}
 		tester.SetTitleBar(testerTitleBar)

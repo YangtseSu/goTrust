@@ -209,8 +209,8 @@ type app struct {
 	// instead of hiding it in the tray.
 	quitting bool
 	// localeChoice is the language picker's entry: 0 follows the
-	// desktop, 1 is Chinese, 2 is English. mygo remembers the language itself;
-	// this only keeps the picker in step for the rest of the run.
+	// desktop, 1 is Simplified Chinese, 2 is English. mygo remembers the
+	// language; this only keeps the picker in step for the rest of the run.
 	localeChoice int
 }
 

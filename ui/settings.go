@@ -865,7 +865,7 @@ func languageSection(c *ui.Context, state *SettingsState, actions SettingsAction
 		sectionHeading(c, locales.Language())
 		if ui.Segmented(c, &state.LocaleIndex,
 			locales.LanguageSystem(),
-			i18n.Autonym("zh"),
+			i18n.Autonym("zh-Hans"),
 			i18n.Autonym("en"),
 		).AlignSelf(ui.Start).Changed() && actions.SetLocale != nil {
 			actions.SetLocale(localeTag(state.LocaleIndex))
@@ -982,7 +982,7 @@ func switchTrack(c *ui.Context, on bool) {
 func localeTag(index int) string {
 	switch index {
 	case 1:
-		return "zh"
+		return "zh-Hans"
 	case 2:
 		return "en"
 	default:

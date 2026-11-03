@@ -14,13 +14,13 @@ import (
 //go:embed *.json
 var files embed.FS
 
-// Catalog holds the messages in zh, the source language, and en. It is
+// Catalog holds the messages in zh-Hans, the source language, and en. It is
 // registered with package i18n, which makes its languages the app's.
 var Catalog *i18n.Catalog
 
 func init() {
 	var err error
-	if Catalog, err = i18n.NewCatalog(files, "zh"); err != nil {
+	if Catalog, err = i18n.NewCatalog(files, "zh-Hans"); err != nil {
 		panic(err)
 	}
 	i18n.Register(Catalog)
