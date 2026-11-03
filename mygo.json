@@ -1,4 +1,10 @@
 {
+  "name": "gotrust",
+  "slug": "gotrust",
+  "identifier": "io.github.yangtsesu.gotrust",
+  "publisher": "Yangtse Su",
+  "copyright": "Copyright © 2026 Yangtse Su",
   "main": "./cmd/gotrust",
+  "windows": { "displayName": "goTrust" },
   "i18n": { "dir": "locales", "source": "zh-Hans" }
 }

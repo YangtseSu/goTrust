@@ -85,12 +85,29 @@ the archives, and creates the GitHub release with generated notes:
 
 The version a binary reports is injected at link time into
 `internal/version.Version`; a source checkout says `devel`, and
-`gotrust --version` / `gotrust-cli --version` print it.
+`gotrust --version` / `gotrust-cli --version` print it. The Windows build
+takes its version twice: the same tag goes into `mygo.json` before
+`mygo build`, which writes the version resource the file properties show.
 
-Nothing is code-signed. macOS and Windows builds pass the cross-build matrix
-but have never been run on those systems, so a signature would only hide that.
-macOS users get Gatekeeper's unknown-developer refusal, Windows users get
-SmartScreen's prompt; the release notes say so and nothing more.
+The Windows executable is the one target built by `mygo build` rather than
+`go build`: Windows reads the icon, the file properties and the manifest
+(per-monitor DPI, Common Controls 6, UTF-8 code page) from a resource object
+that only `mygo build` generates, from `resources/icon.png`. The other
+platforms keep `go build`. `resources/icon.png` is rendered from the same SVG
+as the tray icon, at 1024x1024:
+
+```sh
+rsvg-convert -w 1024 -h 1024 data/icons/hicolor/scalable/apps/gotrust.svg \
+  -o resources/icon.png
+```
+
+Nothing is code-signed, and no free route to a signature applies yet. Windows
+shows SmartScreen's prompt for an unsigned download, and macOS Gatekeeper
+refuses an unidentified developer; the release notes say so and nothing more.
+SignPath Foundation signs open-source projects without charge, but requires a
+project with a verifiable reputation, and this repository is new. A paid
+certificate needs a hardware token or a cloud HSM, which a GitHub runner cannot
+reach; Azure Trusted Signing is limited to the USA, Canada, the EU and the UK.
 
 ### AUR
 
