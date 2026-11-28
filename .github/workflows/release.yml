@@ -8,7 +8,7 @@
 #
 # Linux: amd64 and arm64, built from the Ubuntu runner.
 # macOS: one universal binary, two cross-builds joined with lipo.
-# Windows: amd64 only; ARM desktops are untested, so they are not published.
+# Windows: amd64 and arm64
 
 name: release
 
@@ -62,6 +62,10 @@ jobs:
           - os: ubuntu-latest
             goos: windows
             goarch: amd64
+            archive: zip
+          - os: ubuntu-latest
+            goos: windows
+            goarch: arm64
             archive: zip
           - os: macos-latest
             goos: darwin

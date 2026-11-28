@@ -37,7 +37,7 @@ Download the archive for your platform from
 |---|---|
 | Linux x86_64 / aarch64 | `gotrust_<version>_linux_amd64.tar.gz`, `gotrust_<version>_linux_arm64.tar.gz` |
 | macOS (Intel and Apple Silicon) | `gotrust_<version>_darwin_universal.tar.gz` |
-| Windows x86_64 | `gotrust_<version>_windows_amd64.zip` |
+| Windows x86_64 / ARM64 | `gotrust_<version>_windows_amd64.zip`, `gotrust_<version>_windows_arm64.zip` |
 
 The headless version is on the same page, named
 `gotrust-cli_<version>_<system>_<arch>`.

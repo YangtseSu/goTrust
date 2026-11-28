@@ -31,7 +31,7 @@ goTrust 是 aTrust 的桌面客户端。它常驻托盘，登录 Sangfor aTrust 
 |---|---|
 | Linux x86_64 / aarch64 | `gotrust_<版本>_linux_amd64.tar.gz`、`gotrust_<版本>_linux_arm64.tar.gz` |
 | macOS（Intel 与 Apple Silicon 通用） | `gotrust_<版本>_darwin_universal.tar.gz` |
-| Windows x86_64 | `gotrust_<版本>_windows_amd64.zip` |
+| Windows x86_64 / ARM64 | `gotrust_<版本>_windows_amd64.zip`、`gotrust_<版本>_windows_arm64.zip` |
 
 无界面版本在同页，文件名为 `gotrust-cli_<版本>_<系统>_<架构>`。
 

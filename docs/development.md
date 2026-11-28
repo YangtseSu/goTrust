@@ -79,7 +79,7 @@ the archives, and creates the GitHub release with generated notes:
 |---|---|
 | `gotrust_<ver>_linux_{amd64,arm64}.tar.gz` | binary, desktop entry, icons, licence |
 | `gotrust_<ver>_darwin_universal.tar.gz` | amd64 and arm64 joined with `lipo` |
-| `gotrust_<ver>_windows_amd64.zip` | GUI subsystem, so no console window |
+| `gotrust_<ver>_windows_{amd64,arm64}.zip` | GUI subsystem, so no console window |
 | `gotrust-cli_<ver>_<os>_<arch>.*` | the headless binary, console subsystem |
 | `checksums.txt` | sha256 of every archive |
 
